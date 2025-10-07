@@ -5,7 +5,7 @@ const port = process.env.PORT || 4000;
 
 // test API
 app.get("/", (req, res) => {
-  res.send("Hello from Vercel!");
+  res.send("اهلا يا شهد يا رخمه!!!");
 });
 
 app.listen(port, () => {
