@@ -29,6 +29,10 @@ app.get("/", (req, res) => {
   res.send("اهلا يا شهد يا رخمه!!!");
 });
 
+app.get("/love", (req, res) => {
+  res.send("اهلا يا سليمان يا رخم!!!");
+});
+
 // app.get("/data", (req, res) => {
 //   connection.query("SELECT * FROM test_table", (err, results) => {
 //     if (err) {
