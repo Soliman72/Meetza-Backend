@@ -29,7 +29,7 @@ app.get("/", (req, res) => {
   res.send("اهلا يا شهد يا رخمه!!!");
 });
 
-app.get("/love", (req, res) => {
+app.get("/l", (req, res) => {
   res.send("اهلا يا سليمان يا رخم!!!");
 });
 
