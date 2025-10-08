@@ -6,7 +6,7 @@ const authController = require("../controller/authController");
 router.post("/register", authController.register);
 
 // Login route
-// router.post("/login", authController.login);
+router.post("/login", authController.login);
 
 // Get current user route
 // router.get("/me", authController.verifyToken, authController.getCurrentUser);

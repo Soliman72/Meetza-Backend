@@ -84,111 +84,72 @@ exports.register = async (req, res) => {
 };
 
 // Login user
-// exports.login = async (req, res) => {
-//   try {
-//     const { username, password } = req.body;
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-//     // Validate required fields
-//     if (!username || !password) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Username and password are required",
-//       });
-//     }
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "email and password are required",
+      });
+    }
 
-//     // Check if user exists
-//     db.query(
-//       "SELECT * FROM Users WHERE username = ?",
-//       [username],
-//       async (err, rows) => {
-//         if (err) return res.status(500).json({ error: err });
-//         if (rows.length === 0) {
-//           return res.status(401).json({
-//             success: false,
-//             message: "Invalid username or password",
-//           });
-//         }
+    // Check if user exists
+    db.query(
+      "SELECT * FROM user WHERE email = ?",
+      [email],
+      async (err, rows) => {
+        if (err) return res.status(500).json({ error: err });
+        if (rows.length === 0) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid email or password",
+          });
+        }
 
-//         const user = rows[0];
+        const user = rows[0];
 
-//         // Compare password
-//         const validPassword = await bcrypt.compare(password, user.password);
-//         if (!validPassword) {
-//           return res.status(401).json({
-//             success: false,
-//             message: "Invalid username or password",
-//           });
-//         }
+        // Compare password
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid email or password",
+          });
+        }
 
-//         // Generate JWT token
-//         const token = jwt.sign(
-//           {
-//             id: user.id,
-//             username: user.username,
-//           },
-//           process.env.JWT_SECRET,
-//           { expiresIn: "24h" }
-//         );
+        // Generate JWT token
+        const token = jwt.sign(
+          {
+            id: user.id,
+            email: user.email,
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "24h" }
+        );
 
-//         // Create a fake res object to capture the result
-//         const fakeRes = {
-//           status: function (code) {
-//             this.statusCode = code;
-//             return this;
-//           },
-//           json: function (data) {
-//             this.data = data;
-//             return this;
-//           },
-//         };
-
-//         // login to studio automated also
-//         const studioLoginResult = await UniversalController.authenticate(
-//           {
-//             body: {
-//               username: "hello@weareaugustus.com",
-//               password: "Augustus@123",
-//             },
-//             query: {
-//               system: "studio-automated",
-//             },
-//           },
-//           fakeRes
-//         );
-//         let studioAutomatedToken = null;
-//         if (
-//           fakeRes.data &&
-//           fakeRes.data.data &&
-//           fakeRes.data.data.access_token
-//         ) {
-//           studioAutomatedToken = fakeRes.data.data.access_token;
-//           // Store the token in the Users table
-//           db.query("UPDATE Users SET studio_automated_token = ? WHERE id = ?", [
-//             studioAutomatedToken,
-//             user.id,
-//           ]);
-//         }
-
-//         res.status(200).json({
-//           success: true,
-//           message: "Login successful",
-//           data: {
-//             token,
-//             user: {
-//               id: user.id,
-//               username: user.username,
-//               role_id: user.role_id,
-//             },
-//             studio_automated_token: studioAutomatedToken, // for demonstration
-//           },
-//         });
-//       }
-//     );
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: "Error logging in",
-//       error: error.message,
-//     });
-//   }
-// };
+        res.status(200).json({
+          success: true,
+          message: "Login successful",
+          data: {
+            token,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+            }
+          },
+        });
+      }
+    );
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error logging in",
+      error: error.message,
+    });
+  }
+};
