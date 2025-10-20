@@ -1,3 +1,4 @@
+require("dotenv").config();
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -5,18 +6,21 @@ const { v4: uuidv4 } = require("uuid");
 const nodemailer = require("nodemailer");
 
 // Register new user
+
+// Register new user
+
 // Helper function to send the verification email
 const sendVerificationEmail = (email, verificationCode) => {
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-      user: "shahd01278039699@gmail.com", // Use your actual email
-      pass: "Shahd2632005@", // Use your actual email password
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
     },
   });
 
   const mailOptions = {
-    from: "shahd01278039699@gmail.com",
+    from: process.env.EMAIL_USER,
     to: email,
     subject: "Verify Your Email Address",
     html: `
@@ -33,8 +37,6 @@ const sendVerificationEmail = (email, verificationCode) => {
 exports.register = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-
-    const id = uuidv4();
 
     // Validate required fields
     if (!name || !password || !role || !email) {
@@ -56,6 +58,9 @@ exports.register = async (req, res) => {
             message: "Email already exists",
           });
         }
+
+        // Generate unique user ID
+        const id = uuidv4();
 
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
