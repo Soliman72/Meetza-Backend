@@ -10,7 +10,7 @@ const nodemailer = require("nodemailer");
 // Register new user
 
 // Helper function to send the verification email
-const sendVerificationEmail = (email, verificationCode) => {
+const sendVerificationEmail = (email, verificationCode, msg) => {
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -24,7 +24,7 @@ const sendVerificationEmail = (email, verificationCode) => {
     to: email,
     subject: "Verify Your Email Address",
     html: `
-      <p>Thank you for registering! Please use the following code to verify your email:</p>
+      ${msg}
       <h2>${verificationCode}</h2>
       <p>If you did not request this, please ignore this email.</p>
     `,
@@ -78,7 +78,11 @@ exports.register = async (req, res) => {
             if (err) return res.status(500).json({ error: err });
 
             // Send verification email with 4-digit code
-            sendVerificationEmail(email, verificationCode)
+            sendVerificationEmail(
+              email,
+              verificationCode,
+              "<p>Thank you for registering! Please use the following code to verify your email:</p>"
+            )
               .then(() => {
                 const selectQuery = "SELECT * FROM user WHERE id = ?";
                 db.query(selectQuery, [id], (err, rows) => {
@@ -139,7 +143,7 @@ exports.register = async (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, remember_me } = req.body;
 
     // Validate required fields
     if (!email || !password) {
@@ -180,7 +184,7 @@ exports.login = async (req, res) => {
             email: user.email,
           },
           process.env.JWT_SECRET,
-          { expiresIn: "24h" }
+          { expiresIn: remember_me ? "4d" : "24h" }
         );
 
         res.status(200).json({
@@ -203,6 +207,197 @@ exports.login = async (req, res) => {
       success: false,
       message: "Error logging in",
       error: error.message,
+    });
+  }
+};
+
+// Email Verification Route
+exports.verifyEmail = (req, res) => {
+  const { code, email } = req.body;
+
+  if (!code || !email) {
+    return res.status(400).json({
+      success: false,
+      message: "Verification code & Email is required",
+    });
+  }
+
+  // Verify code in the database
+  db.query(
+    "SELECT * FROM user WHERE verification_code = ? AND email_verification = false AND email = ?",
+    [code, email],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err });
+      if (rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification code",
+        });
+      }
+
+      const user = rows[0];
+
+      // Mark user as verified
+      db.query(
+        "UPDATE user SET email_verification = true, verification_code = NULL WHERE email = ?",
+        [user.email],
+        (err) => {
+          if (err) return res.status(500).json({ error: err });
+
+          res.status(200).json({
+            success: true,
+            message: "Email verified successfully. You can now log in.",
+          });
+        }
+      );
+    }
+  );
+};
+
+// Forgot password - Step 1: Send reset email
+exports.forgotPassword = (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      message: "Email is required",
+    });
+  }
+
+  // Check if the email exists in the database
+  db.query("SELECT * FROM user WHERE email = ?", [email], (err, rows) => {
+    if (err) return res.status(500).json({ error: err });
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Email not found",
+      });
+    }
+
+    // const user = rows[0];
+    const resetCode = Math.floor(1000 + Math.random() * 9000); // Generate a unique token for password reset
+
+    // Store the reset token in the database
+    db.query(
+      "UPDATE user SET verification_code = ? WHERE email = ?",
+      [resetCode, email],
+      (err) => {
+        if (err) return res.status(500).json({ error: err });
+
+        // Send verification email with 4-digit code
+        sendVerificationEmail(
+          email,
+          resetCode,
+          "<p>Thank you for registering! Please use the following code to reset your password:</p>"
+        )
+          .then(() => {
+            return res.status(201).json({
+              success: true,
+              message: "Please check your email to reset password",
+            });
+          })
+          .catch((emailError) => {
+            return res.status(500).json({
+              success: false,
+              message: "Failed to send verification email",
+              error: emailError.message,
+            });
+          });
+      }
+    );
+  });
+};
+
+// Code Verification Route for reset password
+exports.verifyCode = (req, res) => {
+  const { code, email } = req.body;
+
+  if (!code || !email) {
+    return res.status(400).json({
+      success: false,
+      message: "Verification code & Email is required",
+    });
+  }
+
+  // Verify code in the database
+  db.query(
+    "SELECT * FROM user WHERE verification_code = ? AND email = ?",
+    [code, email],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err });
+      if (rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification code",
+        });
+      }
+
+      const user = rows[0];
+
+      // Mark user as verified
+      db.query(
+        "UPDATE user SET verification_code = NULL WHERE email = ?",
+        [user.email],
+        (err) => {
+          if (err) return res.status(500).json({ error: err });
+
+          res.status(200).json({
+            success: true,
+            message: "Email verified successfully. You can now reset password.",
+          });
+        }
+      );
+    }
+  );
+};
+// Code Verification Route for reset password
+exports.resetPassword = async (req, res) => {
+  const { is_verifyed, email, new_password } = req.body;
+
+  if (!is_verifyed || !new_password || !email) {
+    return res.status(400).json({
+      success: false,
+      message: "New password & Email is required",
+    });
+  }
+
+  if (is_verifyed === "true") {
+    // Verify code in the database
+    db.query(
+      "SELECT * FROM user WHERE email = ?",
+      [email],
+      async (err, rows) => {
+        if (err) return res.status(500).json({ error: err });
+        if (rows.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid email!",
+          });
+        }
+
+        const user = rows[0];
+        const hashedPassword = await bcrypt.hash(new_password, 10);
+
+        // Mark user as verified
+        db.query(
+          "UPDATE user SET password = ? WHERE email = ?",
+          [hashedPassword, user.email],
+          (err) => {
+            if (err) return res.status(500).json({ error: err });
+
+            res.status(200).json({
+              success: true,
+              message: "password change successfully. You can now login.",
+            });
+          }
+        );
+      }
+    );
+  } else {
+    return res.status(400).json({
+      success: false,
+      message: "is_verifyed is false",
     });
   }
 };
