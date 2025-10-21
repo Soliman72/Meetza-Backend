@@ -363,7 +363,7 @@ exports.resetPassword = async (req, res) => {
   }
 
   if (is_verifyed === "true") {
-    // Verify code in the database
+    // Verify code in the databaseeeee
     db.query(
       "SELECT * FROM user WHERE email = ?",
       [email],
