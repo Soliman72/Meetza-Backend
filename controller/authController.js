@@ -184,7 +184,7 @@ exports.login = async (req, res) => {
             email: user.email,
           },
           process.env.JWT_SECRET,
-          { expiresIn: remember_me ? "4d" : "24h" }
+          { expiresIn: remember_me === "true" ? "4d" : "24h" }
         );
 
         res.status(200).json({
