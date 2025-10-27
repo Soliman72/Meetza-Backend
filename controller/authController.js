@@ -402,112 +402,236 @@ exports.resetPassword = async (req, res) => {
 
 // Social Authentication
 exports.socialAuth = (req, res, next) => {
-  const platform = req.params.platform; // 'google' or 'linkedin'
   const role = req.query.role; // 'Administrator' or 'Member'
   const state = JSON.stringify({ role });
 
-  const scope = platform === 'google' ? ['email', 'profile'] : ['r_liteprofile', 'r_emailaddress'];
-  console.log('sssssqq');
-  passport.authenticate(platform, { scope, session: false, state })(req, res, next);
+  const scope = ["email", "profile"];
+  passport.authenticate("google", { scope, session: false, state })(
+    req,
+    res,
+    next
+  );
 };
 
 // Social Authentication Callback
 exports.socialAuthCallback = (req, res, next) => {
-  const platform = req.params.platform;
-
-  passport.authenticate(platform, { session: false }, async (err, profile) => {
-    console.log('sssss1');
+  passport.authenticate("google", { session: false }, async (err, profile) => {
     if (err) {
-      console.error('Passport error:', err);
-      return res.status(500).json({ success: false, message: `${platform} callback error`, error: err.message || err });
+      console.error("Passport error:", err);
+      return res.status(500).json({
+        success: false,
+        message: `${"google"} callback error`,
+        error: err.message || err,
+      });
     }
     if (!profile) {
-      console.log('sssss2');
-      return res.status(400).json({ success: false, message: `${platform} login failed` });
+      return res
+        .status(400)
+        .json({ success: false, message: `${"google"} login failed` });
     }
 
     try {
-      console.log('sssss3');
       // parse state
-      const stateObj = req.query.state ? JSON.parse(req.query.state) : { role: '' };
+      const stateObj = req.query.state
+        ? JSON.parse(req.query.state)
+        : { role: "" };
       const role = stateObj.role;
 
       // extract email and provider id
       let email = null;
-      if (profile.emails && profile.emails.length > 0) email = profile.emails[0].value;
+      let user;
+      if (profile.emails && profile.emails.length > 0)
+        email = profile.emails[0].value;
+
       const providerId = profile.id;
-      const name = profile.displayName || ((profile.name && `${profile.name.givenName || ''} ${profile.name.familyName || ''}`).trim()) || 'NoName';
+      const name =
+        profile.displayName ||
+        (
+          profile.name &&
+          `${profile.name.givenName || ""} ${profile.name.familyName || ""}`
+        ).trim() ||
+        "NoName";
 
       // 1 Check user_providers for provider + provider_id
-      const findProvQ = 'SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1';
-      const rowsProv = await db.queryAsync(findProvQ, [platform, providerId]);
-      
-      let user;
-      if (rowsProv.length > 0) {
-        // linked provider exists -> get user
-        const userId = rowsProv[0].user_id;
-        const users = await db.queryAsync('SELECT * FROM user WHERE id = ? LIMIT 1', [userId]);
-        user = users[0];
-      } else if (email) {
-        // 2 If user with email exists -> auto-link
-        const rowsEmail = await db.queryAsync('SELECT * FROM user WHERE email = ? LIMIT 1', [email]);
-        if (rowsEmail.length > 0) {
-          user = rowsEmail[0];
-          // insert into social_auth (ignore duplicate errors)
-          try {
-            const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
-            await db.queryAsync(insertProviderQ, [user.id, platform, providerId]);
-          } catch (e) {
-            console.warn('Could not insert provider (maybe exists):', e.message || e);
-          }
-          // ensure email verification true
-          await db.queryAsync('UPDATE users SET email_verification = ? WHERE id = ?', [ture, user.id]);
+      // 1 Check user_providers for provider + provider_id
+      const findProvQ =
+        "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1";
+      db.query(findProvQ, ["google", providerId], (err, rowsProv) => {
+        if (err) {
+          console.error("Error querying provider:", err);
+          return res
+            .status(500)
+            .json({ success: false, message: "Database query error" });
+        }
+
+        if (rowsProv.length > 0) {
+          // linked provider exists -> get user
+          // const userId = rowsProv[0].user_id;
+          db.query(
+            "SELECT * FROM user WHERE email = ? LIMIT 1",
+            [email],
+            (err, users) => {
+              if (err) {
+                console.error("Error querying user:", err);
+                return res
+                  .status(500)
+                  .json({ success: false, message: "Database query error" });
+              }
+              user = users[0];
+              proceedWithUser(user, "google", res);
+            }
+          );
+        } else if (email) {
+          // 2 If user with email exists -> auto-link
+          db.query(
+            "SELECT * FROM user WHERE email = ? LIMIT 1",
+            [email],
+            async (err, rowsEmail) => {
+              if (err) {
+                console.error("Error querying email:", err);
+                return res
+                  .status(500)
+                  .json({ success: false, message: "Database query error" });
+              }
+
+              if (rowsEmail.length > 0) {
+                user = rowsEmail[0];
+                // insert into social_auth (ignore duplicate errors)
+                const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
+                db.query(
+                  insertProviderQ,
+                  [user.id, "google", providerId],
+                  (err) => {
+                    if (err) {
+                      console.warn(
+                        "Could not insert provider (maybe exists):",
+                        err.message || err
+                      );
+                    }
+                  }
+                );
+
+                // ensure email verification true
+                db.query(
+                  "UPDATE users SET email_verification = ? WHERE id = ?",
+                  [true, user.id],
+                  (err) => {
+                    if (err) {
+                      console.error("Error updating email verification:", err);
+                    }
+                  }
+                );
+
+                proceedWithUser(user, "google", res);
+
+                // Proceed to create token and response
+              } else {
+                // 3 Create new user and link provider
+                const id = uuidv4();
+                const insertUserQuery = `INSERT INTO user (id, name, email, role, verification_code , email_verification) VALUES (?, ?, ?, ?, ?, ?)`;
+                db.query(
+                  insertUserQuery,
+                  [id, name, email, role, 0, true],
+                  (err) => {
+                    if (err) {
+                      console.error("Error inserting new user:", err);
+                      return res.status(500).json({
+                        success: false,
+                        message: "Error creating user",
+                      });
+                    }
+
+                    if (role === "Administrator") {
+                      db.query(
+                        "INSERT INTO administrator (user_id) VALUES (?)",
+                        [id],
+                        (err) => {
+                          if (err) {
+                            console.error(
+                              "Error inserting into administrator:",
+                              err
+                            );
+                          }
+                        }
+                      );
+                    } else if (role === "Member") {
+                      db.query(
+                        "INSERT INTO member (user_id) VALUES (?)",
+                        [id],
+                        (err) => {
+                          if (err) {
+                            console.error("Error inserting into member:", err);
+                          }
+                        }
+                      );
+                    }
+
+                    const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
+                    db.query(
+                      insertProviderQ,
+                      [id, "google", providerId],
+                      (err) => {
+                        if (err) {
+                          console.error("Error inserting social auth:", err);
+                        }
+                      }
+                    );
+
+                    // Fetch new user details
+                    db.query(
+                      "SELECT * FROM user WHERE email = ?",
+                      [email],
+                      (err, newRows) => {
+                        if (err) {
+                          console.error("Error fetching new user:", err);
+                          return res.status(500).json({
+                            success: false,
+                            message: "Error fetching new user",
+                          });
+                        }
+
+                        user = newRows[0];
+                        proceedWithUser(user, "google", res);
+
+                        // Continue with JWT token creation or response here
+                      }
+                    );
+                  }
+                );
+              }
+            }
+          );
         } else {
-          // 3 create new user and link provider
-          const id = uuidv4();
-          const insertUserQuery = `INSERT INTO user (id, name, email, role, code_verification, email_verification) VALUES (?, ?, ?, ?, ?, ?)`;
-          await db.queryAsync(insertUserQuery, [id, name, email, role, 0, true]);
-          if (role === 'Administrator') {
-            await db.queryAsync('INSERT INTO administrator (user_id) VALUES (?)', [id]);
-          } else if (role === 'Member') {
-            await db.queryAsync('INSERT INTO member (user_id) VALUES (?)', [id]);
-          }
-          const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
-          await db.queryAsync(insertProviderQ, [id, platform, providerId]);
-          const newRows = await db.queryAsync('SELECT * FROM user WHERE id = ?', [id]);
-          user = newRows[0];
+          console.error("Social callback error:", error);
+          return res.status(500).json({
+            success: false,
+            message: "There is no email!",
+          });
         }
-      } else {
-        // No email returned by provider -> create user without email
-        const id = uuidv4();
-
-        const insertUserQuery = `INSERT INTO user (id, name, email, role, code_verification, email_verification) VALUES (?, ?, ?, ?, ?, ?)`;
-        await db.queryAsync(insertUserQuery, [id, name, email, role, 0, true]);
-        if (role === 'Administrator') {
-          await db.queryAsync('INSERT INTO administrator (user_id) VALUES (?)', [id]);
-        } else if (role === 'Member') {
-          await db.queryAsync('INSERT INTO member (user_id) VALUES (?)', [id]);
-        }
-
-        const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
-        await db.queryAsync(insertProviderQ, [id, platform, providerId]);
-        const newRows = await db.queryAsync('SELECT * FROM user WHERE id = ?', [id]);
-        user = newRows[0];
-      }
-
-      // final: issue JWT
-      const tokenPayload = { id: user.id, email: user.email, role: user.role };
-      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '24h' });
-
-      return res.status(200).json({
-        success: true,
-        message: `${platform} login successful`,
-        token,
-        user
       });
     } catch (error) {
-      console.error('Social callback error:', error);
-      return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+      console.error("Social callback error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error.message,
+      });
     }
   })(req, res, next);
 };
+
+// Helper function to proceed with user creation and token generation
+function proceedWithUser(user, platform, res) {
+  // final: issue JWT
+  const tokenPayload = { id: user.id, email: user.email, role: user.role };
+  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+    expiresIn: "24h",
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: `${platform} login successful`,
+    token,
+    user,
+  });
+}
