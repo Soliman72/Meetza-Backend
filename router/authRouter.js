@@ -12,6 +12,12 @@ router.post("/reset_password", authController.resetPassword);
 // Login route
 router.post("/login", authController.login);
 
+// Social auth routes
+router.get('/social/:platform', authController.socialAuth);
+router.get('/social/:platform/callback', authController.socialAuthCallback);
+
+
+
 // Get current user route
 // router.get("/me", authController.verifyToken, authController.getCurrentUser);
 

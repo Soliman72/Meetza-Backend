@@ -3,11 +3,13 @@ const express = require("express");
 const cors = require("cors");
 require("./config/db");
 const authRouter = require("./router/authRouter");
+const passport = require("./config/passport");
 
 const app = express();
 const port = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
+app.use(passport.initialize());
 
 // test API
 app.get("/", (req, res) => {
