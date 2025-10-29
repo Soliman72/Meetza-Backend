@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 require("./config/db");
 const authRouter = require("./router/authRouter");
+const meetingContentRouter = require("./router/meetingContentRouter");
 const passport = require("./config/passport");
 
 const app = express();
@@ -17,6 +18,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/meeting-contents", meetingContentRouter);
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}...`);

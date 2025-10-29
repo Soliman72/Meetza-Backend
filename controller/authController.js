@@ -4,8 +4,6 @@ const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const nodemailer = require("nodemailer");
 const passport = require("passport");
-require("dotenv").config();
-
 // Helper function to send the verification email
 const sendVerificationEmail = (email, verificationCode, msg) => {
   const transporter = nodemailer.createTransport({
