@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controller/administratorController');
+const { verifyToken } = require("../utils/verifyToken");
 
 router.post('/', controller.createAdministrator);
-router.get('/', controller.getAllAdministrators);
-router.get('/:user_id', controller.getAdministratorById);
-router.put('/:user_id', controller.updateAdministrator);
-router.delete('/:user_id', controller.deleteAdministrator);
+router.get('/', verifyToken, controller.getAllAdministrators);
+router.get('/:id', verifyToken, controller.getAdministratorById);
+router.patch('/:id', verifyToken, controller.updateAdministrator);
+router.delete('/:id', verifyToken, controller.deleteAdministrator);
 
 module.exports = router;

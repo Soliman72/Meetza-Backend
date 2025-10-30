@@ -80,18 +80,38 @@ exports.getMeetingContentById = (req, res) => {
   });
 };
 
+// Controller to update a specific meeting content by ID
 exports.updateMeetingContentById = (req, res) => {
   const { id } = req.params;
-  const { content_name, content_description } = req.body;
-  if (!id || !content_name || !content_description) {
+  const updates = req.body;
+
+  if (!id) {
     return res.status(400).json({
       success: false,
-      message: "content id are required",
+      message: "id is required",
     });
   }
-  const query =
-    "UPDATE meeting_content SET content_name = ?, content_description = ? WHERE id = ?";
-  db.query(query, [content_name, content_description, id], (err, result) => {
+
+  // Build dynamic query based on provided fields
+  const fields = [];
+  const values = [];
+
+  for (const [key, value] of Object.entries(updates)) {
+    fields.push(`${key} = ?`);
+    values.push(value);
+  }
+
+  if (fields.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "No fields to update",
+    });
+  }
+
+  const query = `UPDATE meeting_content SET ${fields.join(', ')} WHERE id = ?`;
+  values.push(id);
+
+  db.query(query, values, (err, result) => {
     if (err) {
       return res.status(500).json({
         success: false,
@@ -99,12 +119,14 @@ exports.updateMeetingContentById = (req, res) => {
         error: err.message,
       });
     }
+
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
         message: "Meeting content not found",
       });
     }
+
     return res.status(200).json({
       success: true,
       message: "Meeting content updated successfully",

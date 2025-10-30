@@ -57,25 +57,43 @@ exports.getMemberById = async (req, res) => {
 exports.updateMember = async (req, res) => {
   try {
     const { user_id } = req.params;
-    const { new_user_id } = req.body;
+    const updates = req.body;
 
-    if (!user_id || !new_user_id) {
-      return res.status(400).json({ message: 'user_id and new_user_id are required' });
+    if (!user_id) {
+      return res.status(400).json({ message: 'user_id is required in params' });
     }
 
+    // Build dynamic SET clause
+    const fields = [];
+    const values = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(value);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    // Check if member exists
     const [exists] = await db.promise().query('SELECT * FROM member WHERE user_id = ?', [user_id]);
     if (exists.length === 0) {
       return res.status(404).json({ message: 'Member not found' });
     }
 
-    const sql = 'UPDATE member SET user_id = ? WHERE user_id = ?';
-    await db.promise().query(sql, [new_user_id, user_id]);
+    // Run dynamic update
+    const sql = `UPDATE member SET ${fields.join(', ')} WHERE user_id = ?`;
+    values.push(user_id);
+
+    await db.promise().query(sql, values);
 
     res.json({ message: 'Member updated successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // Delete
 exports.deleteMember = async (req, res) => {

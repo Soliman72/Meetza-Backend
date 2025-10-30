@@ -4,29 +4,8 @@ const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const nodemailer = require("nodemailer");
 const passport = require("passport");
-// Helper function to send the verification email
-const sendVerificationEmail = (email, verificationCode, msg) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Verify Your Email Address",
-    html: `
-      ${msg}
-      <h2>${verificationCode}</h2>
-      <p>If you did not request this, please ignore this email.</p>
-    `,
-  };
-
-  return transporter.sendMail(mailOptions);
-};
+const userController = require("./userController");
+const social_authController = require("./social_authController");
 
 // Register new user with email verification
 exports.register = async (req, res) => {
@@ -451,7 +430,6 @@ exports.socialAuthCallback = (req, res, next) => {
         "NoName";
 
       // 1 Check user_providers for provider + provider_id
-      // 1 Check user_providers for provider + provider_id
       const findProvQ =
         "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1";
       db.query(findProvQ, ["google", providerId], (err, rowsProv) => {
@@ -495,30 +473,23 @@ exports.socialAuthCallback = (req, res, next) => {
               if (rowsEmail.length > 0) {
                 user = rowsEmail[0];
                 // insert into social_auth (ignore duplicate errors)
-                const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
-                db.query(
-                  insertProviderQ,
-                  [user.id, "google", providerId],
-                  (err) => {
-                    if (err) {
-                      console.warn(
-                        "Could not insert provider (maybe exists):",
-                        err.message || err
-                      );
-                    }
-                  }
-                );
+                await this.social_authController.createSocialAuth({
+                  user_id: user.id,
+                  provider: "google",
+                  provider_id: providerId,
+                });
 
                 // ensure email verification true
-                db.query(
-                  "UPDATE users SET email_verification = ? WHERE id = ?",
-                  [true, user.id],
-                  (err) => {
-                    if (err) {
-                      console.error("Error updating email verification:", err);
-                    }
-                  }
-                );
+                await userController.updateUser(user.id, { email_verification: true });
+                // db.query(
+                //   "UPDATE users SET email_verification = ? WHERE id = ?",
+                //   [true, user.id],
+                //   (err) => {
+                //     if (err) {
+                //       console.error("Error updating email verification:", err);
+                //     }
+                //   }
+                // );
 
                 proceedWithUser(user, "google", res);
 
@@ -526,54 +497,68 @@ exports.socialAuthCallback = (req, res, next) => {
               } else {
                 // 3 Create new user and link provider
                 const id = uuidv4();
-                const insertUserQuery = `INSERT INTO user (id, name, email, role, verification_code , email_verification) VALUES (?, ?, ?, ?, ?, ?)`;
-                db.query(
-                  insertUserQuery,
-                  [id, name, email, role, 0, true],
-                  (err) => {
-                    if (err) {
-                      console.error("Error inserting new user:", err);
-                      return res.status(500).json({
-                        success: false,
-                        message: "Error creating user",
-                      });
-                    }
+                await userController.createUser({
+                  id,
+                  name,
+                  email,
+                  password: uuidv4(), // random password
+                  role,
+                  verification_code: null,
+                  email_verification: true,
+                }, res);
+                await this.social_authController.createSocialAuth({
+                  user_id: id,
+                  provider: "google",
+                  provider_id: providerId,
+                });
+                // const insertUserQuery = `INSERT INTO user (id, name, email, role, verification_code , email_verification) VALUES (?, ?, ?, ?, ?, ?)`;
+                // db.query(
+                //   insertUserQuery,
+                //   [id, name, email, role, 0, true],
+                //   (err) => {
+                //     if (err) {
+                //       console.error("Error inserting new user:", err);
+                //       return res.status(500).json({
+                //         success: false,
+                //         message: "Error creating user",
+                //       });
+                //     }
 
-                    if (role === "Administrator") {
-                      db.query(
-                        "INSERT INTO administrator (user_id) VALUES (?)",
-                        [id],
-                        (err) => {
-                          if (err) {
-                            console.error(
-                              "Error inserting into administrator:",
-                              err
-                            );
-                          }
-                        }
-                      );
-                    } else if (role === "Member") {
-                      db.query(
-                        "INSERT INTO member (user_id) VALUES (?)",
-                        [id],
-                        (err) => {
-                          if (err) {
-                            console.error("Error inserting into member:", err);
-                          }
-                        }
-                      );
-                    }
+                //     if (role === "Administrator") {
+                //       db.query(
+                //         "INSERT INTO administrator (user_id) VALUES (?)",
+                //         [id],
+                //         (err) => {
+                //           if (err) {
+                //             console.error(
+                //               "Error inserting into administrator:",
+                //               err
+                //             );
+                //           }
+                //         }
+                //       );
+                //     } else if (role === "Member") {
+                //       db.query(
+                //         "INSERT INTO member (user_id) VALUES (?)",
+                //         [id],
+                //         (err) => {
+                //           if (err) {
+                //             console.error("Error inserting into member:", err);
+                //           }
+                //         }
+                //       );
+                //     }
 
-                    const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
-                    db.query(
-                      insertProviderQ,
-                      [id, "google", providerId],
-                      (err) => {
-                        if (err) {
-                          console.error("Error inserting social auth:", err);
-                        }
-                      }
-                    );
+                //     const insertProviderQ = `INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)`;
+                //     db.query(
+                //       insertProviderQ,
+                //       [id, "google", providerId],
+                //       (err) => {
+                //         if (err) {
+                //           console.error("Error inserting social auth:", err);
+                //         }
+                //       }
+                //     );
 
                     // Fetch new user details
                     db.query(
@@ -594,8 +579,8 @@ exports.socialAuthCallback = (req, res, next) => {
                         // Continue with JWT token creation or response here
                       }
                     );
-                  }
-                );
+                //   }
+                // );
               }
             }
           );
@@ -616,6 +601,30 @@ exports.socialAuthCallback = (req, res, next) => {
       });
     }
   })(req, res, next);
+};
+
+// Helper function to send the verification email
+const sendVerificationEmail = (email, verificationCode, msg) => {
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: "Verify Your Email Address",
+    html: `
+      ${msg}
+      <h2>${verificationCode}</h2>
+      <p>If you did not request this, please ignore this email.</p>
+    `,
+  };
+
+  return transporter.sendMail(mailOptions);
 };
 
 // Helper function to proceed with user creation and token generation

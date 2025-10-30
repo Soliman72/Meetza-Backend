@@ -48,23 +48,36 @@ exports.getSocialAuthById = async (req, res) => {
 exports.updateSocialAuth = async (req, res) => {
   try {
     const { id } = req.params;
-    const { user_id, provider, provider_id } = req.body;
+    const updates = req.body;
 
     if (!id) {
-      return res.status(400).json({ message: 'id is required' });
+      return res.status(400).json({ message: 'id is required in params' });
     }
 
-    if (!user_id || !provider || !provider_id) {
-      return res.status(400).json({ message: 'user_id, provider, and provider_id are required' });
+    // Build dynamic query
+    const fields = [];
+    const values = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(value);
     }
 
-    const [result] = await db.promise().query('SELECT * FROM social_auth WHERE id = ?', [id]);
-    if (result.length === 0) {
+    if (fields.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    // Check if record exists
+    const [exists] = await db.promise().query('SELECT * FROM social_auth WHERE id = ?', [id]);
+    if (exists.length === 0) {
       return res.status(404).json({ message: 'Record not found' });
     }
 
-    const sql = 'UPDATE social_auth SET user_id = ?, provider = ?, provider_id = ? WHERE id = ?';
-    await db.promise().query(sql, [user_id, provider, provider_id, id]);
+    // Update dynamically
+    const sql = `UPDATE social_auth SET ${fields.join(', ')} WHERE id = ?`;
+    values.push(id);
+    await db.promise().query(sql, values);
+
     res.json({ message: 'Social account updated successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });

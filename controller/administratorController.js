@@ -57,10 +57,10 @@ exports.getAdministratorById = async (req, res) => {
 exports.updateAdministrator = async (req, res) => {
   try {
     const { user_id } = req.params;
-    const { new_user_id, role } = req.body;
+    const updates = req.body;
 
-    if (!user_id || !new_user_id || !role) {
-      return res.status(400).json({ message: 'user_id, new_user_id and role are required' });
+    if (!user_id) {
+      return res.status(400).json({ message: 'user_id is required' });
     }
 
     const [exists] = await db.promise().query('SELECT * FROM administrator WHERE user_id = ?', [user_id]);
@@ -68,8 +68,23 @@ exports.updateAdministrator = async (req, res) => {
       return res.status(404).json({ message: 'Administrator not found' });
     }
 
-    const sql = 'UPDATE administrator SET user_id = ?, role = ? WHERE user_id = ?';
-    await db.promise().query(sql, [new_user_id, role, user_id]);
+    // Build update query dynamically based on provided fields
+    const fields = [];
+    const values = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(value);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    const sql = `UPDATE administrator SET ${fields.join(', ')} WHERE user_id = ?`;
+    values.push(user_id);
+
+    await db.promise().query(sql, values);
 
     res.json({ message: 'Administrator updated successfully' });
   } catch (err) {
