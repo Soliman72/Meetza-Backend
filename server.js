@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const authRouter = require("./router/authRouter");
 const meetingContentRouter = require("./router/meetingContentRouter");
+const meetingRouter = require("./router/meetingRouter");
 const passport = require("./config/passport");
 
 require("./config/db");
@@ -20,10 +21,16 @@ app.use(passport.initialize());
 app.use("/api/auth", authRouter);
 
 app.use("/api/meeting-contents", meetingContentRouter);
+app.use("/api/meeting", meetingRouter);
 app.use("/api/social_auth", socialAuthRouter);
 app.use("/api/member", memberRouter);
 app.use("/api/administrator", administratorRouter);
 app.use("/api/user", userRouter);
+
+app.get("/", (req, res) => {
+  res.send("اهلا يا شهد يا رخمه!!!");
+});
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}...`);
 });
