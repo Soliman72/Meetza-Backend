@@ -1,13 +1,11 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-require("./config/db");
 const authRouter = require("./router/authRouter");
 const meetingContentRouter = require("./router/meetingContentRouter");
 const passport = require("./config/passport");
-require("dotenv").config();
-require("./config/db");
 
-const authRouter = require("./router/authRouter");
+require("./config/db");
 const socialAuthRouter = require("./router/social_authRouter");
 const memberRouter = require("./router/memberRouter");
 const administratorRouter = require("./router/administratorRouter");
