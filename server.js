@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const path = require("path");
 const cors = require("cors");
 const authRouter = require("./router/authRouter");
 const meetingContentRouter = require("./router/meetingContentRouter");
@@ -11,8 +12,15 @@ const socialAuthRouter = require("./router/social_authRouter");
 const memberRouter = require("./router/memberRouter");
 const administratorRouter = require("./router/administratorRouter");
 const userRouter = require("./router/userRouter");
+const videoRouter = require("./router/videoRouter");
+
+// Use video router
 
 const app = express();
+
+// Serve static files (videos, posters) from the uploads folder
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 const port = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
@@ -25,6 +33,9 @@ app.use("/api/meeting", meetingRouter);
 app.use("/api/social_auth", socialAuthRouter);
 app.use("/api/member", memberRouter);
 app.use("/api/administrator", administratorRouter);
+app.use("/api/video", videoRouter);
+app.use("/api/like", require("./router/likeRouter"));
+
 app.use("/api/user", userRouter);
 
 app.get("/", (req, res) => {
