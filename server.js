@@ -13,6 +13,9 @@ const memberRouter = require("./router/memberRouter");
 const administratorRouter = require("./router/administratorRouter");
 const userRouter = require("./router/userRouter");
 const videoRouter = require("./router/videoRouter");
+const groupRouter = require("./router/groupRouter"); // Use group router
+const groupMembershipRouter = require("./router/group_membershipRouter");
+const positionRouter = require("./router/positionRouter"); // Use position router
 
 // Use video router
 
@@ -28,15 +31,20 @@ app.use(passport.initialize());
 
 app.use("/api/auth", authRouter);
 
-app.use("/api/meeting-contents", meetingContentRouter);
-app.use("/api/meeting", meetingRouter);
+
+app.use("/api/user", userRouter);
 app.use("/api/social_auth", socialAuthRouter);
 app.use("/api/member", memberRouter);
 app.use("/api/administrator", administratorRouter);
+
+app.use("/api/position", positionRouter);
+app.use("/api/group", groupRouter);
+app.use("/api/group-membership", groupMembershipRouter);
+app.use("/api/meeting-contents", meetingContentRouter);
+app.use("/api/meeting", meetingRouter);
 app.use("/api/video", videoRouter);
 app.use("/api/like", require("./router/likeRouter"));
 
-app.use("/api/user", userRouter);
 
 app.get("/", (req, res) => {
   res.send("اهلا يا شهد يا رخمه!!!");
