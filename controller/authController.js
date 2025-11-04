@@ -117,65 +117,71 @@ exports.register = async (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
-    const { email, password, remember_me } = req.body;
+    const { email, password, remember_me, role } = req.body;
 
     // Validate required fields
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "email and password are required",
+        message: "Email and password are required",
       });
     }
 
     // Check if user exists
-    db.query(
-      "SELECT * FROM user WHERE email = ?",
-      [email],
-      async (err, rows) => {
-        if (err) return res.status(500).json({ error: err });
-        if (rows.length === 0) {
-          return res.status(401).json({
-            success: false,
-            message: "Invalid email or password",
-          });
-        }
+    const [rows] = await db
+      .promise()
+      .query("SELECT * FROM user WHERE email = ?", [email]);
 
-        const user = rows[0];
+    if (rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
 
-        // Compare password
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-          return res.status(401).json({
-            success: false,
-            message: "Invalid email or password",
-          });
-        }
+    const user = rows[0];
 
-        // Generate JWT token
-        const token = jwt.sign(
-          {
-            id: user.id,
-            email: user.email,
-          },
-          process.env.JWT_SECRET,
-          { expiresIn: remember_me === "true" ? "4d" : "24h" }
-        );
-
-        res.status(200).json({
-          success: true,
-          message: "Login successful",
-          data: {
-            token,
-            user: {
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-            },
-          },
+    if (role) {
+      if (user.role !== role) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid role for this user",
         });
       }
+    }
+
+    // Compare password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: remember_me === "true" ? "4d" : "24h" }
     );
+
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      },
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -480,7 +486,9 @@ exports.socialAuthCallback = (req, res, next) => {
                 });
 
                 // ensure email verification true
-                await userController.updateUser(user.id, { email_verification: true });
+                await userController.updateUser(user.id, {
+                  email_verification: true,
+                });
                 // db.query(
                 //   "UPDATE users SET email_verification = ? WHERE id = ?",
                 //   [true, user.id],
@@ -497,15 +505,18 @@ exports.socialAuthCallback = (req, res, next) => {
               } else {
                 // 3 Create new user and link provider
                 const id = uuidv4();
-                await userController.createUser({
-                  id,
-                  name,
-                  email,
-                  password: uuidv4(), // random password
-                  role,
-                  verification_code: null,
-                  email_verification: true,
-                }, res);
+                await userController.createUser(
+                  {
+                    id,
+                    name,
+                    email,
+                    password: uuidv4(), // random password
+                    role,
+                    verification_code: null,
+                    email_verification: true,
+                  },
+                  res
+                );
                 await this.social_authController.createSocialAuth({
                   user_id: id,
                   provider: "google",
@@ -560,25 +571,25 @@ exports.socialAuthCallback = (req, res, next) => {
                 //       }
                 //     );
 
-                    // Fetch new user details
-                    db.query(
-                      "SELECT * FROM user WHERE email = ?",
-                      [email],
-                      (err, newRows) => {
-                        if (err) {
-                          console.error("Error fetching new user:", err);
-                          return res.status(500).json({
-                            success: false,
-                            message: "Error fetching new user",
-                          });
-                        }
+                // Fetch new user details
+                db.query(
+                  "SELECT * FROM user WHERE email = ?",
+                  [email],
+                  (err, newRows) => {
+                    if (err) {
+                      console.error("Error fetching new user:", err);
+                      return res.status(500).json({
+                        success: false,
+                        message: "Error fetching new user",
+                      });
+                    }
 
-                        user = newRows[0];
-                        proceedWithUser(user, "google", res);
+                    user = newRows[0];
+                    proceedWithUser(user, "google", res);
 
-                        // Continue with JWT token creation or response here
-                      }
-                    );
+                    // Continue with JWT token creation or response here
+                  }
+                );
                 //   }
                 // );
               }
