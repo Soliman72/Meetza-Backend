@@ -1,21 +1,23 @@
 const db = require('../config/db');
 
 // Create
-exports.createSocialAuth = async (req, res) => {
+exports.createSocialAuth = async (data) => {
   try {
-    const { user_id, provider, provider_id } = req.body;
+    const { user_id, provider, provider_id } = data;
 
     if (!user_id || !provider || !provider_id) {
-      return res.status(400).json({ message: 'user_id, provider, and provider_id are required' });
+      throw new Error("user_id, provider, and provider_id are required");
     }
 
     const sql = 'INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)';
-    const [result] = await db.promise().query(sql, [user_id, provider, provider_id]);
-    res.status(201).json({ user_id, provider, provider_id });
+    await db.promise().query(sql, [user_id, provider, provider_id]);
+
+    return { user_id, provider, provider_id };
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    throw err;
   }
 };
+
 
 // Read all
 exports.getAllSocialAuths = async (req, res) => {

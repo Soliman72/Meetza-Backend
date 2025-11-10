@@ -1,26 +1,31 @@
 const db = require('../config/db');
 
 // Create
-exports.createAdministrator = async (req, res) => {
-  try {
-    const { user_id, role } = req.body;
+exports.createAdministrator = async (req) => {
+  const { user_id, role } = req.body;
 
-    if (!user_id || !role) {
-      return res.status(400).json({ message: 'user_id and role are required' });
-    }
-
-    const [exists] = await db.promise().query('SELECT * FROM administrator WHERE user_id = ?', [user_id]);
-    if (exists.length > 0) {
-      return res.status(409).json({ message: 'Administrator already exists' });
-    }
-
-    const sql = 'INSERT INTO administrator (user_id, role) VALUES (?, ?)';
-    await db.promise().query(sql, [user_id, role]);
-
-    res.status(201).json({ message: 'Administrator created successfully', user_id, role });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  if (!user_id || !role) {
+    throw new Error('user_id and role are required');
   }
+
+  const [exists] = await db.promise().query(
+    'SELECT * FROM administrator WHERE user_id = ?',
+    [user_id]
+  );
+
+  if (exists.length > 0) {
+    throw new Error('Administrator already exists');
+  }
+
+  const sql = 'INSERT INTO administrator (user_id, role) VALUES (?, ?)';
+  const [result] = await db.promise().query(sql, [user_id, role]);
+
+  const [newAdmin] = await db.promise().query(
+    'SELECT * FROM administrator WHERE user_id = ?',
+    [user_id]
+  );
+
+  return newAdmin[0];
 };
 
 // Read all

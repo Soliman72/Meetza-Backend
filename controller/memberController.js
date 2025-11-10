@@ -1,26 +1,31 @@
 const db = require('../config/db');
 
 // Create
-exports.createMember = async (req, res) => {
-  try {
-    const { user_id } = req.body;
+exports.createMember = async (req) => {
+  const { user_id } = req.body;
 
-    if (!user_id) {
-      return res.status(400).json({ message: 'user_id is required' });
-    }
-
-    const [exists] = await db.promise().query('SELECT * FROM member WHERE user_id = ?', [user_id]);
-    if (exists.length > 0) {
-      return res.status(409).json({ message: 'Member already exists' });
-    }
-
-    const sql = 'INSERT INTO member (user_id) VALUES (?)';
-    await db.promise().query(sql, [user_id]);
-
-    res.status(201).json({ message: 'Member created successfully', user_id });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  if (!user_id) {
+    throw new Error('user_id is required');
   }
+
+  const [exists] = await db.promise().query(
+    'SELECT * FROM member WHERE user_id = ?',
+    [user_id]
+  );
+
+  if (exists.length > 0) {
+    throw new Error('Member already exists');
+  }
+
+  const sql = 'INSERT INTO member (user_id) VALUES (?)';
+  const [result] = await db.promise().query(sql, [user_id]);
+
+  const [newMember] = await db.promise().query(
+    'SELECT * FROM member WHERE user_id = ?',
+    [user_id]
+  );
+
+  return newMember[0];
 };
 
 // Read all

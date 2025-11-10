@@ -3,7 +3,7 @@ const router = express.Router();
 const controller = require('../controller/userController');
 const { verifyToken } = require("../utils/verifyToken");
 
-router.post('/', controller.createUser);
+
 router.get('/', verifyToken, controller.getAllUsers);
 router.get('/:id', verifyToken, controller.getUserById);
 router.patch('/:id', verifyToken, controller.updateUser);
