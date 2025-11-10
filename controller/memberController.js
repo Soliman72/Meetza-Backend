@@ -1,26 +1,31 @@
 const db = require('../config/db');
 
 // Create
-exports.createMember = async (req, res) => {
-  try {
-    const { user_id } = req.body;
+exports.createMember = async (req) => {
+  const { user_id } = req.body;
 
-    if (!user_id) {
-      return res.status(400).json({ message: 'user_id is required' });
-    }
-
-    const [exists] = await db.promise().query('SELECT * FROM member WHERE user_id = ?', [user_id]);
-    if (exists.length > 0) {
-      return res.status(409).json({ message: 'Member already exists' });
-    }
-
-    const sql = 'INSERT INTO member (user_id) VALUES (?)';
-    await db.promise().query(sql, [user_id]);
-
-    res.status(201).json({ message: 'Member created successfully', user_id });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  if (!user_id) {
+    throw new Error('user_id is required');
   }
+
+  const [exists] = await db.promise().query(
+    'SELECT * FROM member WHERE user_id = ?',
+    [user_id]
+  );
+
+  if (exists.length > 0) {
+    throw new Error('Member already exists');
+  }
+
+  const sql = 'INSERT INTO member (user_id) VALUES (?)';
+  const [result] = await db.promise().query(sql, [user_id]);
+
+  const [newMember] = await db.promise().query(
+    'SELECT * FROM member WHERE user_id = ?',
+    [user_id]
+  );
+
+  return newMember[0];
 };
 
 // Read all
@@ -57,43 +62,21 @@ exports.getMemberById = async (req, res) => {
 exports.updateMember = async (req, res) => {
   try {
     const { user_id } = req.params;
-    const updates = req.body;
+    const { user_id : new_user_id } = req.body;
 
-    if (!user_id) {
-      return res.status(400).json({ message: 'user_id is required in params' });
+    if (!user_id || !new_user_id) {
+      return res.status(400).json({ message: 'user_id and new_user_id are required' });
     }
-
-    // Build dynamic SET clause
-    const fields = [];
-    const values = [];
-
-    for (const [key, value] of Object.entries(updates)) {
-      fields.push(`${key} = ?`);
-      values.push(value);
-    }
-
-    if (fields.length === 0) {
-      return res.status(400).json({ message: 'No fields to update' });
-    }
-
-    // Check if member exists
-    const [exists] = await db.promise().query('SELECT * FROM member WHERE user_id = ?', [user_id]);
-    if (exists.length === 0) {
+    const sql = 'UPDATE member SET user_id = ? WHERE user_id = ?';
+    const [result] = await db.promise().query(sql, [new_user_id, user_id]);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Member not found' });
     }
-
-    // Run dynamic update
-    const sql = `UPDATE member SET ${fields.join(', ')} WHERE user_id = ?`;
-    values.push(user_id);
-
-    await db.promise().query(sql, values);
-
     res.json({ message: 'Member updated successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 // Delete
 exports.deleteMember = async (req, res) => {
