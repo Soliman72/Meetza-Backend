@@ -1,13 +1,15 @@
 const db = require('../config/db');
+const bcrypt = require("bcrypt");
+const { v4: uuidv4 } = require("uuid");
 const administratorController = require('./administratorController');
 const memberController = require('./memberController');
 
 // Create
 exports.createUser = async (req, res) => {
     try {
-        const {id, name, email, password, role, verification_code, email_verification } = req.body;
+        const {name, email, password, role, verification_code, email_verification } = req.body;
 
-        if (!id || !name || !email || !password || !role || !verification_code || !email_verification) {
+        if (!name || !email || !password || !role || !verification_code || !email_verification) {
             return res.status(400).json({ message: 'One or more fields are required' });
         }
 
@@ -16,8 +18,14 @@ exports.createUser = async (req, res) => {
             return res.status(409).json({ message: 'User with this email already exists' });
         }
 
+        // Generate unique user ID
+        const id = uuidv4();
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
         const sql = 'INSERT INTO user (id, name, email, password, role, verification_code, email_verification) VALUES (?, ?, ?, ?, ?, ?, ?)';
-        await db.promise().query(sql, [id, name, email, password, role, verification_code, email_verification]);
+        await db.promise().query(sql, [id, name, email, hashedPassword, role, verification_code, email_verification]);
 
         if(role === 'Administrator'){
             const reqadmin = { body: { user_id: id, role: role } };
@@ -64,35 +72,19 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+        const {name, email, password, role, verification_code, email_verification } = req.body;
 
         if (!id) {
             return res.status(400).json({ message: 'id is required' });
         }
-
-        // Check if user exists
-        const [exists] = await db.promise().query('SELECT * FROM user WHERE id = ?', [id]);
-        if (exists.length === 0) {
-            return res.status(404).json({ message: 'User not found' });
+        if (!name && !email && !password && !role && !verification_code && !email_verification) {
+            return res.status(400).json({ message: 'At least one field is required to update' });
         }
 
-        // Build dynamic update query
-        const fields = [];
-        const values = [];
-
-        for (const [key, value] of Object.entries(updates)) {
-            fields.push(`${key} = ?`);
-            values.push(value);
-        }
-
-        if (fields.length === 0) {
-            return res.status(400).json({ message: 'No fields to update' });
-        }
-
-        const sql = `UPDATE user SET ${fields.join(', ')} WHERE id = ?`;
-        values.push(id);
-
-        await db.promise().query(sql, values);
+        await db.promise().query(
+            'UPDATE user SET name = COALESCE(?, name), email = COALESCE(?, email), password = COALESCE(?, password), role = COALESCE(?, role), verification_code = COALESCE(?, verification_code), email_verification = COALESCE(?, email_verification) WHERE id = ?',
+            [name, email, password, role, verification_code, email_verification, id]
+        );
         res.json({ message: 'User updated successfully' });
     } catch (err) {
         res.status(500).json({ message: err.message });

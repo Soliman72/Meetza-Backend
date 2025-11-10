@@ -11,7 +11,7 @@ exports.createSocialAuth = async (req, res) => {
 
     const sql = 'INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)';
     const [result] = await db.promise().query(sql, [user_id, provider, provider_id]);
-    res.status(201).json({ id: result.insertId, user_id, provider, provider_id });
+    res.status(201).json({ user_id, provider, provider_id });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -47,37 +47,17 @@ exports.getSocialAuthById = async (req, res) => {
 // Update
 exports.updateSocialAuth = async (req, res) => {
   try {
-    const { id } = req.params;
-    const updates = req.body;
-
-    if (!id) {
-      return res.status(400).json({ message: 'id is required in params' });
+    const { user_id } = req.params;
+    const { provider, provider_id } = req.body;
+    if (!user_id || !provider || !provider_id) {
+      return res.status(400).json({ message: 'user_id, provider, and provider_id are required' });
     }
 
-    // Build dynamic query
-    const fields = [];
-    const values = [];
-
-    for (const [key, value] of Object.entries(updates)) {
-      fields.push(`${key} = ?`);
-      values.push(value);
-    }
-
-    if (fields.length === 0) {
-      return res.status(400).json({ message: 'No fields to update' });
-    }
-
-    // Check if record exists
-    const [exists] = await db.promise().query('SELECT * FROM social_auth WHERE id = ?', [id]);
-    if (exists.length === 0) {
+    const sql = 'UPDATE social_auth SET provider = COALESCE(?, provider), provider_id = COALESCE(?, provider_id) WHERE user_id = ?';
+    const [result] = await db.promise().query(sql, [provider, provider_id, user_id]);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Record not found' });
     }
-
-    // Update dynamically
-    const sql = `UPDATE social_auth SET ${fields.join(', ')} WHERE id = ?`;
-    values.push(id);
-    await db.promise().query(sql, values);
-
     res.json({ message: 'Social account updated successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -87,18 +67,18 @@ exports.updateSocialAuth = async (req, res) => {
 // Delete
 exports.deleteSocialAuth = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { user_id } = req.params;
 
-    if (!id) {
+    if (!user_id) {
       return res.status(400).json({ message: 'id is required' });
     }
 
-    const [rows] = await db.promise().query('SELECT * FROM social_auth WHERE id = ?', [id]);
-    if (rows.length === 0) {
+    const sql = 'DELETE FROM social_auth WHERE user_id = ?';
+    const [result] = await db.promise().query(sql, [user_id]);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Record not found' });
     }
 
-    await db.promise().query('DELETE FROM social_auth WHERE id = ?', [id]);
     res.json({ message: 'Social account deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });

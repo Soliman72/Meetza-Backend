@@ -16,95 +16,132 @@ exports.register = async (req, res) => {
     if (!name || !password || !role || !email) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required",
+        message: "One or more fields are required",
+      });
+    }
+    
+    // Check if email already exists
+    const [rows] = await db.promise().query('SELECT email FROM user WHERE email = ?', [email]);
+    if (rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists",
       });
     }
 
-    // Check if email already exists
-    db.query(
-      "SELECT email FROM user WHERE email = ?",
-      [email],
-      async (err, rows) => {
-        if (err) return res.status(500).json({ error: err });
-        if (rows.length > 0) {
-          return res.status(400).json({
-            success: false,
-            message: "Email already exists",
-          });
-        }
+    // Generate a 4-digit verification code
+    const verificationCode = Math.floor(1000 + Math.random() * 9000);
 
-        // Generate unique user ID
-        const id = uuidv4();
+    // Insert new user (with 'verified' flag set to false)
+    const userData = { body: {name, email, password, role, verification_code: verificationCode, email_verification: `false`} };
+    await userController.createUser(userData, res);
 
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
+    // Send verification email with 4-digit code
+    sendVerificationEmail(
+      email,
+      verificationCode,
+      "<p>Thank you for registering! Please use the following code to verify your email:</p>"
+    )
+      .then(() => { 
+        return res.status(201).json({
+          success: true,
+          message: "User registered successfully. Please check your email to verify your account.",
+          data: { name, email, role },
+        });
+      })
+      .catch(async (emailError) => {
+        // If email fails to send, delete the user from the database
+        await db.promise().query("DELETE FROM user WHERE email = ?", [email]);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to send verification email. User registration has been cancelled.",
+          error: emailError.message,
+        });
+      });
+    // db.query(
+    //   "SELECT email FROM user WHERE email = ?",
+    //   [email],
+    //   async (err, rows) => {
+    //     if (err) return res.status(500).json({ error: err });
+    //     if (rows.length > 0) {
+    //       return res.status(400).json({
+    //         success: false,
+    //         message: "Email already exists",
+    //       });
+    //     }
 
-        // Generate a 4-digit verification code
-        const verificationCode = Math.floor(1000 + Math.random() * 9000);
+    //     // Generate unique user ID
+    //     const id = uuidv4();
 
-        // Insert new user (with 'verified' flag set to false)
-        const query =
-          "INSERT INTO user (id, name, email, password, role, verification_code, email_verification) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        db.query(
-          query,
-          [id, name, email, hashedPassword, role, verificationCode, false],
-          (err, result) => {
-            if (err) return res.status(500).json({ error: err });
+    //     // Hash password
+    //     const hashedPassword = await bcrypt.hash(password, 10);
 
-            // Send verification email with 4-digit code
-            sendVerificationEmail(
-              email,
-              verificationCode,
-              "<p>Thank you for registering! Please use the following code to verify your email:</p>"
-            )
-              .then(() => {
-                const selectQuery = "SELECT * FROM user WHERE id = ?";
-                db.query(selectQuery, [id], (err, rows) => {
-                  if (err) return res.status(500).json({ error: err });
+    //     // Generate a 4-digit verification code
+    //     const verificationCode = Math.floor(1000 + Math.random() * 9000);
 
-                  // Check if the user is an admin or member and insert into respective table
-                  if (role === "Administrator") {
-                    db.query(
-                      "INSERT INTO administrator (user_id) VALUES (?)",
-                      [id],
-                      (err) => {
-                        if (err) return res.status(500).json({ error: err });
-                      }
-                    );
-                  } else if (role === "Member") {
-                    db.query(
-                      "INSERT INTO member (user_id) VALUES (?)",
-                      [id],
-                      (err) => {
-                        if (err) return res.status(500).json({ error: err });
-                      }
-                    );
-                  }
+    //     // Insert new user (with 'verified' flag set to false)
+    //     const query =
+    //       "INSERT INTO user (id, name, email, password, role, verification_code, email_verification) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    //     db.query(
+    //       query,
+    //       [id, name, email, hashedPassword, role, verificationCode, false],
+    //       (err, result) => {
+    //         if (err) return res.status(500).json({ error: err });
 
-                  return res.status(201).json({
-                    success: true,
-                    message:
-                      "User registered successfully. Please check your email to verify your account.",
-                    data: rows[0],
-                  });
-                });
-              })
-              .catch((emailError) => {
-                // If email fails to send, delete the user from the database
-                db.query("DELETE FROM user WHERE id = ?", [id], (err) => {
-                  if (err) return res.status(500).json({ error: err });
-                  return res.status(500).json({
-                    success: false,
-                    message:
-                      "Failed to send verification email. User registration has been cancelled.",
-                    error: emailError.message,
-                  });
-                });
-              });
-          }
-        );
-      }
-    );
+    //         // Send verification email with 4-digit code
+    //         sendVerificationEmail(
+    //           email,
+    //           verificationCode,
+    //           "<p>Thank you for registering! Please use the following code to verify your email:</p>"
+    //         )
+    //           .then(() => {
+    //             const selectQuery = "SELECT * FROM user WHERE id = ?";
+    //             db.query(selectQuery, [id], (err, rows) => {
+    //               if (err) return res.status(500).json({ error: err });
+
+    //               // Check if the user is an admin or member and insert into respective table
+    //               if (role === "Administrator") {
+    //                 db.query(
+    //                   "INSERT INTO administrator (user_id) VALUES (?)",
+    //                   [id],
+    //                   (err) => {
+    //                     if (err) return res.status(500).json({ error: err });
+    //                   }
+    //                 );
+    //               } else if (role === "Member") {
+    //                 db.query(
+    //                   "INSERT INTO member (user_id) VALUES (?)",
+    //                   [id],
+    //                   (err) => {
+    //                     if (err) return res.status(500).json({ error: err });
+    //                   }
+    //                 );
+    //               }
+
+    //               return res.status(201).json({
+    //                 success: true,
+    //                 message:
+    //                   "User registered successfully. Please check your email to verify your account.",
+    //                 data: rows[0],
+    //               });
+    //             });
+    //           })
+    //           .catch((emailError) => {
+    //             // If email fails to send, delete the user from the database
+    //             db.query("DELETE FROM user WHERE id = ?", [id], (err) => {
+    //               if (err) return res.status(500).json({ error: err });
+    //               return res.status(500).json({
+    //                 success: false,
+    //                 message:
+    //                   "Failed to send verification email. User registration has been cancelled.",
+    //                 error: emailError.message,
+    //               });
+    //             });
+    //           });
+    //       }
+    //     );
+    //   }
+    // );
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -128,9 +165,7 @@ exports.login = async (req, res) => {
     }
 
     // Check if user exists
-    const [rows] = await db
-      .promise()
-      .query("SELECT * FROM user WHERE email = ?", [email]);
+    const [rows] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
 
     if (rows.length === 0) {
       return res.status(401).json({
@@ -192,46 +227,81 @@ exports.login = async (req, res) => {
 };
 
 // Email Verification Route
-exports.verifyEmail = (req, res) => {
-  const { code, email } = req.body;
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { code, email } = req.body;
 
-  if (!code || !email) {
-    return res.status(400).json({
+    if (!code || !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Verification code & Email is required",
+      });
+    }
+
+    // Verify code in the database
+    const [rows] = await db.promise().query(
+      "SELECT * FROM user WHERE verification_code = ? AND email_verification = false AND email = ?",
+      [code, email]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid or expired verification code",
+      });
+    }
+
+    const user = rows[0];
+
+    // Mark as verified
+    await db.promise().query(
+      "UPDATE user SET email_verification = true, verification_code = NULL WHERE email = ?",
+      [user.email]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Email verified successfully. You can now log in.",
+    });
+
+  } catch (error) {
+    console.error("verifyEmail error:", error);
+    return res.status(500).json({
       success: false,
-      message: "Verification code & Email is required",
+      message: "Error verifying email",
+      error: error.message,
     });
   }
 
-  // Verify code in the database
-  db.query(
-    "SELECT * FROM user WHERE verification_code = ? AND email_verification = false AND email = ?",
-    [code, email],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err });
-      if (rows.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid or expired verification code",
-        });
-      }
+  // db.query(
+  //   "SELECT * FROM user WHERE verification_code = ? AND email_verification = false AND email = ?",
+  //   [code, email],
+  //   (err, rows) => {
+  //     if (err) return res.status(500).json({ error: err });
+  //     if (rows.length === 0) {
+  //       return res.status(400).json({
+  //         success: false,
+  //         message: "Invalid or expired verification code",
+  //       });
+  //     }
 
-      const user = rows[0];
+  //     const user = rows[0];
 
-      // Mark user as verified
-      db.query(
-        "UPDATE user SET email_verification = true, verification_code = NULL WHERE email = ?",
-        [user.email],
-        (err) => {
-          if (err) return res.status(500).json({ error: err });
+  //     // Mark user as verified
+  //     db.query(
+  //       "UPDATE user SET email_verification = true, verification_code = NULL WHERE email = ?",
+  //       [user.email],
+  //       (err) => {
+  //         if (err) return res.status(500).json({ error: err });
 
-          res.status(200).json({
-            success: true,
-            message: "Email verified successfully. You can now log in.",
-          });
-        }
-      );
-    }
-  );
+  //         res.status(200).json({
+  //           success: true,
+  //           message: "Email verified successfully. You can now log in.",
+  //         });
+  //       }
+  //     );
+  //   }
+  // );
 };
 
 // Forgot password - Step 1: Send reset email
@@ -448,7 +518,6 @@ exports.socialAuthCallback = (req, res, next) => {
 
         if (rowsProv.length > 0) {
           // linked provider exists -> get user
-          // const userId = rowsProv[0].user_id;
           db.query(
             "SELECT * FROM user WHERE email = ? LIMIT 1",
             [email],
@@ -603,6 +672,7 @@ exports.socialAuthCallback = (req, res, next) => {
           });
         }
       });
+
     } catch (error) {
       console.error("Social callback error:", error);
       return res.status(500).json({
