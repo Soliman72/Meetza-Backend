@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
+const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 
 // Controller to handle meeting content creation
 exports.createMeetingContent = async (req, res) => {
@@ -35,8 +36,30 @@ exports.createMeetingContent = async (req, res) => {
 // Controller to get all meeting contents
 exports.getAllMeetingContents = async (req, res) => {
   try {
-    const query = "SELECT * FROM meeting_content";
-    const [results] = await db.promise().query(query);
+    const { name } = req.query;
+    let query =
+      "SELECT meeting_content.id , meeting_content.content_name , meeting_content.content_description FROM meeting_content";
+    let params = [];
+
+    // Apply ownership filter for regular admins
+    const ownershipFilter = getOwnershipFilter(req, "meeting.administrator_id");
+    console.log(ownershipFilter);
+
+    if (ownershipFilter.whereClause) {
+      query +=
+        " JOIN meeting ON meeting.meeting_content_id = meeting_content.id";
+      query += " " + ownershipFilter.whereClause;
+      params.push(...ownershipFilter.params);
+    }
+
+    if (name) {
+      query += " AND content_name LIKE ?";
+      params.push(`%${name}%`);
+    }
+
+    console.log(query);
+
+    const [results] = await db.promise().query(query, params);
 
     return res.status(200).json({
       success: true,

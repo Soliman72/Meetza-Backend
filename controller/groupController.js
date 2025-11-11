@@ -1,88 +1,130 @@
-const db = require('../config/db');
+const db = require("../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 
 // Create
 exports.createGroup = async (req, res) => {
-    try {
-        const { group_name, position_id } = req.body;
-        if (!group_name || !position_id) {
-            return res.status(400).json({ message: 'group_name and position_id are required' });
-        }
-        // Chieck if position_id exists
-        const [positionRows] = await db.promise().query('SELECT * FROM position WHERE id = ?', [position_id]);
-        if (positionRows.length === 0) {
-            return res.status(400).json({ message: 'Invalid position_id: not found' });
-        }
-        // Check if user is authenticated and has a valid id
-        if (req.user && req.user.id !== undefined) {
-            req.body.administrator_id = req.user.id;
-        } else {
-            return res.status(401).json({
-                success: false,
-                message: "Unauthorized: administrator_id is required",
-            });
-        }
-        const id = uuidv4();
-        const sql = "INSERT INTO `group` (id, group_name, position_id, administrator_id) VALUES (?, ?, ?, ?)";
-        const [result] = await db.promise().query(sql, [id, group_name, position_id, req.body.administrator_id]);
-        res.status(201).json({ id: result.insertId, group_name, position_id });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+  try {
+    const { group_name, position_id } = req.body;
+    if (!group_name || !position_id) {
+      return res
+        .status(400)
+        .json({ message: "group_name and position_id are required" });
     }
+    // Chieck if position_id exists
+    const [positionRows] = await db
+      .promise()
+      .query("SELECT * FROM position WHERE id = ?", [position_id]);
+    if (positionRows.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Invalid position_id: not found" });
+    }
+    // Check if user is authenticated and has a valid id
+    if (req.user && req.user.id !== undefined) {
+      req.body.administrator_id = req.user.id;
+    } else {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: administrator_id is required",
+      });
+    }
+    const id = uuidv4();
+    const sql =
+      "INSERT INTO `group` (id, group_name, position_id, administrator_id) VALUES (?, ?, ?, ?)";
+    const [result] = await db
+      .promise()
+      .query(sql, [id, group_name, position_id, req.body.administrator_id]);
+    res.status(201).json({ id: result.insertId, group_name, position_id });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // Read all
 exports.getAllGroups = async (req, res) => {
-    try {
-        const [rows] = await db.promise().query('SELECT * FROM `group`');
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+  try {
+    const { name } = req.query;
+    let sql = "SELECT * FROM `group`";
+    let params = [];
+
+    // Apply ownership filter for regular admins
+    const ownershipFilter = getOwnershipFilter(req, "administrator_id");
+    if (ownershipFilter.whereClause) {
+      sql += " " + ownershipFilter.whereClause;
+      params.push(...ownershipFilter.params);
     }
+
+    if (name) {
+      sql += ownershipFilter.whereClause ? " AND" : " WHERE";
+      sql += " group_name LIKE ?";
+      params.push(`%${name}%`);
+    }
+
+    const [rows] = await db.promise().query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // Read by id
 exports.getGroupById = async (req, res) => {
-    try {
-        const { id } = req.params;
-        if (!id) {
-            return res.status(400).json({ message: 'id is required' });
-        }
-        const [rows] = await db.promise().query('SELECT * FROM `group` WHERE id = ?', [id]);
-        if (rows.length === 0) return res.status(404).json({ message: 'Record not found' });
-        res.json(rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "id is required" });
     }
+    let query = "SELECT * FROM `group` WHERE id = ?";
+    let params = [id];
+
+    // Apply ownership filter for regular admins
+    if (!req.isSuperAdmin) {
+      query += " AND administrator_id = ?";
+      params.push(req.administratorId);
+    }
+
+    const [rows] = await db.promise().query(query, params);
+    if (rows.length === 0)
+      return res.status(404).json({ message: "Record not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // Update
 exports.updateGroup = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { group_name, position_id } = req.body;
-        if (!id || !group_name || !position_id) {
-            return res.status(400).json({ message: 'id, group_name and position_id are required' });
-        }
-        const sql = 'UPDATE `group` SET group_name = ?, position_id = ? WHERE id = ?';
-        const [result] = await db.promise().query(sql, [group_name, position_id, id]);
-        res.json({ message: 'Group updated successfully' });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+  try {
+    const { id } = req.params;
+    const { group_name, position_id } = req.body;
+    if (!id || !group_name || !position_id) {
+      return res
+        .status(400)
+        .json({ message: "id, group_name and position_id are required" });
     }
+    const sql =
+      "UPDATE `group` SET group_name = ?, position_id = ? WHERE id = ?";
+    const [result] = await db
+      .promise()
+      .query(sql, [group_name, position_id, id]);
+    res.json({ message: "Group updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // Delete
 exports.deleteGroup = async (req, res) => {
-    try {
-        const { id } = req.params;
-        if (!id) {
-            return res.status(400).json({ message: 'id is required' });
-        }
-        const sql = 'DELETE FROM `group` WHERE id = ?';
-        const [result] = await db.promise().query(sql, [id]);
-        res.json({ message: 'Group deleted successfully' });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "id is required" });
     }
+    const sql = "DELETE FROM `group` WHERE id = ?";
+    const [result] = await db.promise().query(sql, [id]);
+    res.json({ message: "Group deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };

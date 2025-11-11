@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
+const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 
 // Create a meeting
 exports.createMeeting = async (req, res) => {
@@ -102,8 +103,24 @@ exports.createMeeting = async (req, res) => {
 // Get all meetings
 exports.getAllMeetings = async (req, res) => {
   try {
-    const query = "SELECT * FROM meeting";
-    const [results] = await db.promise().query(query);
+    const { title } = req.query;
+    let query = "SELECT * FROM meeting";
+    let params = [];
+
+    // Apply ownership filter for regular admins
+    const ownershipFilter = getOwnershipFilter(req, "administrator_id");
+    if (ownershipFilter.whereClause) {
+      query += " " + ownershipFilter.whereClause;
+      params.push(...ownershipFilter.params);
+    }
+
+    if (title) {
+      query += ownershipFilter.whereClause ? " AND" : " WHERE";
+      query += " title LIKE ?";
+      params.push(`%${title}%`);
+    }
+
+    const [results] = await db.promise().query(query, params);
 
     return res.status(200).json({
       success: true,
@@ -129,8 +146,16 @@ exports.getMeetingById = async (req, res) => {
       });
     }
 
-    const query = "SELECT * FROM meeting WHERE id = ?";
-    const [results] = await db.promise().query(query, [id]);
+    let query = "SELECT * FROM meeting WHERE id = ?";
+    let params = [id];
+
+    // Apply ownership filter for regular admins
+    if (!req.isSuperAdmin) {
+      query += " AND administrator_id = ?";
+      params.push(req.administratorId);
+    }
+
+    const [results] = await db.promise().query(query, params);
 
     if (results.length === 0) {
       return res.status(404).json({

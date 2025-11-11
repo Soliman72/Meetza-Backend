@@ -2,12 +2,40 @@ const express = require("express");
 const router = express.Router();
 const positionController = require("../controller/positionController");
 const { verifyToken } = require("../utils/verifyToken");
-const { checkAdmin } = require("../utils/checkAdmin");
+const {
+  checkAdminPermission,
+  checkOwnership,
+} = require("../utils/checkAdminPermission");
 
-router.get("/", verifyToken, checkAdmin, positionController.getAllPositions);
-router.post("/", verifyToken, checkAdmin, positionController.createPosition);
-router.get("/:id", verifyToken, checkAdmin, positionController.getPositionById);
-router.put("/:id", verifyToken, checkAdmin, positionController.updatePosition);
-router.delete("/:id", verifyToken, checkAdmin, positionController.deletePosition);
+router.get(
+  "/",
+  verifyToken,
+  checkAdminPermission,
+  positionController.getAllPositions
+);
+router.post(
+  "/",
+  verifyToken,
+  checkAdminPermission,
+  positionController.createPosition
+);
+router.get(
+  "/:id",
+  verifyToken,
+  checkAdminPermission,
+  positionController.getPositionById
+);
+router.put(
+  "/:id",
+  verifyToken,
+  checkAdminPermission,
+  positionController.updatePosition
+);
+router.delete(
+  "/:id",
+  verifyToken,
+  checkAdminPermission,
+  positionController.deletePosition
+);
 
 module.exports = router;
