@@ -2,21 +2,39 @@ const express = require("express");
 const router = express.Router();
 const meetingController = require("../controller/meetingController");
 const { verifyToken } = require("../utils/verifyToken");
-const { checkAdmin } = require("../utils/checkAdmin");
+const {
+  checkAdminPermission,
+  checkOwnership,
+} = require("../utils/checkAdminPermission");
 
-router.get("/", verifyToken, checkAdmin, meetingController.getAllMeetings);
-router.post("/", verifyToken, checkAdmin, meetingController.createMeeting);
-router.get("/:id", verifyToken, checkAdmin, meetingController.getMeetingById);
+router.get(
+  "/",
+  verifyToken,
+  checkAdminPermission,
+  meetingController.getAllMeetings
+);
+router.post(
+  "/",
+  verifyToken,
+  checkAdminPermission,
+  meetingController.createMeeting
+);
+router.get(
+  "/:id",
+  verifyToken,
+  checkAdminPermission,
+  meetingController.getMeetingById
+);
 router.put(
   "/:id",
   verifyToken,
-  checkAdmin,
+  checkAdminPermission,
   meetingController.updateMeetingById
 );
 router.delete(
   "/:id",
   verifyToken,
-  checkAdmin,
+  checkAdminPermission,
   meetingController.deleteMeetingById
 );
 

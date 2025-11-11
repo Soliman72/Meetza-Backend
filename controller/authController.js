@@ -21,7 +21,9 @@ exports.register = async (req, res) => {
     }
 
     // Check if email already exists
-    const [rows] = await db.promise().query('SELECT email FROM user WHERE email = ?', [email]);
+    const [rows] = await db
+      .promise()
+      .query("SELECT email FROM user WHERE email = ?", [email]);
     if (rows.length > 0) {
       return res.status(400).json({
         success: false,
@@ -33,7 +35,16 @@ exports.register = async (req, res) => {
     const verificationCode = Math.floor(1000 + Math.random() * 9000);
 
     // Insert new user (with 'verified' flag set to false)
-    const userData = { body: { name, email, password, role, verification_code: verificationCode, email_verification: `false` } };
+    const userData = {
+      body: {
+        name,
+        email,
+        password,
+        role,
+        verification_code: verificationCode,
+        email_verification: `false`,
+      },
+    };
     await userController.createUser(userData);
 
     // Send verification email with 4-digit code
@@ -45,7 +56,8 @@ exports.register = async (req, res) => {
       .then(() => {
         return res.status(201).json({
           success: true,
-          message: "User registered successfully. Please check your email to verify your account.",
+          message:
+            "User registered successfully. Please check your email to verify your account.",
           data: { name, email, role },
         });
       })
@@ -54,11 +66,12 @@ exports.register = async (req, res) => {
         await db.promise().query("DELETE FROM user WHERE email = ?", [email]);
         return res.status(500).json({
           success: false,
-          message: "Failed to send verification email. User registration has been cancelled.",
+          message:
+            "Failed to send verification email. User registration has been cancelled.",
           error: emailError.message,
         });
       });
-    } catch (error) {
+  } catch (error) {
     res.status(500).json({
       success: false,
       message: "Error registering user",
@@ -70,18 +83,20 @@ exports.register = async (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
-    const { email, password, remember_me, role } = req.body;
+    const { email, password, remember_me, role, from } = req.body;
 
     // Validate required fields
-    if (!email || !password) {
+    if (!email || !password || !role) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required",
+        message: "Email , password and role are required",
       });
     }
 
     // Check if user exists
-    const [rows] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
+    const [rows] = await db
+      .promise()
+      .query("SELECT * FROM user WHERE email = ?", [email]);
 
     if (rows.length === 0) {
       return res.status(401).json({
@@ -92,13 +107,24 @@ exports.login = async (req, res) => {
 
     const user = rows[0];
 
-    if (role) {
-      if (user.role !== role) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid role for this user",
-        });
-      }
+    if (user.role !== role) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid role for this user",
+      });
+    }
+
+    // check from dashboard or other platform
+    if (
+      from &&
+      from === "dashboard" &&
+      user.role !== "Administrator" &&
+      user.role !== "Super_Admin"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Administrators only.",
+      });
     }
 
     // Compare password
@@ -155,10 +181,12 @@ exports.verifyEmail = async (req, res) => {
     }
 
     // Verify code in the database
-    const [rows] = await db.promise().query(
-      "SELECT * FROM user WHERE verification_code = ? AND email_verification = false AND email = ?",
-      [code, email]
-    );
+    const [rows] = await db
+      .promise()
+      .query(
+        "SELECT * FROM user WHERE verification_code = ? AND email_verification = false AND email = ?",
+        [code, email]
+      );
 
     if (rows.length === 0) {
       return res.status(400).json({
@@ -170,16 +198,17 @@ exports.verifyEmail = async (req, res) => {
     const user = rows[0];
 
     // Mark as verified
-    await db.promise().query(
-      "UPDATE user SET email_verification = true, verification_code = NULL WHERE email = ?",
-      [user.email]
-    );
+    await db
+      .promise()
+      .query(
+        "UPDATE user SET email_verification = true, verification_code = NULL WHERE email = ?",
+        [user.email]
+      );
 
     return res.status(200).json({
       success: true,
       message: "Email verified successfully. You can now log in.",
     });
-
   } catch (error) {
     console.error("verifyEmail error:", error);
     return res.status(500).json({
@@ -233,7 +262,9 @@ exports.forgotPassword = async (req, res) => {
     }
 
     // Check if the email exists in the database
-    const [rows] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
+    const [rows] = await db
+      .promise()
+      .query("SELECT * FROM user WHERE email = ?", [email]);
     if (rows.length === 0) {
       return res.status(404).json({
         success: false,
@@ -245,10 +276,12 @@ exports.forgotPassword = async (req, res) => {
     const resetCode = Math.floor(1000 + Math.random() * 9000); // Generate a unique token for password reset
 
     // Store the reset token in the database
-    await db.promise().query(
-      "UPDATE user SET verification_code = ? WHERE email = ?",
-      [resetCode, email]
-    );
+    await db
+      .promise()
+      .query("UPDATE user SET verification_code = ? WHERE email = ?", [
+        resetCode,
+        email,
+      ]);
     // Send verification email with 4-digit code
     await sendVerificationEmail(
       email,
@@ -265,8 +298,6 @@ exports.forgotPassword = async (req, res) => {
       message: "Failed to send verification email",
       error: emailError.message,
     });
-
-
   }
 
   // const { email } = req.body;
@@ -334,10 +365,12 @@ exports.verifyCode = async (req, res) => {
     }
 
     // Verify code in the database
-    const [rows] = await db.promise().query(
-      "SELECT * FROM user WHERE verification_code = ? AND email = ?",
-      [code, email]
-    );
+    const [rows] = await db
+      .promise()
+      .query("SELECT * FROM user WHERE verification_code = ? AND email = ?", [
+        code,
+        email,
+      ]);
     if (rows.length === 0) {
       return res.status(400).json({
         success: false,
@@ -348,16 +381,16 @@ exports.verifyCode = async (req, res) => {
     const user = rows[0];
 
     // Mark user as verified
-    await db.promise().query(
-      "UPDATE user SET verification_code = NULL WHERE email = ?",
-      [user.email]
-    );
+    await db
+      .promise()
+      .query("UPDATE user SET verification_code = NULL WHERE email = ?", [
+        user.email,
+      ]);
 
     return res.status(200).json({
       success: true,
       message: "Email verified successfully. You can now reset password.",
     });
-
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -418,10 +451,9 @@ exports.resetPassword = async (req, res) => {
     }
     if (is_verifyed === "true") {
       // Verify code in the database
-      const [rows] = await db.promise().query(
-        "SELECT * FROM user WHERE email = ?",
-        [email]
-      );
+      const [rows] = await db
+        .promise()
+        .query("SELECT * FROM user WHERE email = ?", [email]);
       if (rows.length === 0) {
         return res.status(400).json({
           success: false,
@@ -431,17 +463,18 @@ exports.resetPassword = async (req, res) => {
       const user = rows[0];
       const hashedPassword = await bcrypt.hash(new_password, 10);
       // Mark user as verified
-      await db.promise().query(
-        "UPDATE user SET password = ? WHERE email = ?",
-        [hashedPassword, user.email]
-      );
+      await db
+        .promise()
+        .query("UPDATE user SET password = ? WHERE email = ?", [
+          hashedPassword,
+          user.email,
+        ]);
 
       res.status(200).json({
         success: true,
         message: "password change successfully. You can now login.",
       });
-    }
-    else {
+    } else {
       return res.status(400).json({
         success: false,
         message: "is_verifyed is false",
@@ -509,11 +542,12 @@ exports.socialAuth = (req, res, next) => {
   const state = JSON.stringify({ role });
 
   const scope = ["email", "profile"];
-  passport.authenticate("google", { scope, session: false, state, callbackURL: process.env.CALLBACK_URL })(
-    req,
-    res,
-    next
-  );
+  passport.authenticate("google", {
+    scope,
+    session: false,
+    state,
+    callbackURL: process.env.CALLBACK_URL,
+  })(req, res, next);
 };
 
 // Social Authentication Callback
@@ -533,7 +567,7 @@ exports.socialAuthCallback = (req, res, next) => {
         .status(400)
         .json({ success: false, message: `${"google"} login failed` });
     }
-    
+
     try {
       // parse state
       const stateObj = req.query.state
@@ -557,24 +591,24 @@ exports.socialAuthCallback = (req, res, next) => {
         "NoName";
 
       // 1 Check user_providers for provider + provider_id
-      const [rows] = await db.promise().query(
-        "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
-        ["google", providerId]
-      );
+      const [rows] = await db
+        .promise()
+        .query(
+          "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
+          ["google", providerId]
+        );
       if (rows.length > 0) {
         // linked provider exists -> get user
-        const [users] = await db.promise().query(
-          "SELECT * FROM user WHERE email = ? LIMIT 1",
-          [email]
-        );
+        const [users] = await db
+          .promise()
+          .query("SELECT * FROM user WHERE email = ? LIMIT 1", [email]);
         user = users[0];
         return proceedWithUser(user, "google", res);
       } else if (email) {
         // 2 If user with email exists -> auto-link
-        const [rowsEmail] = await db.promise().query(
-          "SELECT * FROM user WHERE email = ? LIMIT 1",
-          [email]
-        );
+        const [rowsEmail] = await db
+          .promise()
+          .query("SELECT * FROM user WHERE email = ? LIMIT 1", [email]);
         if (rowsEmail.length > 0) {
           user = rowsEmail[0];
           // insert into social_auth (ignore duplicate errors)
@@ -590,30 +624,30 @@ exports.socialAuthCallback = (req, res, next) => {
           return proceedWithUser(user, "google", res);
         } else {
           // 3 Create new user and link provider
-          await userController.createUser(
-            {body: {
+          await userController.createUser({
+            body: {
               name,
               email,
               password: uuidv4(), // random password
               role,
               verification_code: "0000",
               email_verification: true,
-            }});
-          const id = (await db.promise().query(
-            "SELECT id FROM user WHERE email = ?",
-            [email]
-          ))[0][0].id;
-          await social_authController.createSocialAuth(
-            {
-              user_id: id,
-              provider: "google",
-              provider_id: providerId,
-            });
+            },
+          });
+          const id = (
+            await db
+              .promise()
+              .query("SELECT id FROM user WHERE email = ?", [email])
+          )[0][0].id;
+          await social_authController.createSocialAuth({
+            user_id: id,
+            provider: "google",
+            provider_id: providerId,
+          });
           // Fetch new user details
-          const [newRows] = await db.promise().query(
-            "SELECT * FROM user WHERE email = ?",
-            [email]
-          );
+          const [newRows] = await db
+            .promise()
+            .query("SELECT * FROM user WHERE email = ?", [email]);
           user = newRows[0];
           return proceedWithUser(user, "google", res);
         }
