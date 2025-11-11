@@ -61,70 +61,70 @@ exports.checkAdminPermission = async (req, res, next) => {
   }
 };
 
-/**
- * Middleware to check ownership for update/delete operations
- * Super admin can update/delete any resource
- * Regular admin can only update/delete their own resources
- */
-exports.checkOwnership = (
-  tableName,
-  idParam = "id",
-  ownerField = "administrator_id"
-) => {
-  return async (req, res, next) => {
-    try {
-      // Super admin can access everything
-      if (req.isSuperAdmin) {
-        return next();
-      }
+// /**
+//  * Middleware to check ownership for update/delete operations
+//  * Super admin can update/delete any resource
+//  * Regular admin can only update/delete their own resources
+//  */
+// exports.checkOwnership = (
+//   tableName,
+//   idParam = "id",
+//   ownerField = "administrator_id"
+// ) => {
+//   return async (req, res, next) => {
+//     try {
+//       // Super admin can access everything
+//       if (req.isSuperAdmin) {
+//         return next();
+//       }
 
-      // For regular admin, check ownership
-      const resourceId = req.params[idParam];
+//       // For regular admin, check ownership
+//       const resourceId = req.params[idParam];
 
-      if (!resourceId) {
-        return res.status(400).json({
-          success: false,
-          message: `${idParam} is required`,
-        });
-      }
+//       if (!resourceId) {
+//         return res.status(400).json({
+//           success: false,
+//           message: `${idParam} is required`,
+//         });
+//       }
 
-      // Check if resource exists and belongs to the admin
-      const query = `SELECT * FROM ${tableName} WHERE id = ? AND ${ownerField} = ?`;
-      const [rows] = await db
-        .promise()
-        .query(query, [resourceId, req.administratorId]);
+//       // Check if resource exists and belongs to the admin
+//       const query = `SELECT * FROM ${tableName} WHERE id = ? AND ${ownerField} = ?`;
+//       const [rows] = await db
+//         .promise()
+//         .query(query, [resourceId, req.administratorId]);
 
-      if (rows.length === 0) {
-        // Check if resource exists at all
-        const checkQuery = `SELECT * FROM ${tableName} WHERE id = ?`;
-        const [checkRows] = await db.promise().query(checkQuery, [resourceId]);
+//       if (rows.length === 0) {
+//         // Check if resource exists at all
+//         const checkQuery = `SELECT * FROM ${tableName} WHERE id = ?`;
+//         const [checkRows] = await db.promise().query(checkQuery, [resourceId]);
 
-        if (checkRows.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Resource not found",
-          });
-        }
+//         if (checkRows.length === 0) {
+//           return res.status(404).json({
+//             success: false,
+//             message: "Resource not found",
+//           });
+//         }
 
-        // Resource exists but doesn't belong to this admin
-        return res.status(403).json({
-          success: false,
-          message: "Access denied. You can only modify your own resources.",
-        });
-      }
+//         // Resource exists but doesn't belong to this admin
+//         return res.status(403).json({
+//           success: false,
+//           message: "Access denied. You can only modify your own resources.",
+//         });
+//       }
 
-      // Resource belongs to the admin, proceed
-      req.resource = rows[0];
-      next();
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: "Error checking ownership",
-        error: error.message,
-      });
-    }
-  };
-};
+//       // Resource belongs to the admin, proceed
+//       req.resource = rows[0];
+//       next();
+//     } catch (error) {
+//       res.status(500).json({
+//         success: false,
+//         message: "Error checking ownership",
+//         error: error.message,
+//       });
+//     }
+//   };
+// };
 
 /**
  * Helper function to add ownership filter to queries for regular admins
@@ -133,13 +133,13 @@ exports.checkOwnership = (
  */
 exports.getOwnershipFilter = (req, ownerField = "administrator_id") => {
   // If isSuperAdmin is true, return empty filter (can see all)
+
   if (req.isSuperAdmin === true) {
     return { whereClause: "", params: [] };
   }
 
   // For regular admins, filter by administrator_id
   // Note: checkAdminPermission middleware was called first
-  console.log(req.administratorId);
 
   if (req.administratorId) {
     return {

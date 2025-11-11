@@ -3,7 +3,6 @@ const db = require("../config/db");
 // Middleware to verify JWT token
 exports.checkAdmin = (req, res, next) => {
   try {
-    // console.log(req.user);
     if (req.user && req.user.role === "Administrator") {
       next();
     } else {

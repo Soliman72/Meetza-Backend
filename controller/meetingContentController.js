@@ -43,7 +43,6 @@ exports.getAllMeetingContents = async (req, res) => {
 
     // Apply ownership filter for regular admins
     const ownershipFilter = getOwnershipFilter(req, "meeting.administrator_id");
-    console.log(ownershipFilter);
 
     if (ownershipFilter.whereClause) {
       query +=
@@ -56,8 +55,6 @@ exports.getAllMeetingContents = async (req, res) => {
       query += " AND content_name LIKE ?";
       params.push(`%${name}%`);
     }
-
-    console.log(query);
 
     const [results] = await db.promise().query(query, params);
 

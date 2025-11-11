@@ -46,7 +46,8 @@ exports.getAllPositions = async (req, res) => {
 
     // Apply ownership filter for regular admins
     const ownershipFilter = getOwnershipFilter(req, "administrator_id");
-    if (ownershipFilter.whereClause) {
+
+    if (ownershipFilter.whereClause != "") {
       query += " " + ownershipFilter.whereClause;
       params.push(...ownershipFilter.params);
     }

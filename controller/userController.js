@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require("uuid");
 const administratorController = require("./administratorController");
 const memberController = require("./memberController");
+const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 
 // Create
 exports.createUser = async (data) => {
@@ -58,7 +59,7 @@ exports.createUser = async (data) => {
       ]);
 
     // Create corresponding record based on role
-    if (role === "Administrator") {
+    if (role === "Administrator" || role === "Super_Admin") {
       const reqadmin = { body: { user_id: id, role } };
       await administratorController.createAdministrator(reqadmin); // No res passed here
     } else if (role === "Member") {
@@ -78,14 +79,22 @@ exports.getAllUsers = async (req, res) => {
   try {
     const { name } = req.query;
     let sql = "SELECT * FROM user";
-    let params = [];
 
+    let params = [];
+    let query = sql;
+    // Apply ownership filter for regular admins
+
+    const ownershipFilter = getOwnershipFilter(req, "id");
+    if (ownershipFilter.whereClause) {
+      query += " " + ownershipFilter.whereClause;
+      params.push(...ownershipFilter.params);
+    }
     if (name) {
-      sql += " WHERE name LIKE ?";
+      query += " AND name LIKE ?";
       params.push(`%${name}%`);
     }
 
-    const [rows] = await db.promise().query(sql, params);
+    const [rows] = await db.promise().query(query, params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: err.message });
