@@ -4,6 +4,7 @@ const controller = require("../controller/administratorController");
 const { verifyToken } = require("../utils/verifyToken");
 const { checkAdminPermission } = require("../utils/checkAdminPermission");
 
+
 router.get(
   "/",
   verifyToken,
@@ -28,5 +29,4 @@ router.delete(
   checkAdminPermission,
   controller.deleteAdministrator
 );
-
 module.exports = router;

@@ -16,6 +16,8 @@ const videoRouter = require("./router/videoRouter");
 const groupRouter = require("./router/groupRouter"); // Use group router
 const groupMembershipRouter = require("./router/group_membershipRouter");
 const positionRouter = require("./router/positionRouter"); // Use position router
+const commentRouter = require("./router/commentRouter");
+const saved_videoRouter = require("./router/saved_videoRouter");
 
 // Use video router
 
@@ -44,6 +46,8 @@ app.use("/api/meeting-contents", meetingContentRouter);
 app.use("/api/meeting", meetingRouter);
 app.use("/api/video", videoRouter);
 app.use("/api/like", require("./router/likeRouter"));
+app.use("/api/comment", commentRouter);
+app.use("/api/saved_video", saved_videoRouter);
 
 
 app.get("/", (req, res) => {
