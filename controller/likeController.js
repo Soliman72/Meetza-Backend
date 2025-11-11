@@ -1,5 +1,5 @@
-const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
+const { v4: uuidv4 } = require("uuid");
 
 exports.createLike = async (req, res) => {
   try {
@@ -26,7 +26,24 @@ exports.createLike = async (req, res) => {
       });
     }
 
-    // 🔍 Check if user already liked/disliked this video
+    // Check if video exists
+    const videoQuery = "SELECT id FROM video WHERE id = ?";
+    const [video] = await db.promise().query(videoQuery, [video_id]);
+    if (video.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Video not found",
+      });
+    }
+
+    // Check if member exists
+    const memberQuery = "SELECT user_id FROM member WHERE user_id = ?";
+    const [member] = await db.promise().query(memberQuery, [member_id]);
+    if (member.length === 0) {
+      throw new Error("Member not found");
+    }
+
+    // Check if user already liked/disliked this video
     const checkQuery =
       "SELECT id, like_type FROM `like` WHERE member_id = ? AND video_id = ?";
     const [existing] = await db
@@ -58,7 +75,7 @@ exports.createLike = async (req, res) => {
       });
     }
 
-    // 🆕 Insert new like/dislike
+    // Insert new like/dislike
     const id = uuidv4();
     const insertQuery =
       "INSERT INTO `like` (id, member_id, video_id, like_type) VALUES (?, ?, ?, ?)";
