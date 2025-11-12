@@ -6,23 +6,24 @@ const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 exports.createMeetingContent = async (req, res) => {
   try {
     const { content_name, content_description } = req.body;
+
     const id = uuidv4();
 
-    if (!content_name || !content_description) {
+    if (!content_name || !content_description || !req.user?.id) {
       return res.status(400).json({
         success: false,
-        message: "Content name and description are required",
+        message: "Content name , description or administrator_id is required",
       });
     }
 
     const query =
-      "INSERT INTO meeting_content (id, content_name, content_description) VALUES (?, ?, ?)";
-    await db.promise().query(query, [id, content_name, content_description]);
+      "INSERT INTO meeting_content (id, content_name, content_description, administrator_id) VALUES (?, ?, ?, ?)";
+    await db.promise().query(query, [id, content_name, content_description, req.user?.id]);
 
     return res.status(201).json({
       success: true,
       message: "Meeting content created successfully",
-      data: { id, content_name, content_description },
+      data: { id, content_name, content_description, administrator_id: req.user?.id },
     });
   } catch (err) {
     return res.status(500).json({
@@ -38,21 +39,22 @@ exports.getAllMeetingContents = async (req, res) => {
   try {
     const { name } = req.query;
     let query =
-      "SELECT meeting_content.id , meeting_content.content_name , meeting_content.content_description FROM meeting_content";
+      "SELECT * FROM meeting_content";
     let params = [];
 
     // Apply ownership filter for regular admins
-    const ownershipFilter = getOwnershipFilter(req, "meeting.administrator_id");
+    const ownershipFilter = getOwnershipFilter(req, "administrator_id");
 
     if (ownershipFilter.whereClause) {
-      query +=
-        " JOIN meeting ON meeting.meeting_content_id = meeting_content.id";
       query += " " + ownershipFilter.whereClause;
       params.push(...ownershipFilter.params);
     }
 
-    if (name) {
+    if (ownershipFilter.whereClause && name ) {
       query += " AND content_name LIKE ?";
+      params.push(`%${name}%`);
+    } else if (name) {
+      query += " WHERE content_name LIKE ?";
       params.push(`%${name}%`);
     }
 

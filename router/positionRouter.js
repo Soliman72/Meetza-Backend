@@ -2,10 +2,7 @@ const express = require("express");
 const router = express.Router();
 const positionController = require("../controller/positionController");
 const { verifyToken } = require("../utils/verifyToken");
-const {
-  checkAdminPermission,
-  checkOwnership,
-} = require("../utils/checkAdminPermission");
+const { checkAdminPermission } = require("../utils/checkAdminPermission");
 
 router.get(
   "/",
