@@ -6,6 +6,7 @@ const nodemailer = require("nodemailer");
 const passport = require("passport");
 const userController = require("./userController");
 const social_authController = require("./social_authController");
+const axios = require("axios");
 
 // Register new user with email verification
 exports.register = async (req, res) => {
@@ -83,15 +84,31 @@ exports.register = async (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
-    const { email, password, remember_me, role, from } = req.body;
+    const { email, password, remember_me, role, from, captchaToken } = req.body;
 
     // Validate required fields
     if (!email || !password || !role) {
       return res.status(400).json({
         success: false,
-        message: "Email , password and role are required",
+        message: "Email , password , captchaToken and role are required",
       });
     }
+
+    // const verifyUrl = "https://www.google.com/recaptcha/api/siteverify";
+    // const response = await axios.post(verifyUrl, null, {
+    //   params: {
+    //     secret: process.env.RECAPTCHA_SECRET_KEY,
+    //     response: captchaToken,
+    //   },
+    // });
+
+    // const { success, score, action } = response.data;
+
+    // if (!success) {
+    //   return res
+    //     .status(400)
+    //     .json({ success: false, message: "CAPTCHA verification failed" });
+    // }
 
     // Check if user exists
     const [rows] = await db
@@ -111,6 +128,14 @@ exports.login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: "Invalid role for this user",
+      });
+    }
+
+    // check email verification
+    if (!user.email_verification) {
+      return res.status(403).json({
+        success: false,
+        message: "Please verify your email before logging in",
       });
     }
 
@@ -217,36 +242,6 @@ exports.verifyEmail = async (req, res) => {
       error: error.message,
     });
   }
-
-  // db.query(
-  //   "SELECT * FROM user WHERE verification_code = ? AND email_verification = false AND email = ?",
-  //   [code, email],
-  //   (err, rows) => {
-  //     if (err) return res.status(500).json({ error: err });
-  //     if (rows.length === 0) {
-  //       return res.status(400).json({
-  //         success: false,
-  //         message: "Invalid or expired verification code",
-  //       });
-  //     }
-
-  //     const user = rows[0];
-
-  //     // Mark user as verified
-  //     db.query(
-  //       "UPDATE user SET email_verification = true, verification_code = NULL WHERE email = ?",
-  //       [user.email],
-  //       (err) => {
-  //         if (err) return res.status(500).json({ error: err });
-
-  //         res.status(200).json({
-  //           success: true,
-  //           message: "Email verified successfully. You can now log in.",
-  //         });
-  //       }
-  //     );
-  //   }
-  // );
 };
 
 // Forgot password - Step 1: Send reset email
@@ -299,58 +294,6 @@ exports.forgotPassword = async (req, res) => {
       error: emailError.message,
     });
   }
-
-  // const { email } = req.body;
-
-  // if (!email) {
-  //   return res.status(400).json({
-  //     success: false,
-  //     message: "Email is required",
-  //   });
-  // }
-
-  // // Check if the email exists in the database
-  // db.query("SELECT * FROM user WHERE email = ?", [email], (err, rows) => {
-  //   if (err) return res.status(500).json({ error: err });
-  //   if (rows.length === 0) {
-  //     return res.status(404).json({
-  //       success: false,
-  //       message: "Email not found",
-  //     });
-  //   }
-
-  //   // const user = rows[0];
-  //   const resetCode = Math.floor(1000 + Math.random() * 9000); // Generate a unique token for password reset
-
-  //   // Store the reset token in the database
-  //   db.query(
-  //     "UPDATE user SET verification_code = ? WHERE email = ?",
-  //     [resetCode, email],
-  //     (err) => {
-  //       if (err) return res.status(500).json({ error: err });
-
-  //       // Send verification email with 4-digit code
-  //       sendVerificationEmail(
-  //         email,
-  //         resetCode,
-  //         "<p>Thank you for registering! Please use the following code to reset your password:</p>"
-  //       )
-  //         .then(() => {
-  //           return res.status(201).json({
-  //             success: true,
-  //             message: "Please check your email to reset password",
-  //           });
-  //         })
-  //         .catch((emailError) => {
-  //           return res.status(500).json({
-  //             success: false,
-  //             message: "Failed to send verification email",
-  //             error: emailError.message,
-  //           });
-  //         });
-  //     }
-  //   );
-  // });
 };
 
 // Code Verification Route for reset password
@@ -398,45 +341,6 @@ exports.verifyCode = async (req, res) => {
       error: error.message,
     });
   }
-  // const { code, email } = req.body;
-
-  // if (!code || !email) {
-  //   return res.status(400).json({
-  //     success: false,
-  //     message: "Verification code & Email is required",
-  //   });
-  // }
-
-  // // Verify code in the database
-  // db.query(
-  //   "SELECT * FROM user WHERE verification_code = ? AND email = ?",
-  //   [code, email],
-  //   (err, rows) => {
-  //     if (err) return res.status(500).json({ error: err });
-  //     if (rows.length === 0) {
-  //       return res.status(400).json({
-  //         success: false,
-  //         message: "Invalid or expired verification code",
-  //       });
-  //     }
-
-  //     const user = rows[0];
-
-  //     // Mark user as verified
-  //     db.query(
-  //       "UPDATE user SET verification_code = NULL WHERE email = ?",
-  //       [user.email],
-  //       (err) => {
-  //         if (err) return res.status(500).json({ error: err });
-
-  //         res.status(200).json({
-  //           success: true,
-  //           message: "Email verified successfully. You can now reset password.",
-  //         });
-  //       }
-  //     );
-  //   }
-  // );
 };
 
 // Code Verification Route for reset password
@@ -487,53 +391,6 @@ exports.resetPassword = async (req, res) => {
       error: error.message,
     });
   }
-  // const { is_verifyed, email, new_password } = req.body;
-
-  // if (!is_verifyed || !new_password || !email) {
-  //   return res.status(400).json({
-  //     success: false,
-  //     message: "New password & Email is required",
-  //   });
-  // }
-
-  // if (is_verifyed === "true") {
-  //   // Verify code in the database
-  //   db.query(
-  //     "SELECT * FROM user WHERE email = ?",
-  //     [email],
-  //     async (err, rows) => {
-  //       if (err) return res.status(500).json({ error: err });
-  //       if (rows.length === 0) {
-  //         return res.status(400).json({
-  //           success: false,
-  //           message: "Invalid email!",
-  //         });
-  //       }
-
-  //       const user = rows[0];
-  //       const hashedPassword = await bcrypt.hash(new_password, 10);
-
-  //       // Mark user as verified
-  //       db.query(
-  //         "UPDATE user SET password = ? WHERE email = ?",
-  //         [hashedPassword, user.email],
-  //         (err) => {
-  //           if (err) return res.status(500).json({ error: err });
-
-  //           res.status(200).json({
-  //             success: true,
-  //             message: "password change successfully. You can now login.",
-  //           });
-  //         }
-  //       );
-  //     }
-  //   );
-  // } else {
-  //   return res.status(400).json({
-  //     success: false,
-  //     message: "is_verifyed is false",
-  //   });
-  // }
 };
 
 // Social Authentication

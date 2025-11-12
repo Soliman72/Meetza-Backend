@@ -89,10 +89,18 @@ exports.getAllUsers = async (req, res) => {
       query += " " + ownershipFilter.whereClause;
       params.push(...ownershipFilter.params);
     }
-    if (name) {
+
+    if (ownershipFilter.whereClause && name) {
       query += " AND name LIKE ?";
       params.push(`%${name}%`);
+    } else {
+      if (name) {
+        query += " WHERE name LIKE ?";
+        params.push(`%${name}%`);
+      }
     }
+
+    console.log(query);
 
     const [rows] = await db.promise().query(query, params);
     res.json(rows);
