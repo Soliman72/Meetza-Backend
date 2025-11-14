@@ -2,10 +2,7 @@ const express = require("express");
 const router = express.Router();
 const videoController = require("../controller/videoController");
 const { verifyToken } = require("../utils/verifyToken");
-const {
-  checkAdminPermission,
-  checkOwnership,
-} = require("../utils/checkAdminPermission");
+const { checkAdminPermission } = require("../utils/checkAdminPermission");
 
 // Create video with file upload
 router.post(
