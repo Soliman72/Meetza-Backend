@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { v4: uuidv4 } = require("uuid");
 
 // Create
 exports.createSocialAuth = async (data) => {
@@ -9,10 +10,11 @@ exports.createSocialAuth = async (data) => {
       throw new Error("user_id, provider, and provider_id are required");
     }
 
-    const sql = 'INSERT INTO social_auth (user_id, provider, provider_id) VALUES (?, ?, ?)';
-    await db.promise().query(sql, [user_id, provider, provider_id]);
+    const id = uuidv4();
+    const sql = 'INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)';
+    await db.promise().query(sql, [id, user_id, provider, provider_id]);
 
-    return { user_id, provider, provider_id };
+    return { id, user_id, provider, provider_id };
   } catch (err) {
     throw err;
   }

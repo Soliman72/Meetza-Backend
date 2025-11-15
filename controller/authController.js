@@ -399,6 +399,7 @@ exports.socialAuth = (req, res, next) => {
   const state = JSON.stringify({ role });
 
   const scope = ["email", "profile"];
+  
   passport.authenticate("google", {
     scope,
     session: false,
@@ -424,6 +425,8 @@ exports.socialAuthCallback = (req, res, next) => {
         .status(400)
         .json({ success: false, message: `${"google"} login failed` });
     }
+    // console.log("Google profile received:", profile);
+
 
     try {
       // parse state
@@ -433,19 +436,17 @@ exports.socialAuthCallback = (req, res, next) => {
       const role = stateObj.role;
 
       // extract email and provider id
-      let email = null;
       let user;
-      if (profile.emails && profile.emails.length > 0)
-        email = profile.emails[0].value;
+      const actualProfile = profile.profile || profile;
+      const email = actualProfile._json?.email || actualProfile.emails?.[0]?.value;
 
-      const providerId = profile.id;
+      // console.log("email",email);
+      const providerId = actualProfile.id;
       const name =
-        profile.displayName ||
-        (
-          profile.name &&
-          `${profile.name.givenName || ""} ${profile.name.familyName || ""}`
-        ).trim() ||
+        actualProfile.displayName ||
+        `${actualProfile.name?.givenName || ""} ${actualProfile.name?.familyName || ""}`.trim() ||
         "NoName";
+
 
       // 1 Check user_providers for provider + provider_id
       const [rows] = await db
@@ -475,9 +476,9 @@ exports.socialAuthCallback = (req, res, next) => {
             provider_id: providerId,
           });
           // ensure email verification true
-          await userController.updateUser(user.id, {
-            email_verification: true,
-          });
+          await db.promise().query(
+            "UPDATE user SET ? WHERE email_verification = true"
+          );
           return proceedWithUser(user, "google", res);
         } else {
           // 3 Create new user and link provider
@@ -552,16 +553,24 @@ const sendVerificationEmail = (email, verificationCode, msg) => {
 
 // Helper function to proceed with user creation and token generation
 function proceedWithUser(user, platform, res) {
-  // final: issue JWT
+  const safeUser = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    email_verification: user.email_verification,
+    created_at: user.created_at,
+    updated_at: user.updated_at
+  };
+
   const tokenPayload = { id: user.id, email: user.email, role: user.role };
-  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-    expiresIn: "24h",
-  });
+  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: "24h" });
 
   return res.status(200).json({
     success: true,
     message: `${platform} login successful`,
     token,
-    user,
+    user: safeUser,
   });
 }
+
