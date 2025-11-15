@@ -5,33 +5,52 @@ const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 // Create
 exports.createPosition = async (req, res) => {
   try {
-    const { title } = req.body;
+    const { title, role, administrator_id } = req.body;
 
+    let admin_id;
     // Validate required fields
-    if (!title) {
-      return res.status(400).json({ message: "title are required" });
+    if (!title || !role) {
+      return res.status(400).json({ message: "title and role are required" });
     }
 
     // Check if user is authenticated and has a valid id
-    if (req.user && req.user.id !== undefined) {
-      req.body.administrator_id = req.user.id;
-    } else {
+    if (!(req.user && req.user.id !== undefined)) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized: administrator_id is required",
+        message: "Unauthorized: user is not authenticated",
       });
+    }
+
+    // check administrator role is Administrator or Super_Admin
+    if (role === "Super_Admin") {
+      if (!administrator_id) {
+        return res.status(400).json({ message: "administrator_id is required" });
+      }
+      admin_id = administrator_id;
+    } else if (role === "Administrator") {
+      admin_id = req.user.id;
+    } else {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+
+    // check administrator_id exists
+    const [administratorRows] = await db
+      .promise()
+      .query("SELECT * FROM administrator WHERE user_id = ?", [admin_id]);
+    if (administratorRows.length === 0) {
+      return res.status(400).json({ message: "Invalid administrator_id: not found" });
     }
 
     const id = uuidv4();
 
     const sql =
       "INSERT INTO `position` (id, title, administrator_id) VALUES (?, ?, ?)";
-    const [result] = await db
+    await db
       .promise()
-      .query(sql, [id, title, req.body.administrator_id]);
+      .query(sql, [id, title, admin_id]);
     res
       .status(201)
-      .json({ id: id, title, administrator_id: req.body.administrator_id });
+      .json({ id: id, title, administrator_id: admin_id });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
