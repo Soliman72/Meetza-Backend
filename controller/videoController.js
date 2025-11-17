@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
-const upload = require("../utils/uploadFile"); // Import the upload utility
+const {upload ,uploadToDrive, authenticateGoogle} = require("../utils/uploadFile"); // Import the upload utility
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 
 // Create a video with file upload
@@ -22,16 +22,42 @@ exports.createVideo = (req, res) => {
       const id = uuidv4();
 
       // Ensure both files are uploaded
-      if (!req.files || !req.files.video_file || !req.files.poster_file) {
+      if (!req.files && (!req.body.video_file || !req.body.poster_file)) {
         return res.status(400).json({
           success: false,
           message: "Both video and poster files are required",
         });
       }
 
-      // Get the file paths
-      const videoFilePath = `/uploads/${req.files.video_file[0].filename}`;
-      const posterFilePath = `/uploads/${req.files.poster_file[0].filename}`;
+      let videoUrl = '';
+      let posterUrl = '';
+
+      // If files are uploaded via form, process them
+      // if (req.files) {
+        // const videoFile = req.files.video_file ? req.files.video_file[0] : null;
+        // const posterFile = req.files.poster_file ? req.files.poster_file[0] : null;
+
+        // If files are uploaded, upload them to OneDrive/SharePoint
+        // if (videoFile) {
+        //   const accessToken = await getAccessToken();
+        //   videoUrl = await uploadToSharePoint(videoFile.buffer, videoFile.originalname, accessToken);
+        // }
+
+        // if (posterFile) {
+        //   const accessToken = await getAccessToken();
+        //   posterUrl = await uploadToSharePoint(posterFile.buffer, posterFile.originalname, accessToken);
+        // }
+      // }
+
+      // If URLs are provided in the body (from OneDrive or SharePoint directly)
+      if (req.body.video_file && req.body.poster_file) {
+        videoUrl = req.body.video_file; // Assuming it's a URL
+        posterUrl = req.body.poster_file; // Assuming it's a URL
+      }
+
+      console.log(videoUrl, posterUrl);
+
+
 
       // Validate required fields
       if (!meeting_id || !title || !date_recorded) {
@@ -70,8 +96,8 @@ exports.createVideo = (req, res) => {
         id,
         title,
         meeting_id,
-        videoFilePath, // Store the video file path
-        posterFilePath, // Store the poster file path
+        videoUrl, // Store the video file path
+        posterUrl, // Store the poster file path
         req.body.administrator_id,
         date_recorded,
       ]);
@@ -81,9 +107,10 @@ exports.createVideo = (req, res) => {
         message: "Video created successfully",
         data: {
           id,
+          title,
           meeting_id,
-          video_url: videoFilePath,
-          poster_url: posterFilePath,
+          video_url: videoUrl,
+          poster_url: posterUrl,
           date_recorded,
         },
       });
