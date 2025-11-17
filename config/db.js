@@ -8,7 +8,7 @@ const db = mysql.createPool({
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "meetza",
   waitForConnections: true,
-  // connectionLimit: process.env.DB_CONNECTION_LIMIT || 10,
+  connectionLimit: 20000,
   queueLimit: 0,
 });
 
