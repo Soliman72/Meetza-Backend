@@ -139,6 +139,7 @@ exports.updateUser = async (req, res) => {
       role,
       verification_code,
       email_verification,
+      user_photo,
     } = req.body;
 
     if (!id) {
@@ -150,7 +151,8 @@ exports.updateUser = async (req, res) => {
       !password &&
       !role &&
       !verification_code &&
-      !email_verification
+      !email_verification &&
+      !user_photo
     ) {
       return res
         .status(400)
@@ -160,8 +162,8 @@ exports.updateUser = async (req, res) => {
     await db
       .promise()
       .query(
-        "UPDATE user SET name = COALESCE(?, name), email = COALESCE(?, email), password = COALESCE(?, password), role = COALESCE(?, role), verification_code = COALESCE(?, verification_code), email_verification = COALESCE(?, email_verification) WHERE id = ?",
-        [name, email, password, role, verification_code, email_verification, id]
+        "UPDATE user SET name = COALESCE(?, name), email = COALESCE(?, email), password = COALESCE(?, password), role = COALESCE(?, role), verification_code = COALESCE(?, verification_code), email_verification = COALESCE(?, email_verification), user_photo = COALESCE(?, user_photo) WHERE id = ?",
+        [name, email, password, role, verification_code, email_verification, user_photo,id]
       );
     res.json({ message: "User updated successfully" });
   } catch (err) {
