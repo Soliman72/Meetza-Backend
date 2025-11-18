@@ -22,20 +22,22 @@ exports.createGroup = async (req, res) => {
     }
     // Check if user is authenticated and has a valid id
     if (req.user && req.user.id !== undefined) {
-      req.body.administrator_id = req.user.id;
     } else {
       return res.status(401).json({
         success: false,
         message: "Unauthorized: administrator_id is required",
       });
     }
+    // get administrator_id from position_id
+    administrator_id = positionRows[0].administrator_id;
+
     const id = uuidv4();
     const sql =
       "INSERT INTO `group` (id, group_name, position_id, administrator_id) VALUES (?, ?, ?, ?)";
     const [result] = await db
       .promise()
-      .query(sql, [id, group_name, position_id, req.body.administrator_id]);
-    res.status(201).json({ id: result.insertId, group_name, position_id });
+      .query(sql, [id, group_name, position_id, administrator_id]);
+    res.status(201).json({ id, group_name, position_id });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

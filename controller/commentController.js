@@ -46,7 +46,7 @@ exports.getCommentsByVideoId = async (req, res) => {
     if (!video_id) {
       return res.status(400).json({ message: 'video_id is required' });
     }
-    const [rows] = await db.promise().query('SELECT * FROM comment WHERE video_id = ?', [video_id]);
+    const [rows] = await db.promise().query('SELECT comment.*, user.name as "member_name", user.user_photo as "Member_photo" FROM comment JOIN user ON comment.member_id=user.id WHERE video_id = ?', [video_id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Record not found' });
     res.json(rows);
     } catch (err) {

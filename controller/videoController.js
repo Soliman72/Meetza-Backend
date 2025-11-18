@@ -1,7 +1,8 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
-const {upload ,uploadToDrive, authenticateGoogle} = require("../utils/uploadFile"); // Import the upload utility
+//const {upload ,uploadToDrive, authenticateGoogle} = require("../utils/uploadFile"); // Import the upload utility
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
+const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 
 // Create a video with file upload
 exports.createVideo = (req, res) => {
@@ -32,22 +33,12 @@ exports.createVideo = (req, res) => {
       let videoUrl = '';
       let posterUrl = '';
 
-      // If files are uploaded via form, process them
-      // if (req.files) {
-        // const videoFile = req.files.video_file ? req.files.video_file[0] : null;
-        // const posterFile = req.files.poster_file ? req.files.poster_file[0] : null;
+      const videoFile = req.files.video_file[0];
+      const posterFile = req.files.poster_file[0];
 
-        // If files are uploaded, upload them to OneDrive/SharePoint
-        // if (videoFile) {
-        //   const accessToken = await getAccessToken();
-        //   videoUrl = await uploadToSharePoint(videoFile.buffer, videoFile.originalname, accessToken);
-        // }
-
-        // if (posterFile) {
-        //   const accessToken = await getAccessToken();
-        //   posterUrl = await uploadToSharePoint(posterFile.buffer, posterFile.originalname, accessToken);
-        // }
-      // }
+      // Upload files to Cloudinary
+       videoUrl = await uploadToCloudinary(videoFile, "videos");
+       posterUrl = await uploadToCloudinary(posterFile, "posters");
 
       // If URLs are provided in the body (from OneDrive or SharePoint directly)
       if (req.body.video_file && req.body.poster_file) {
