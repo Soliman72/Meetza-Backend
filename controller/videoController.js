@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
+const { validateFileType } = require("../utils/validateFiles");
 
 // Create a video with file upload
 exports.createVideo = (req, res) => {
@@ -29,25 +30,32 @@ exports.createVideo = (req, res) => {
         });
       }
 
-      let videoUrl = '';
-      let posterUrl = '';
+      let videoUrl = "";
+      let posterUrl = "";
 
-      const videoFile = req.files.video_file[0];
-      const posterFile = req.files.poster_file[0];
+      if (req.files.video_file && req.files.poster_file) {
+        const videoFile = req.files.video_file[0];
+        const posterFile = req.files.poster_file[0];
 
-      // Upload files to Cloudinary
-       videoUrl = await uploadToCloudinary(videoFile, "videos");
-       posterUrl = await uploadToCloudinary(posterFile, "posters");
+        // Validate file types BEFORE uploading
+        validateFileType(videoFile, "video");
+        validateFileType(posterFile, "image");
 
-      // If URLs are provided in the body (from OneDrive or SharePoint directly)
-      if (req.body.video_file && req.body.poster_file) {
+        // Upload files to Cloudinary
+        videoUrl = await uploadToCloudinary(videoFile, "videos");
+        posterUrl = await uploadToCloudinary(posterFile, "posters");
+      } else if (req.body.video_file && req.body.poster_file) {
+        // If URLs are provided in the body (from OneDrive or SharePoint directly)
+
+        // Validate file types BEFORE uploading
+        validateFileType(req.body.video_file, "video");
+        validateFileType(req.body.poster_file, "image");
+
         videoUrl = req.body.video_file; // Assuming it's a URL
         posterUrl = req.body.poster_file; // Assuming it's a URL
       }
 
       console.log(videoUrl, posterUrl);
-
-
 
       // Validate required fields
       if (!meeting_id || !title || !date_recorded) {

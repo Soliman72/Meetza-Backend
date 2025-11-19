@@ -5,7 +5,7 @@ const administratorController = require("./administratorController");
 const memberController = require("./memberController");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
-
+const { validateFileType } = require("../utils/validateFiles");
 
 // Create
 exports.createUser = async (data) => {
@@ -131,66 +131,82 @@ exports.getUserById = async (req, res) => {
 };
 
 // Update
-exports.updateUser = async ( req, res ) =>
-{
+exports.updateUser = async (req, res) => {
   // Apply multer upload middleware to handle file uploads
-  upload.fields([
-    { name: "user_photo", maxCount: 1 },
-  ])(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message,
-      });
+  upload.fields([{ name: "user_photo", maxCount: 1 }])(
+    req,
+    res,
+    async (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message,
+        });
+      }
+
+      try {
+        const { id } = req.params;
+        const {
+          name,
+          email,
+          password,
+          role,
+          verification_code,
+          email_verification,
+          user_photo,
+        } = req.body;
+
+        if (!id) {
+          return res.status(400).json({ message: "id is required" });
+        }
+        if (
+          !name &&
+          !email &&
+          !password &&
+          !role &&
+          !verification_code &&
+          !email_verification &&
+          !user_photo &&
+          !req.files.user_photo
+        ) {
+          return res
+            .status(400)
+            .json({ message: "At least one field is required to update" });
+        }
+
+        // Handle file upload to Cloudinary
+        let user_photo_url;
+        if (req.files && req.files.user_photo) {
+          const user_photo = req.files.user_photo[0];
+          validateFileType(user_photo, "image");
+
+          user_photo_url = await uploadToCloudinary(user_photo, "posters");
+        } else if (user_photo) {
+          validateFileType(user_photo, "image");
+          user_photo_url = user_photo;
+        }
+
+        await db
+          .promise()
+          .query(
+            "UPDATE user SET name = COALESCE(?, name), email = COALESCE(?, email), password = COALESCE(?, password), role = COALESCE(?, role), verification_code = COALESCE(?, verification_code), email_verification = COALESCE(?, email_verification), user_photo = COALESCE(?, user_photo) WHERE id = ?",
+            [
+              name,
+              email,
+              password,
+              role,
+              verification_code,
+              email_verification,
+              user_photo_url,
+              id,
+            ]
+          );
+        res.json({ message: "User updated successfully" });
+      } catch (err) {
+        res.status(500).json({ message: err.message });
+      }
     }
-
-
-  try {
-    const { id } = req.params;
-    const {
-      name,
-      email,
-      password,
-      role,
-      verification_code,
-      email_verification,
-    } = req.body;
-
-    if (!id) {
-      return res.status(400).json({ message: "id is required" });
-    }
-    if (
-      !name &&
-      !email &&
-      !password &&
-      !role &&
-      !verification_code &&
-      !email_verification && 
-      !req.files.user_photo
-    ) {
-      return res
-        .status(400)
-        .json({ message: "At least one field is required to update" });
-    }
-
-    // Handle file upload to Cloudinary
-    let user_photo_url;
-    if(req.files && req.files.user_photo){
-      const user_photo = req.files.user_photo[0];
-      user_photo_url= await uploadToCloudinary(user_photo, "posters");
-    }
-
-    await db
-      .promise()
-      .query(
-        "UPDATE user SET name = COALESCE(?, name), email = COALESCE(?, email), password = COALESCE(?, password), role = COALESCE(?, role), verification_code = COALESCE(?, verification_code), email_verification = COALESCE(?, email_verification), user_photo = COALESCE(?, user_photo) WHERE id = ?",
-        [name, email, password, role, verification_code, email_verification, user_photo_url,id]
-      );
-    res.json({ message: "User updated successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-      });
+  );
 };
 
 // Delete
