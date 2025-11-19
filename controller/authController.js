@@ -656,4 +656,3 @@ function proceedWithUser(user, platform, res) {
     user: safeUser,
   });
 }
-
