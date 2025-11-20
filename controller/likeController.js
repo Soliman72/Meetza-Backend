@@ -111,13 +111,19 @@ exports.getLikesByVideoId = async (req, res) => {
       });
     }
 
+    // Count likes and dislikes
+    const countQuery =
+      "SELECT like_type, COUNT(*) as count FROM `like` WHERE video_id = ? GROUP BY like_type";
+    const [counts] = await db.promise().query(countQuery, [video_id]);
+
     // Get all likes/dislikes for the video
     const query = "SELECT * FROM `like` WHERE video_id = ?";
     const [results] = await db.promise().query(query, [video_id]);
 
     return res.status(200).json({
       success: true,
-      data: results,
+      likeCounts: counts,
+      data: results
     });
   } catch (err) {
     return res.status(500).json({
