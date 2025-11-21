@@ -51,23 +51,50 @@ exports.createGroupMembership = async (req, res) => {
 // Read all
 exports.getAllGroupMemberships = async (req, res) => {
   try {
-    let query = "SELECT * FROM group_membership";
+    // Compose query that retrieves group and all its members
+    let query = `
+      SELECT 
+        g.id as group_id, 
+        g.group_name as group_name,
+        m.user_id as member_id,
+        u.name as member_name,
+        u.email as member_email,
+        u.user_photo as member_photo
+      FROM group_membership gm
+      JOIN \`group\` g ON g.id = gm.group_id
+      JOIN member m ON m.user_id = gm.member_id
+      JOIN user u ON u.id = gm.member_id
+    `;
     let params = [];
 
     // Apply ownership filter for regular admins
-    const ownershipFilter = getOwnershipFilter(req, "group.administrator_id");
-
+    const ownershipFilter = getOwnershipFilter(req, "g.administrator_id");
     if (ownershipFilter.whereClause) {
-      query =
-        "SELECT group_membership.group_id , user.name , user.email FROM group_membership";
-      query +=
-        " JOIN user ON user.id = group_membership.member_id JOIN `group` ON `group`.id = group_membership.group_id";
       query += " " + ownershipFilter.whereClause;
       params.push(...ownershipFilter.params);
     }
 
     const [rows] = await db.promise().query(query, params);
-    res.json(rows);
+
+    // Transform to nested structure: [{group_id, group_name, members: [{member_id, member_name, member_email}]}]
+    const groups = {};
+    rows.forEach((row) => {
+      if (!groups[row.group_id]) {
+        groups[row.group_id] = {
+          group_id: row.group_id,
+          group_name: row.group_name,
+          members: [],
+        };
+      }
+      groups[row.group_id].members.push({
+        member_id: row.member_id,
+        member_name: row.member_name,
+        member_email: row.member_email,
+        member_photo: row.member_photo,
+      });
+    });
+
+    res.json(Object.values(groups));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
