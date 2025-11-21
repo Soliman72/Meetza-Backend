@@ -225,7 +225,6 @@ exports.deleteVideo = async (req, res) => {
 
 // Update video by ID
 exports.updateVideo = (req, res) => {
-  // Apply multer upload middleware to handle file uploads
   upload.fields([
     { name: "video_file", maxCount: 1 },
     { name: "poster_file", maxCount: 1 },
@@ -239,29 +238,15 @@ exports.updateVideo = (req, res) => {
 
     try {
       const { id } = req.params;
-      const { title, meeting_id, date_recorded } = req.body;
 
-      // Validate required fields
-      if (!id || !meeting_id || !title || !date_recorded) {
+      if (!id) {
         return res.status(400).json({
           success: false,
-          message: "id, meeting_id, title, and date_recorded are required",
+          message: "id is required",
         });
       }
 
-      // Check if meeting exists
-      const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
-      const [meetingRows] = await db
-        .promise()
-        .query(meetingCheckQuery, [meeting_id]);
-      if (meetingRows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Meeting not found",
-        });
-      }
-
-      // Get old video and poster URLs from the database
+      // Check if video exists
       const [oldVideo] = await db
         .promise()
         .query("SELECT * FROM video WHERE id = ?", [id]);
@@ -272,44 +257,79 @@ exports.updateVideo = (req, res) => {
         });
       }
 
-      // Get the new file paths if uploaded
-      let videoFilePath = oldVideo[0].video_url;
-      let posterFilePath = oldVideo[0].poster_url;
+      const updateFields = [];
+      const updateParams = [];
 
-      if (req.files) {
-        if (req.files.video_file) {
-          videoFilePath = `/uploads/${req.files.video_file[0].filename}`;
+      // Handle basic fields from body
+      const { title, meeting_id, date_recorded } = req.body;
+      if (typeof title !== "undefined") {
+        updateFields.push("title = ?");
+        updateParams.push(title);
+      }
+      if (typeof meeting_id !== "undefined") {
+        // Check if meeting exists if updating meeting_id
+        const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
+        const [meetingRows] = await db
+          .promise()
+          .query(meetingCheckQuery, [meeting_id]);
+        if (meetingRows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Meeting not found",
+          });
         }
-        if (req.files.poster_file) {
-          posterFilePath = `/uploads/${req.files.poster_file[0].filename}`;
-        }
+        updateFields.push("meeting_id = ?");
+        updateParams.push(meeting_id);
+      }
+      if (typeof date_recorded !== "undefined") {
+        updateFields.push("date_recorded = ?");
+        updateParams.push(date_recorded);
       }
 
-      // Update the video in the database
-      const query =
-        "UPDATE video SET title = ?, meeting_id = ?, video_url = ?, poster_url = ?, date_recorded = ? WHERE id = ?";
-      await db
-        .promise()
-        .query(query, [
-          title,
-          meeting_id,
-          videoFilePath,
-          posterFilePath,
-          date_recorded,
-          id,
-        ]);
+      // Handle video/poster file updates
+      let newVideoUrl, newPosterUrl;
+
+      if (req.files && req.files.video_file) {
+        const videoFile = req.files.video_file[0];
+        validateFileType(videoFile, "video");
+        newVideoUrl = await uploadToCloudinary(videoFile, "videos");
+        updateFields.push("video_url = ?");
+        updateParams.push(newVideoUrl);
+      } else if (req.body.video_file) {
+        validateFileType(req.body.video_file, "video");
+        newVideoUrl = req.body.video_file;
+        updateFields.push("video_url = ?");
+        updateParams.push(newVideoUrl);
+      }
+
+      if (req.files && req.files.poster_file) {
+        const posterFile = req.files.poster_file[0];
+        validateFileType(posterFile, "image");
+        newPosterUrl = await uploadToCloudinary(posterFile, "posters");
+        updateFields.push("poster_url = ?");
+        updateParams.push(newPosterUrl);
+      } else if (req.body.poster_file) {
+        validateFileType(req.body.poster_file, "image");
+        newPosterUrl = req.body.poster_file;
+        updateFields.push("poster_url = ?");
+        updateParams.push(newPosterUrl);
+      }
+
+      if (updateFields.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No new data provided for update",
+        });
+      }
+
+      updateParams.push(id);
+
+      const sql = `UPDATE video SET ${updateFields.join(", ")} WHERE id = ?`;
+      const [result] = await db.promise().query(sql, [...updateParams, id]);
 
       return res.status(200).json({
         success: true,
         message: "Video updated successfully",
-        data: {
-          id,
-          title,
-          meeting_id,
-          video_url: videoFilePath,
-          poster_url: posterFilePath,
-          date_recorded,
-        },
       });
     } catch (err) {
       return res.status(500).json({
