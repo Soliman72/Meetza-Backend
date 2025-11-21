@@ -62,9 +62,13 @@ exports.getSavedVideoById = async (req, res) => {
     if (!video_id) {
       return res.status(400).json({ message: 'id is required' });
     }
+    // Count saved videos
+    const sqlCount = 'SELECT COUNT(*) as count FROM saved_video WHERE video_id = ?';
+    const [countRows] = await db.promise().query(sqlCount, [video_id]);
+    const savedVideoCount = countRows[0].count;
     const [rows] = await db.promise().query('SELECT * FROM saved_video WHERE video_id = ?', [video_id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Record not found' });
-    res.json(rows);
+    res.json({ savedVideoCount, saved_videos: rows });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
