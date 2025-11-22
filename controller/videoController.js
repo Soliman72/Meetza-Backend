@@ -19,7 +19,7 @@ exports.createVideo = (req, res) => {
     }
 
     try {
-      const { title, meeting_id, date_recorded } = req.body;
+      const { title, meeting_id, date_recorded, description } = req.body;
       const id = uuidv4();
 
       // Ensure both files are uploaded
@@ -55,13 +55,12 @@ exports.createVideo = (req, res) => {
         posterUrl = req.body.poster_file; // Assuming it's a URL
       }
 
-      console.log(videoUrl, posterUrl);
 
       // Validate required fields
-      if (!meeting_id || !title || !date_recorded) {
+      if (!meeting_id || !title || !date_recorded || !description)  {
         return res.status(400).json({
           success: false,
-          message: "meeting_id, title, and date_recorded are required",
+          message: "meeting_id, title, description, and date_recorded are required",
         });
       }
 
@@ -89,7 +88,7 @@ exports.createVideo = (req, res) => {
 
       // Insert the video into the database
       const query =
-        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, date_recorded ) VALUES (?, ?, ?, ?, ?, ?, ? )";
+        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, date_recorded, description ) VALUES (?, ?, ?, ?, ?, ?, ? ,?)";
       await db.promise().query(query, [
         id,
         title,
@@ -98,6 +97,7 @@ exports.createVideo = (req, res) => {
         posterUrl, // Store the poster file path
         req.body.administrator_id,
         date_recorded,
+        description,
       ]);
 
       return res.status(201).json({
@@ -110,6 +110,7 @@ exports.createVideo = (req, res) => {
           video_url: videoUrl,
           poster_url: posterUrl,
           date_recorded,
+          description,
         },
       });
     } catch (err) {
@@ -261,7 +262,7 @@ exports.updateVideo = (req, res) => {
       const updateParams = [];
 
       // Handle basic fields from body
-      const { title, meeting_id, date_recorded } = req.body;
+      const { title, meeting_id, date_recorded, description } = req.body;
       if (typeof title !== "undefined") {
         updateFields.push("title = ?");
         updateParams.push(title);
@@ -285,7 +286,10 @@ exports.updateVideo = (req, res) => {
         updateFields.push("date_recorded = ?");
         updateParams.push(date_recorded);
       }
-
+      if (typeof description !== "undefined") {
+        updateFields.push("description = ?");
+        updateParams.push(description);
+      }
       // Handle video/poster file updates
       let newVideoUrl, newPosterUrl;
 
