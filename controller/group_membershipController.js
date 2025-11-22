@@ -57,6 +57,7 @@ exports.getAllGroupMemberships = async (req, res) => {
         g.id as group_id, 
         g.group_name as group_name,
         m.user_id as member_id,
+        gm.id as membership_id,
         u.name as member_name,
         u.email as member_email,
         u.user_photo as member_photo
@@ -87,6 +88,7 @@ exports.getAllGroupMemberships = async (req, res) => {
         };
       }
       groups[row.group_id].members.push({
+        membership_id: row.membership_id,
         member_id: row.member_id,
         member_name: row.member_name,
         member_email: row.member_email,
