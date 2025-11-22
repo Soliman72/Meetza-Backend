@@ -28,6 +28,18 @@ router.put(
   checkAdminPermission,
   meetingContentController.updateMeetingContentById
 );
+router.post(
+  "/:id/files",
+  verifyToken,
+  checkAdminPermission,
+  meetingContentController.addFilesToMeetingContent
+);
+router.delete(
+  "/:id/files/:resourceId",
+  verifyToken,
+  checkAdminPermission,
+  meetingContentController.deleteFileFromMeetingContent
+);
 router.delete(
   "/:id",
   verifyToken,
