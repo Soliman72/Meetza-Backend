@@ -1,46 +1,76 @@
 const db = require("../config/db");
 const { v4: uuidv4 } = require("uuid");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
+const { upload, uploadToCloudinary } = require("../utils/uploadFile");
+const { validateFileType } = require("../utils/validateFiles");
+
 
 // Create
 exports.createGroup = async (req, res) => {
-  try {
-    const { group_name, position_id } = req.body;
-    if (!group_name || !position_id) {
-      return res
-        .status(400)
-        .json({ message: "group_name and position_id are required" });
-    }
-    // Chieck if position_id exists
-    const [positionRows] = await db
-      .promise()
-      .query("SELECT * FROM position WHERE id = ?", [position_id]);
-    if (positionRows.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Invalid position_id: not found" });
-    }
-    // Check if user is authenticated and has a valid id
-    if (req.user && req.user.id !== undefined) {
-    } else {
-      return res.status(401).json({
+  upload.fields([
+    { name: "group_photo", maxCount: 1 },
+  ])(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({
         success: false,
-        message: "Unauthorized: administrator_id is required",
+        message: err.message,
       });
     }
-    // get administrator_id from position_id
-    administrator_id = positionRows[0].administrator_id;
+    try {
+      const { group_name, position_id, description } = req.body;
+      if (!group_name || !position_id ) {
+        return res
+          .status(400)
+          .json({ message: "group_name or position_id are required" });
+      }
+      let group_photo_url;
+      if (req.files?.group_photo) {
+        const group_photo = req.files.group_photo[0];
 
-    const id = uuidv4();
-    const sql =
-      "INSERT INTO `group` (id, group_name, position_id, administrator_id) VALUES (?, ?, ?, ?)";
-    const [result] = await db
-      .promise()
-      .query(sql, [id, group_name, position_id, administrator_id]);
-    res.status(201).json({ id, group_name, position_id });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+        // Validate file types BEFORE uploading
+        validateFileType(group_photo, "image");
+
+        // Upload files to Cloudinary
+        group_photo_url = await uploadToCloudinary(group_photo, "posters");
+      } else if (req.body?.group_photo) {
+        // If URLs are provided in the body (from cloudinary)
+
+        // Validate file types BEFORE uploading
+        validateFileType(req.body.group_photo, "image");
+
+        group_photo_url = req.body.group_photo; // Assuming it's a URL
+      }
+      // Chieck if position_id exists
+      const [positionRows] = await db
+        .promise()
+        .query("SELECT * FROM position WHERE id = ?", [position_id]);
+      if (positionRows.length === 0) {
+        return res
+          .status(400)
+          .json({ message: "Invalid position_id: not found" });
+      }
+      // Check if user is authenticated and has a valid id
+      if (req.user && req.user.id !== undefined) {
+      } else {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized: administrator_id is required",
+        });
+      }
+      // get administrator_id from position_id
+      administrator_id = positionRows[0].administrator_id;
+
+      const id = uuidv4();
+      const sql =
+        "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo) VALUES (?, ?, ?, ?, ?, ?)";
+      const [result] = await db
+        .promise()
+        .query(sql, [id, group_name, position_id, administrator_id, description, group_photo_url]);
+      res.status(201).json({ id, group_name, position_id, administrator_id, description , group_photo: group_photo_url });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 };
 
 // Read all
@@ -97,23 +127,56 @@ exports.getGroupById = async (req, res) => {
 
 // Update
 exports.updateGroup = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { group_name, position_id } = req.body;
-    if (!id || !group_name || !position_id) {
-      return res
-        .status(400)
-        .json({ message: "id, group_name and position_id are required" });
+upload.fields([
+    { name: "group_photo", maxCount: 1 },
+  ])(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+      });
     }
-    const sql =
-      "UPDATE `group` SET group_name = ?, position_id = ? WHERE id = ?";
-    const [result] = await db
-      .promise()
-      .query(sql, [group_name, position_id, id]);
-    res.json({ message: "Group updated successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    try {
+      const { id } = req.params;
+      const { group_name, position_id, description } = req.body;
+      if (!id) {
+        return res.status(400).json({ message: "id is required" });
+      }
+      
+      if (!position_id && !group_name && !description && !req.files?.group_photo && !req.body.group_photo) {
+        return res
+          .status(400)
+          .json({ message: "At least one field to update is required" });
+      }
+
+      let group_photo_url;
+        if (req.files?.group_photo) {
+          const group_photo = req.files.group_photo[0];
+          // Validate file types BEFORE uploading
+          validateFileType(group_photo, "image");
+          // Upload files to Cloudinary
+          group_photo_url = await uploadToCloudinary(group_photo, "posters");
+        }
+        else if (req.body?.group_photo) {
+          // If URLs are provided in the body (from cloudinary)
+          // Validate file types BEFORE uploading
+          validateFileType(req.body.group_photo, "image");
+          group_photo_url = req.body.group_photo; // Assuming it's a URL
+        }
+        const sql = `UPDATE \`group\` SET 
+        group_name = COALESCE(?, group_name), 
+        position_id = COALESCE(?, position_id),
+        description = COALESCE(?, description),
+        group_photo = COALESCE(?, group_photo)
+        WHERE id = ?`;
+      const [result] = await db
+        .promise()
+        .query(sql, [group_name, position_id, description, group_photo_url, id]);
+      res.json({ message: "Group updated successfully" });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 };
 
 // Delete
