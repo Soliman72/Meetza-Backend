@@ -3,7 +3,7 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 const authRouter = require("./router/authRouter");
-const meetingContentRouter = require("./router/meetingContentRouter");
+const groupContentRouter = require("./router/groupContentRouter");
 const meetingRouter = require("./router/meetingRouter");
 const passport = require("./config/passport");
 
@@ -33,7 +33,6 @@ app.use(passport.initialize());
 
 app.use("/api/auth", authRouter);
 
-
 app.use("/api/user", userRouter);
 app.use("/api/social_auth", socialAuthRouter);
 app.use("/api/member", memberRouter);
@@ -42,13 +41,12 @@ app.use("/api/administrator", administratorRouter);
 app.use("/api/position", positionRouter);
 app.use("/api/group", groupRouter);
 app.use("/api/group-membership", groupMembershipRouter);
-app.use("/api/meeting-contents", meetingContentRouter);
+app.use("/api/group-contents", groupContentRouter);
 app.use("/api/meeting", meetingRouter);
 app.use("/api/video", videoRouter);
 app.use("/api/like", require("./router/likeRouter"));
 app.use("/api/comment", commentRouter);
 app.use("/api/saved_video", saved_videoRouter);
-
 
 app.get("/", (req, res) => {
   res.send("اهلا يا شهد يا رخمه!!!");

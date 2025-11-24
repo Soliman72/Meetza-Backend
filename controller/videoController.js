@@ -19,7 +19,7 @@ exports.createVideo = (req, res) => {
     }
 
     try {
-      const { title, meeting_id, date_recorded, description } = req.body;
+      const { title, meeting_id, group_id , date_recorded, description } = req.body;
       const id = uuidv4();
 
       // Ensure both files are uploaded
@@ -55,26 +55,42 @@ exports.createVideo = (req, res) => {
         posterUrl = req.body.poster_file; // Assuming it's a URL
       }
 
-
       // Validate required fields
-      if (!meeting_id || !title || !date_recorded || !description)  {
+      if (! group_id || !title || !date_recorded || !description) {
         return res.status(400).json({
           success: false,
-          message: "meeting_id, title, description, and date_recorded are required",
+          message:
+            " group_id , title, description, and date_recorded are required",
         });
       }
 
-      const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
-      const [meetingRows] = await db
+      if ( meeting_id )
+      {
+        const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
+        const [meetingRows] = await db
+          .promise()
+          .query(meetingCheckQuery, [meeting_id]);
+  
+        if (meetingRows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Meeting not found",
+          });
+        }
+      }
+
+      // check if group exists
+      const groupCheckQuery = "SELECT * FROM `group` WHERE id = ?";
+      const [groupRows] = await db
         .promise()
-        .query(meetingCheckQuery, [meeting_id]);
-
-      if (meetingRows.length === 0) {
-        return res.status(404).json({
+        .query( groupCheckQuery, [ group_id ] );
+      if ( groupRows.length === 0 ) {
+        return res.status( 404 ). json( {
           success: false,
-          message: "Meeting not found",
-        });
+          message: "Group not found",
+        } );
       }
+
 
       // Check if user is authenticated and has a valid id
       if (req.user && req.user.id !== undefined) {
@@ -88,7 +104,7 @@ exports.createVideo = (req, res) => {
 
       // Insert the video into the database
       const query =
-        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, date_recorded, description ) VALUES (?, ?, ?, ?, ?, ?, ? ,?)";
+        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, date_recorded, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, ? ,? , ?)";
       await db.promise().query(query, [
         id,
         title,
@@ -98,6 +114,7 @@ exports.createVideo = (req, res) => {
         req.body.administrator_id,
         date_recorded,
         description,
+        group_id
       ]);
 
       return res.status(201).json({
@@ -111,6 +128,8 @@ exports.createVideo = (req, res) => {
           poster_url: posterUrl,
           date_recorded,
           description,
+          administrator_id: req.body.administrator_id,
+          group_id
         },
       });
     } catch (err) {
@@ -125,7 +144,7 @@ exports.createVideo = (req, res) => {
 
 exports.getAllVideos = async (req, res) => {
   try {
-    const { title } = req.query;
+    const { title, group_id } = req.query;
     let query = "SELECT * FROM video";
     let params = [];
 
@@ -133,15 +152,31 @@ exports.getAllVideos = async (req, res) => {
     const ownershipFilter = getOwnershipFilter(req, "administrator_id");
     if (ownershipFilter.whereClause) {
       query += " " + ownershipFilter.whereClause;
-      params.push(...ownershipFilter.params);
+      if ( !group_id && !title ) 
+        params.push(...ownershipFilter.params);
+    }
+
+    if (group_id) {
+      query = "SELECT video.*  , `group`.group_name FROM video";
+      query +=
+        " JOIN `group` ON video.group_id= `group`.id WHERE video.group_id = ?";
+      params.push( group_id );
+      if ( ownershipFilter.whereClause )
+      {
+        query += " AND video." + ownershipFilter.whereClause.slice(6); // Remove initial WHERE
+        params.push( ...ownershipFilter.params );
+      }
     }
 
     if (title) {
-      query += ownershipFilter.whereClause ? " AND" : " WHERE";
+      query +=( ownershipFilter.whereClause || group_id )  ? " AND" : " WHERE";
       query += " title LIKE ?";
+      if ( ownershipFilter.whereClause && !group_id )
+        params.push(...ownershipFilter.params);
+        
       params.push(`%${title}%`);
     }
-
+    
     const [results] = await db.promise().query(query, params);
     return res.status(200).json({
       success: true,
@@ -262,12 +297,12 @@ exports.updateVideo = (req, res) => {
       const updateParams = [];
 
       // Handle basic fields from body
-      const { title, meeting_id, date_recorded, description } = req.body;
-      if (typeof title !== "undefined") {
+      const { title, meeting_id, group_id ,  date_recorded, description } = req.body;
+      if ( title) {
         updateFields.push("title = ?");
         updateParams.push(title);
       }
-      if (typeof meeting_id !== "undefined") {
+      if (meeting_id) {
         // Check if meeting exists if updating meeting_id
         const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
         const [meetingRows] = await db
@@ -282,13 +317,17 @@ exports.updateVideo = (req, res) => {
         updateFields.push("meeting_id = ?");
         updateParams.push(meeting_id);
       }
-      if (typeof date_recorded !== "undefined") {
+      if (date_recorded) {
         updateFields.push("date_recorded = ?");
         updateParams.push(date_recorded);
       }
-      if (typeof description !== "undefined") {
+      if (description) {
         updateFields.push("description = ?");
         updateParams.push(description);
+      }
+      if ( group_id ) {
+        updateFields.push("group_id = ?");
+        updateParams.push( group_id );
       }
       // Handle video/poster file updates
       let newVideoUrl, newPosterUrl;

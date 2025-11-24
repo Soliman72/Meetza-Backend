@@ -5,15 +5,14 @@ const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 // Create a meeting
 exports.createMeeting = async (req, res) => {
   try {
-    const { title, datetime, group_id, meeting_content_id, status } = req.body;
+    const { title, datetime, group_id, status } = req.body;
     const id = uuidv4();
 
     // Validate required fields
-    if (!title || !datetime || !meeting_content_id || !group_id || !status) {
+    if (!title || !datetime || !group_id || !status) {
       return res.status(400).json({
         success: false,
-        message:
-          "Title, datetime, meeting_content_id,group_id , and status are required",
+        message: "Title, datetime,group_id , and status are required",
       });
     }
 
@@ -26,20 +25,6 @@ exports.createMeeting = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Status must be one of: Scheduled, Completed, Cancelled",
-      });
-    }
-
-    // Check if meeting content id exists
-    const checkMeetingContentQuery =
-      "SELECT * FROM meeting_content WHERE id = ?";
-    const [results] = await db
-      .promise()
-      .query(checkMeetingContentQuery, [meeting_content_id]);
-
-    if (results.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid meeting_content_id: not found",
       });
     }
 
@@ -65,15 +50,14 @@ exports.createMeeting = async (req, res) => {
     }
 
     // Insert the meeting into the database
-    const query = `INSERT INTO meeting (id, title, datetime, meeting_content_id, status, administrator_id , group_id) 
-                    VALUES (?, ?, ?, ?, ?, ? , ?)`;
+    const query = `INSERT INTO meeting (id, title, datetime, status, administrator_id , group_id) 
+                    VALUES (?, ?, ?, ?, ?, ?)`;
     await db
       .promise()
       .query(query, [
         id,
         title,
         datetime,
-        meeting_content_id,
         status,
         req.body.administrator_id,
         group_id,
@@ -86,7 +70,6 @@ exports.createMeeting = async (req, res) => {
         id,
         title,
         datetime,
-        meeting_content_id,
         group_id,
         status,
       },
@@ -181,35 +164,20 @@ exports.getMeetingById = async (req, res) => {
 exports.updateMeetingById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, datetime, meeting_content_id, group_id, status } = req.body;
+    const { title, datetime, group_id, status } = req.body;
 
-    if (
-      !id ||
-      !title ||
-      !datetime ||
-      !meeting_content_id ||
-      !group_id ||
-      !status
-    ) {
+    if (!id || !title || !datetime || !group_id || !status) {
       return res.status(400).json({
         success: false,
-        message:
-          "id, title, datetime, meeting_content_id , group_id and status are required",
+        message: "id, title, datetime , group_id and status are required",
       });
     }
 
     const query =
-      "UPDATE meeting SET title = ?, datetime = ?, meeting_content_id = ?, status = ? , group_id =?  WHERE id = ?";
+      "UPDATE meeting SET title = ?, datetime = ?, status = ? , group_id =?  WHERE id = ?";
     const [result] = await db
       .promise()
-      .query(query, [
-        title,
-        datetime,
-        meeting_content_id,
-        status,
-        group_id,
-        id,
-      ]);
+      .query(query, [title, datetime, status, group_id, id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({

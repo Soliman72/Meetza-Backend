@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const meetingContentController = require("../controller/meetingContentController");
+const groupContentController = require("../controller/groupContentController");
 const { verifyToken } = require("../utils/verifyToken");
 const { checkAdminPermission } = require("../utils/checkAdminPermission");
 
@@ -8,43 +8,43 @@ router.get(
   "/",
   verifyToken,
   checkAdminPermission,
-  meetingContentController.getAllMeetingContents
+  groupContentController.getAllGroupContents
 );
 router.post(
   "/",
   verifyToken,
   checkAdminPermission,
-  meetingContentController.createMeetingContent
+  groupContentController.createGroupContent
 );
 router.get(
   "/:id",
   verifyToken,
   checkAdminPermission,
-  meetingContentController.getMeetingContentById
+  groupContentController.getGroupContentById
 );
 router.put(
   "/:id",
   verifyToken,
   checkAdminPermission,
-  meetingContentController.updateMeetingContentById
+  groupContentController.updateGroupContentById
 );
 router.post(
   "/:id/files",
   verifyToken,
   checkAdminPermission,
-  meetingContentController.addFilesToMeetingContent
+  groupContentController.addFilesToGroupContent
 );
 router.delete(
   "/:id/files/:resourceId",
   verifyToken,
   checkAdminPermission,
-  meetingContentController.deleteFileFromMeetingContent
+  groupContentController.deleteFileFromGroupContent
 );
 router.delete(
   "/:id",
   verifyToken,
   checkAdminPermission,
-  meetingContentController.deleteMeetingContentById
+  groupContentController.deleteGroupContentById
 );
 
 module.exports = router;

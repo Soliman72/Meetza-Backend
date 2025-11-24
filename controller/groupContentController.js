@@ -3,8 +3,8 @@ const db = require("../config/db");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinaryResources } = require("../utils/uploadFile");
 
-// Controller to handle meeting content creation with file uploads
-exports.createMeetingContent = (req, res) => {
+// Controller to handle group content creation with file uploads
+exports.createGroupContent = (req, res) => {
   // Apply multer upload middleware to handle file uploads
   upload.array("files", 20)(req, res, async (err) => {
     if (err) {
@@ -25,9 +25,9 @@ exports.createMeetingContent = (req, res) => {
         });
       }
 
-      // Insert the meeting content into the database
+      // Insert the group content into the database
       const query =
-        "INSERT INTO meeting_content (id, content_name, content_description, administrator_id) VALUES (?, ?, ?, ?)";
+        "INSERT INTO group_content (id, content_name, content_description, administrator_id) VALUES (?, ?, ?, ?)";
       await db
         .promise()
         .query(query, [id, content_name, content_description, req.user?.id]);
@@ -50,10 +50,10 @@ exports.createMeetingContent = (req, res) => {
                 file.mimetype.includes("text"));
             const resourceType = isDocument ? "raw" : "auto";
 
-            // Upload file to separate Cloudinary for meeting content resources (large files)
+            // Upload file to separate Cloudinary for group content resources (large files)
             const fileUrl = await uploadToCloudinaryResources(
               file,
-              "meeting_content_resources",
+              "group_content_resources",
               resourceType
             );
 
@@ -62,7 +62,7 @@ exports.createMeetingContent = (req, res) => {
 
             // Insert resource into database
             const resourceQuery =
-              "INSERT INTO meeting_content_resource (id, meeting_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
+              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
             await db
               .promise()
               .query(resourceQuery, [
@@ -93,7 +93,7 @@ exports.createMeetingContent = (req, res) => {
 
       return res.status(201).json({
         success: true,
-        message: "Meeting content created successfully",
+        message: "Group content created successfully",
         data: {
           id,
           content_name,
@@ -112,11 +112,11 @@ exports.createMeetingContent = (req, res) => {
   });
 };
 
-// Controller to get all meeting contents
-exports.getAllMeetingContents = async (req, res) => {
+// Controller to get all group contents
+exports.getAllGroupContents = async (req, res) => {
   try {
     const { name } = req.query;
-    let query = "SELECT * FROM meeting_content";
+    let query = "SELECT * FROM group_content";
     let params = [];
 
     // Apply ownership filter for regular admins
@@ -137,17 +137,17 @@ exports.getAllMeetingContents = async (req, res) => {
 
     const [results] = await db.promise().query(query, params);
 
-    // Fetch resources for each meeting content
-    const meetingContentsWithResources = await Promise.all(
-      results.map(async (meetingContent) => {
+    // Fetch resources for each group content
+    const groupContentsWithResources = await Promise.all(
+      results.map(async (groupContent) => {
         const resourcesQuery =
-          "SELECT id, file_url, file_name, file_type, file_size, created_at FROM meeting_content_resource WHERE meeting_content_id = ? ORDER BY created_at ASC";
+          "SELECT id, file_url, file_name, file_type, file_size, created_at FROM group_content_resource WHERE group_content_id = ? ORDER BY created_at ASC";
         const [resources] = await db
           .promise()
-          .query(resourcesQuery, [meetingContent.id]);
+          .query(resourcesQuery, [groupContent.id]);
 
         return {
-          ...meetingContent,
+          ...groupContent,
           resources: resources,
         };
       })
@@ -155,7 +155,7 @@ exports.getAllMeetingContents = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: meetingContentsWithResources,
+      data: groupContentsWithResources,
     });
   } catch (err) {
     return res.status(500).json({
@@ -166,8 +166,8 @@ exports.getAllMeetingContents = async (req, res) => {
   }
 };
 
-// Controller to get a specific meeting content by ID
-exports.getMeetingContentById = async (req, res) => {
+// Controller to get a specific group content by ID
+exports.getGroupContentById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -178,30 +178,30 @@ exports.getMeetingContentById = async (req, res) => {
       });
     }
 
-    // Get meeting content
-    const query = "SELECT * FROM meeting_content WHERE id = ?";
+    // Get group content
+    const query = "SELECT * FROM group_content WHERE id = ?";
     const [results] = await db.promise().query(query, [id]);
 
     if (results.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Meeting content not found",
+        message: "Group content not found",
       });
     }
 
     // Get associated resources
     const resourcesQuery =
-      "SELECT id, file_url, file_name, file_type, file_size, created_at FROM meeting_content_resource WHERE meeting_content_id = ? ORDER BY created_at ASC";
+      "SELECT id, file_url, file_name, file_type, file_size, created_at FROM group_content_resource WHERE group_content_id = ? ORDER BY created_at ASC";
     const [resources] = await db.promise().query(resourcesQuery, [id]);
 
-    const meetingContent = {
+    const groupContent = {
       ...results[0],
       resources: resources,
     };
 
     return res.status(200).json({
       success: true,
-      data: meetingContent,
+      data: groupContent,
     });
   } catch (err) {
     return res.status(500).json({
@@ -212,8 +212,8 @@ exports.getMeetingContentById = async (req, res) => {
   }
 };
 
-// Controller to update meeting content by ID
-exports.updateMeetingContentById = async (req, res) => {
+// Controller to update group content by ID
+exports.updateGroupContentById = async (req, res) => {
   try {
     const { id } = req.params;
     const { content_name, content_description } = req.body;
@@ -226,7 +226,7 @@ exports.updateMeetingContentById = async (req, res) => {
     }
 
     const query =
-      "UPDATE meeting_content SET content_name = ?, content_description = ? WHERE id = ?";
+      "UPDATE group_content SET content_name = ?, content_description = ? WHERE id = ?";
     const [result] = await db
       .promise()
       .query(query, [content_name, content_description, id]);
@@ -234,13 +234,13 @@ exports.updateMeetingContentById = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
-        message: "Meeting content not found",
+        message: "Group content not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Meeting content updated successfully",
+      message: "Group content updated successfully",
     });
   } catch (err) {
     return res.status(500).json({
@@ -251,8 +251,8 @@ exports.updateMeetingContentById = async (req, res) => {
   }
 };
 
-// Controller to add files to an existing meeting content
-exports.addFilesToMeetingContent = (req, res) => {
+// Controller to add files to an existing group content
+exports.addFilesToGroupContent = (req, res) => {
   // Apply multer upload middleware to handle file uploads
   upload.array("files", 20)(req, res, async (err) => {
     if (err) {
@@ -272,14 +272,14 @@ exports.addFilesToMeetingContent = (req, res) => {
         });
       }
 
-      // Verify meeting content exists
-      const checkQuery = "SELECT * FROM meeting_content WHERE id = ?";
-      const [meetingContent] = await db.promise().query(checkQuery, [id]);
+      // Verify group content exists
+      const checkQuery = "SELECT * FROM group_content WHERE id = ?";
+      const [groupContent] = await db.promise().query(checkQuery, [id]);
 
-      if (meetingContent.length === 0) {
+      if (groupContent.length === 0) {
         return res.status(404).json({
           success: false,
-          message: "Meeting content not found",
+          message: "Group content not found",
         });
       }
 
@@ -289,14 +289,14 @@ exports.addFilesToMeetingContent = (req, res) => {
         const [userContent] = await db
           .promise()
           .query(
-            `SELECT * FROM meeting_content ${ownershipFilter.whereClause} AND id = ? `,
+            `SELECT * FROM group_content ${ownershipFilter.whereClause} AND id = ? `,
             [...ownershipFilter.params, id]
           );
         if (userContent.length === 0) {
           return res.status(403).json({
             success: false,
             message:
-              "You don't have permission to add files to this meeting content",
+              "You don't have permission to add files to this group content",
           });
         }
       }
@@ -325,10 +325,10 @@ exports.addFilesToMeetingContent = (req, res) => {
               file.mimetype.includes("text"));
           const resourceType = isDocument ? "raw" : "auto";
 
-          // Upload file to separate Cloudinary for meeting content resources (large files)
+          // Upload file to separate Cloudinary for group content resources (large files)
           const fileUrl = await uploadToCloudinaryResources(
             file,
-            "meeting_content_resources",
+            "group_content_resources",
             resourceType
           );
 
@@ -337,7 +337,7 @@ exports.addFilesToMeetingContent = (req, res) => {
 
           // Insert resource into database
           const resourceQuery =
-            "INSERT INTO meeting_content_resource (id, meeting_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
+            "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
           await db
             .promise()
             .query(resourceQuery, [
@@ -376,7 +376,7 @@ exports.addFilesToMeetingContent = (req, res) => {
         success: true,
         message: "Files added successfully",
         data: {
-          meeting_content_id: id,
+          group_content_id: id,
           added_resources: uploadedResources,
           total_added: uploadedResources.length,
         },
@@ -391,8 +391,8 @@ exports.addFilesToMeetingContent = (req, res) => {
   });
 };
 
-// Controller to delete a file from meeting content
-exports.deleteFileFromMeetingContent = async (req, res) => {
+// Controller to delete a file from group content
+exports.deleteFileFromGroupContent = async (req, res) => {
   try {
     const { id, resourceId } = req.params;
 
@@ -410,14 +410,14 @@ exports.deleteFileFromMeetingContent = async (req, res) => {
       });
     }
 
-    // Verify meeting content exists
-    const checkQuery = "SELECT * FROM meeting_content WHERE id = ?";
-    const [meetingContent] = await db.promise().query(checkQuery, [id]);
+    // Verify group content exists
+    const checkQuery = "SELECT * FROM group_content WHERE id = ?";
+    const [groupContent] = await db.promise().query(checkQuery, [id]);
 
-    if (meetingContent.length === 0) {
+    if (groupContent.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Meeting content not found",
+        message: "Group content not found",
       });
     }
 
@@ -427,21 +427,21 @@ exports.deleteFileFromMeetingContent = async (req, res) => {
       const [userContent] = await db
         .promise()
         .query(
-          `SELECT * FROM meeting_content ${ownershipFilter.whereClause} AND id = ? `,
+          `SELECT * FROM group_content ${ownershipFilter.whereClause} AND id = ? `,
           [...ownershipFilter.params, id]
         );
       if (userContent.length === 0) {
         return res.status(403).json({
           success: false,
           message:
-            "You don't have permission to delete files from this meeting content",
+            "You don't have permission to delete files from this group content",
         });
       }
     }
 
     // Delete the resource from database
     const deleteQuery =
-      "DELETE FROM meeting_content_resource WHERE id = ? AND meeting_content_id = ?";
+      "DELETE FROM group_content_resource WHERE id = ? AND group_content_id = ?";
     const [result] = await db.promise().query(deleteQuery, [resourceId, id]);
 
     if (result.affectedRows === 0) {
@@ -464,8 +464,8 @@ exports.deleteFileFromMeetingContent = async (req, res) => {
   }
 };
 
-// Controller to delete a specific meeting content by ID
-exports.deleteMeetingContentById = async (req, res) => {
+// Controller to delete a specific group content by ID
+exports.deleteGroupContentById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -476,19 +476,19 @@ exports.deleteMeetingContentById = async (req, res) => {
       });
     }
 
-    const query = "DELETE FROM meeting_content WHERE id = ?";
+    const query = "DELETE FROM group_content WHERE id = ?";
     const [result] = await db.promise().query(query, [id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
-        message: "Meeting content not found",
+        message: "Group content not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Meeting content deleted successfully",
+      message: "Group content deleted successfully",
     });
   } catch (err) {
     return res.status(500).json({
