@@ -80,7 +80,7 @@ exports.createGroup = async (req, res) => {
 
         const id = uuidv4();
         const sql =
-          "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo , group_content_id) VALUES (?, ?, ?, ?, ?, ?)";
+          "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo , group_content_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
         const [result] = await db
           .promise()
           .query(sql, [
@@ -185,7 +185,7 @@ exports.updateGroup = async (req, res) => {
           !group_name &&
           !description &&
           !req.files?.group_photo &&
-          group_content_id &&
+          !group_content_id &&
           !req.body.group_photo
         ) {
           return res
