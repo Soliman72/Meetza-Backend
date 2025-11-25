@@ -59,10 +59,10 @@ exports.createGroup = async (req, res) => {
           });
         }
 
-        // Check if meeting content id exists
+        // Check if group content id exists
         if (group_content_id) {
           const checkGroupContentQuery =
-            "SELECT * FROM meeting_content WHERE id = ?";
+            "SELECT * FROM group_content WHERE id = ?";
           const [results] = await db
             .promise()
             .query(checkGroupContentQuery, [group_content_id]);
