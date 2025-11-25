@@ -211,7 +211,7 @@ exports.updateGroup = async (req, res) => {
         position_id = COALESCE(?, position_id),
         description = COALESCE(?, description),
         group_photo = COALESCE(?, group_photo),
-        group_content_id = COALESCE(?, group_content_id),
+        group_content_id = COALESCE(?, group_content_id)
         WHERE id = ?`;
         const [result] = await db
           .promise()
