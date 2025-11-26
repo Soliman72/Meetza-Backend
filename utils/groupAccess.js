@@ -13,6 +13,43 @@ class GroupAccessError extends Error {
  * Returns the group record together with the resolved role.
  */
 const ensureGroupAccess = async (userId, groupId) => {
+  // First, get user role to check if Super_Admin
+  const [userRows] = await db
+    .promise()
+    .query(`SELECT role FROM user WHERE id = ? LIMIT 1`, [userId]);
+  const userRole = userRows[0]?.role;
+
+  if (userRole === "Super_Admin") {
+    // If Super_Admin, allow access to any group
+    const [groupRows] = await db.promise().query(
+      `
+          SELECT
+            g.id AS group_id,
+            g.group_name,
+            g.description,
+            g.group_photo,
+            g.group_content_id,
+            g.administrator_id,
+            u.name,
+            u.email,
+            u.user_photo,
+            'Super_Admin' AS membership_role
+          FROM \`group\` g
+          JOIN user u ON u.id = g.administrator_id
+          WHERE g.id = ?
+          LIMIT 1
+        `,
+      [groupId]
+    );
+
+    if (!groupRows.length) {
+      throw new GroupAccessError("Group not found", 404);
+    }
+
+    return groupRows[0];
+  }
+
+  // Else, check if administrator or member of the group
   const [rows] = await db.promise().query(
     `
         SELECT
@@ -22,6 +59,9 @@ const ensureGroupAccess = async (userId, groupId) => {
           g.group_photo,
           g.group_content_id,
           g.administrator_id,
+          u.name,
+          u.email,
+          u.user_photo,
           CASE
             WHEN g.administrator_id = ? THEN 'Administrator'
             WHEN gm.member_id IS NOT NULL THEN 'Member'
@@ -30,18 +70,19 @@ const ensureGroupAccess = async (userId, groupId) => {
         FROM \`group\` g
         LEFT JOIN group_membership gm
           ON gm.group_id = g.id AND gm.member_id = ?
-        WHERE g.id = ?
+        JOIN user u ON u.id = ?
+        WHERE g.id = ? AND u.role = 'Administrator'
+
         LIMIT 1
       `,
-    [userId, userId, groupId]
+    [userId, userId, userId, groupId]
   );
 
   if (!rows.length) {
     throw new GroupAccessError("Group not found", 404);
   }
 
-  // if role is Super Admin, allow access
-  if (!rows[0].membership_role && rows[0].membership_role !== "Super_Admin") {
+  if (!rows[0].membership_role) {
     throw new GroupAccessError("You do not have access to this group", 403);
   }
 

@@ -39,8 +39,58 @@ exports.getMyGroups = async (req, res) => {
       });
     }
 
-    const [rows] = await db.promise().query(
-      `
+    // Fetch the user role (check if Super_Admin)
+    const [userRows] = await db
+      .promise()
+      .query(`SELECT role FROM user WHERE id = ? LIMIT 1`, [userId]);
+    const userRole = userRows[0]?.role;
+
+    let queryStr;
+    let queryParams;
+
+    if (userRole === "Super_Admin") {
+      // Show ALL groups if Super_Admin
+      queryStr = `
+        SELECT DISTINCT
+          g.id,
+          g.group_name,
+          g.description,
+          g.group_photo,
+          g.group_content_id,
+          g.position_id,
+          COALESCE(stats.member_count, 0) + 1 AS member_count,
+          'Super_Admin' AS membership_role,
+          msg.message AS last_message,
+          msg.created_at AS last_message_at,
+          msg.sender_name AS last_sender_name
+        FROM \`group\` g
+        LEFT JOIN (
+          SELECT
+            gm_inner.group_id,
+            gm_inner.message,
+            gm_inner.created_at,
+            u.name AS sender_name
+          FROM group_message gm_inner
+          JOIN (
+            SELECT group_id, MAX(created_at) AS latest_created_at
+            FROM group_message
+            GROUP BY group_id
+          ) latest
+            ON gm_inner.group_id = latest.group_id
+            AND gm_inner.created_at = latest.latest_created_at
+          JOIN user u ON u.id = gm_inner.sender_id
+        ) msg ON msg.group_id = g.id
+        LEFT JOIN (
+          SELECT group_id, COUNT(*) AS member_count
+          FROM group_membership
+          GROUP BY group_id
+        ) stats ON stats.group_id = g.id
+        ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
+      `;
+      queryParams = [];
+    } else {
+      // Show only my groups if not Super_Admin
+      queryStr = `
         SELECT DISTINCT
           g.id,
           g.group_name,
@@ -83,9 +133,11 @@ exports.getMyGroups = async (req, res) => {
         ) stats ON stats.group_id = g.id
         WHERE g.administrator_id = ? OR gm.member_id IS NOT NULL
         ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
-      `,
-      [userId, userId, userId]
-    );
+      `;
+      queryParams = [userId, userId, userId];
+    }
+
+    const [rows] = await db.promise().query(queryStr, queryParams);
 
     return res.json({
       success: true,
