@@ -13,10 +13,8 @@ class GroupAccessError extends Error {
  * Returns the group record together with the resolved role.
  */
 const ensureGroupAccess = async (userId, groupId) => {
-  const [rows] = await db
-    .promise()
-    .query(
-      `
+  const [rows] = await db.promise().query(
+    `
         SELECT
           g.id AS group_id,
           g.group_name,
@@ -35,8 +33,8 @@ const ensureGroupAccess = async (userId, groupId) => {
         WHERE g.id = ?
         LIMIT 1
       `,
-      [userId, userId, groupId]
-    );
+    [userId, userId, groupId]
+  );
 
   if (!rows.length) {
     throw new GroupAccessError("Group not found", 404);
@@ -53,4 +51,3 @@ module.exports = {
   ensureGroupAccess,
   GroupAccessError,
 };
-

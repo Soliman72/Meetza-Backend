@@ -1,7 +1,7 @@
 // scripts/test-socket.js
 const { io } = require("socket.io-client");
 
-const SERVER_URL = "http://localhost:4000"; // adjust if API runs elsewhere
+const SERVER_URL = "PASTE_YOUR_SERVER_URL_HERE"; // meetza backend url
 const JWT = "PASTE_YOUR_JWT_HERE";
 const GROUP_ID = "PASTE_GROUP_ID_HERE";
 
@@ -23,7 +23,7 @@ socket.on("connect", () => {
 
     socket.emit(
       "sendMessage",
-      { groupId: GROUP_ID, message: "Backend test 👋" },
+      { groupId: GROUP_ID, message: "Hello Shooosh from socket 👋" },
       (ackMsg) => console.log("sendMessage ack:", ackMsg)
     );
   });
