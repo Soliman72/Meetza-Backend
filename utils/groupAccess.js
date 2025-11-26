@@ -70,12 +70,11 @@ const ensureGroupAccess = async (userId, groupId) => {
         FROM \`group\` g
         LEFT JOIN group_membership gm
           ON gm.group_id = g.id AND gm.member_id = ?
-        JOIN user u ON u.id = ?
-        WHERE g.id = ? AND u.role = 'Administrator'
-
+        JOIN user u ON u.id = g.administrator_id
+        WHERE g.id = ?
         LIMIT 1
       `,
-    [userId, userId, userId, groupId]
+    [userId, userId, groupId]
   );
 
   if (!rows.length) {
