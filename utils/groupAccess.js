@@ -40,7 +40,8 @@ const ensureGroupAccess = async (userId, groupId) => {
     throw new GroupAccessError("Group not found", 404);
   }
 
-  if (!rows[0].membership_role) {
+  // if role is Super Admin, allow access
+  if (!rows[0].membership_role && rows[0].membership_role !== "Super_Admin") {
     throw new GroupAccessError("You do not have access to this group", 403);
   }
 
