@@ -153,11 +153,23 @@ exports.getGroupMessages = async (req, res) => {
     const userId = req.user?.id;
     const { groupId } = req.params;
     const { limit, before } = req.query;
+    const { searchMessage } = req.query;
 
     if (!groupId) {
       return res.status(400).json({
         success: false,
         message: "groupId is required",
+      });
+    }
+
+    // get messages with search is not supported yet 
+    // why?
+    // because it requires full text search implementation which is not yet done
+
+    if (searchMessage) {
+      return res.status(400).json({
+        success: false,
+        message: "searchMessage parameter is not supported",
       });
     }
 
@@ -195,6 +207,79 @@ exports.sendMessage = async (req, res) => {
       data: savedMessage,
     });
   } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// Delete message
+exports.deleteMessage = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId, messageId } = req.params;
+    if (!groupId || !messageId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId and messageId are required",
+      });
+    }
+    await ensureGroupAccess(userId, groupId);
+
+    // Delete only if the user is the sender of the message
+    const [result] = await db
+      .promise()
+      .query(
+        "DELETE FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
+        [messageId, userId, groupId]
+      );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found or you are not the sender",
+      });
+    }
+    return res.json({
+      success: true,
+      message: "Message deleted successfully",
+    });
+  }
+  catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// update message
+exports.updateMessage = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId, messageId } = req.params;
+    const { message } = req.body;
+    if (!groupId || !messageId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId and messageId are required",
+      });
+    }
+    await ensureGroupAccess(userId, groupId);
+
+    // Update only if the user is the sender of the message
+    const [result] = await db
+      .promise()
+      .query(
+        "UPDATE group_message SET message = ? WHERE id = ? AND sender_id = ? AND group_id = ?",
+        [message, messageId, userId, groupId]
+      );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found or you are not the sender",
+      });
+    }
+    return res.json({
+      success: true,
+      message: "Message updated successfully",
+    });
+  }
+  catch (error) {
     return handleError(res, error);
   }
 };
