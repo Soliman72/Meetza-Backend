@@ -17,13 +17,27 @@ exports.createGroup = async (req, res) => {
         });
       }
       try {
-        const { group_name, position_id, group_content_id, description } =
+        const { group_name, position_id, group_content_id, description, year, semester } =
           req.body;
-        if (!group_name || !position_id) {
+        if (!group_name || !position_id || !year || !semester) {
           return res
             .status(400)
-            .json({ message: "group_name or position_id are required" });
+            .json({ message: "group_name, position_id, year and semester are required" });
         }
+
+        // check year is 1,2,3,4
+        if (!["1", "2", "3", "4"].includes(year.toString())) {
+          return res
+            .status(400)
+            .json({ message: "year must be 1, 2, 3, or 4" });
+        }
+
+        if (!["Fall", "Spring", "Summer"].includes(semester)) {
+          return res
+            .status(400)
+            .json({ message: "semester must be Fall, Spring, or Summer" });
+        }
+
         let group_photo_url;
         if (req.files?.group_photo) {
           const group_photo = req.files.group_photo[0];
@@ -80,7 +94,7 @@ exports.createGroup = async (req, res) => {
 
         const id = uuidv4();
         const sql =
-          "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo , group_content_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
+          "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo , group_content_id, year, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         const [result] = await db
           .promise()
           .query(sql, [
@@ -91,6 +105,8 @@ exports.createGroup = async (req, res) => {
             description,
             group_photo_url,
             group_content_id,
+            year,
+            semester,
           ]);
         res.status(201).json({
           id,
@@ -100,6 +116,8 @@ exports.createGroup = async (req, res) => {
           description,
           group_photo: group_photo_url,
           group_content_id,
+          year,
+          semester,
         });
       } catch (err) {
         res.status(500).json({ message: err.message });
@@ -111,9 +129,11 @@ exports.createGroup = async (req, res) => {
 // Read all
 exports.getAllGroups = async (req, res) => {
   try {
-    const { name } = req.query;
+    const { name , year, semester} = req.query;
     let sql = "SELECT * FROM `group`";
     let params = [];
+
+
 
     // Apply ownership filter for regular admins
     const ownershipFilter = getOwnershipFilter(req, "administrator_id");
@@ -126,6 +146,18 @@ exports.getAllGroups = async (req, res) => {
       sql += ownershipFilter.whereClause ? " AND" : " WHERE";
       sql += " group_name LIKE ?";
       params.push(`%${name}%`);
+    }
+
+    if (year) {
+      sql += ownershipFilter.whereClause || name ? " AND" : " WHERE";
+      sql += " year = ?";
+      params.push(year);
+    }
+
+    if (semester) {
+      sql += ownershipFilter.whereClause || name || year ? " AND" : " WHERE";
+      sql += " semester = ?";
+      params.push(semester);
     }
 
     const [rows] = await db.promise().query(sql, params);
@@ -174,7 +206,7 @@ exports.updateGroup = async (req, res) => {
       }
       try {
         const { id } = req.params;
-        const { group_name, position_id, description, group_content_id } =
+        const { group_name, position_id, description, group_content_id , year, semester} =
           req.body;
         if (!id) {
           return res.status(400).json({ message: "id is required" });
@@ -186,7 +218,9 @@ exports.updateGroup = async (req, res) => {
           !description &&
           !req.files?.group_photo &&
           !group_content_id &&
-          !req.body.group_photo
+          !req.body.group_photo&&
+          !year&&
+          !semester
         ) {
           return res
             .status(400)
@@ -211,7 +245,9 @@ exports.updateGroup = async (req, res) => {
         position_id = COALESCE(?, position_id),
         description = COALESCE(?, description),
         group_photo = COALESCE(?, group_photo),
-        group_content_id = COALESCE(?, group_content_id)
+        group_content_id = COALESCE(?, group_content_id),
+        year = COALESCE(?, year),
+        semester = COALESCE(?, semester)
         WHERE id = ?`;
         const [result] = await db
           .promise()
@@ -221,6 +257,8 @@ exports.updateGroup = async (req, res) => {
             description,
             group_photo_url,
             group_content_id,
+            year,
+            semester,
             id,
           ]);
         res.json({ message: "Group updated successfully" });
