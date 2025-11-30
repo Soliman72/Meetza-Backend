@@ -323,7 +323,7 @@ exports.deleteMessage = async (req, res) => {
     const [messageRows] = await db
       .promise()
       .query(
-        "SELECT id, message, media FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
+        "SELECT id, message FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
         [messageId, userId, groupId]
       );
 
@@ -349,29 +349,9 @@ exports.deleteMessage = async (req, res) => {
       });
     }
 
-    // Parse media if exists
-    let deletedMedia = [];
-    if (messageRows[0].media) {
-      try {
-        if (typeof messageRows[0].media === "object") {
-          deletedMedia = Array.isArray(messageRows[0].media)
-            ? messageRows[0].media
-            : [];
-        } else if (typeof messageRows[0].media === "string") {
-          deletedMedia = JSON.parse(messageRows[0].media);
-        }
-      } catch (parseError) {
-        deletedMedia = [];
-      }
-    }
-
     return res.json({
       success: true,
-      message: "Message and associated media deleted successfully",
-      data: {
-        deletedMessageId: messageId,
-        deletedMediaCount: deletedMedia.length,
-      },
+      message: "Message deleted successfully",
     });
   } catch (error) {
     return handleError(res, error);
