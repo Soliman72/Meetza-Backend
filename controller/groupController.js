@@ -38,6 +38,35 @@ exports.createGroup = async (req, res) => {
             .json({ message: "semester must be Fall, Spring, or Summer" });
         }
 
+        // Check if group content id exists
+        if (group_content_id) {
+          const checkGroupContentQuery =
+            "SELECT * FROM group_content WHERE id = ?";
+          const [results] = await db
+            .promise()
+            .query(checkGroupContentQuery, [group_content_id]);
+          if (results.length === 0) {
+            return res.status(400).json({
+              success: false,
+              message: "Invalid group_content_id: not found",
+            });
+          }
+        }
+        // Check if this group content is already used in another group
+        if (group_content_id) {
+          const [existingGroup] = await db
+            .promise()
+            .query(
+              "SELECT * FROM `group` WHERE group_content_id = ?",
+              [group_content_id]
+            );
+          if (existingGroup.length > 0) {
+            return res.status(409).json({
+              message:
+                "This group_content_id is already associated with another group",
+            });
+          }
+        }
         let group_photo_url;
         if (req.files?.group_photo) {
           const group_photo = req.files.group_photo[0];
