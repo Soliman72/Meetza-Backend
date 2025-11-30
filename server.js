@@ -29,7 +29,6 @@ const { initNotificationSocket } = require("./services/notificationService");
 const registerNotificationSocket = require("./sockets/notificationSocket");
 const notificationRouter = require("./router/notificationRouter");
 
-
 // Use video router
 
 const app = express();
@@ -74,7 +73,7 @@ app.use("/api/chat", chatRouter);
 app.use("/api/notification", notificationRouter);
 
 app.get("/", (req, res) => {
-  res.send("Meetza Backend is running");
+  res.send("اهلا يا شهد يا رخمه!!!");
 });
 
 server.listen(port, () => {

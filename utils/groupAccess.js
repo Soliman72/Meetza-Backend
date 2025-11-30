@@ -19,39 +19,40 @@ const ensureGroupAccess = async (userId, groupId) => {
     .query(`SELECT role FROM user WHERE id = ? LIMIT 1`, [userId]);
   const userRole = userRows[0]?.role;
 
+  let groupData;
+  let membershipRole;
+
   if (userRole === "Super_Admin") {
     // If Super_Admin, allow access to any group
     const [groupRows] = await db.promise().query(
       `
-          SELECT
-            g.id AS group_id,
-            g.group_name,
-            g.description,
-            g.group_photo,
-            g.group_content_id,
-            g.administrator_id,
-            u.name,
-            u.email,
-            u.user_photo,
-            'Super_Admin' AS membership_role
-          FROM \`group\` g
-          JOIN user u ON u.id = g.administrator_id
-          WHERE g.id = ?
-          LIMIT 1
-        `,
+        SELECT
+          g.id AS group_id,
+          g.group_name,
+          g.description,
+          g.group_photo,
+          g.group_content_id,
+          g.administrator_id,
+          u.name,
+          u.email,
+          u.user_photo,
+          'Super_Admin' AS membership_role
+        FROM \`group\` g
+        JOIN user u ON u.id = g.administrator_id
+        WHERE g.id = ?
+        LIMIT 1
+      `,
       [groupId]
     );
-
     if (!groupRows.length) {
       throw new GroupAccessError("Group not found", 404);
     }
-
-    return groupRows[0];
-  }
-
-  // Else, check if administrator or member of the group
-  const [rows] = await db.promise().query(
-    `
+    groupData = groupRows[0];
+    membershipRole = "Super_Admin";
+  } else {
+    // Else, check if administrator or member of the group
+    const [rows] = await db.promise().query(
+      `
         SELECT
           g.id AS group_id,
           g.group_name,
@@ -74,18 +75,39 @@ const ensureGroupAccess = async (userId, groupId) => {
         WHERE g.id = ?
         LIMIT 1
       `,
-    [userId, userId, groupId]
+      [userId, userId, groupId]
+    );
+    if (!rows.length) {
+      throw new GroupAccessError("Group not found", 404);
+    }
+    if (!rows[0].membership_role) {
+      throw new GroupAccessError("You do not have access to this group", 403);
+    }
+    groupData = rows[0];
+    membershipRole = groupData.membership_role;
+  }
+
+  // Now, also get the group media
+  const [mediaRows] = await db.promise().query(
+    `
+      SELECT
+        id,
+        sender_id,
+        media_url,
+        media_type,
+        created_at
+      FROM group_message_media
+      WHERE group_id = ?
+      ORDER BY created_at DESC
+    `,
+    [groupData.group_id]
   );
 
-  if (!rows.length) {
-    throw new GroupAccessError("Group not found", 404);
-  }
-
-  if (!rows[0].membership_role) {
-    throw new GroupAccessError("You do not have access to this group", 403);
-  }
-
-  return rows[0];
+  // Add group_media as array to groupData
+  return {
+    ...groupData,
+    group_media: mediaRows || [],
+  };
 };
 
 module.exports = {

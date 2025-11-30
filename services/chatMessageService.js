@@ -19,22 +19,51 @@ const fetchMessageById = async (id) => {
   const [rows] = await db
     .promise()
     .query(`${baseSelect} WHERE gm.id = ?`, [id]);
-  return rows[0];
+
+  if (!rows[0]) return null;
+
+  const message = rows[0];
+
+  const [mediaRows] = await db
+    .promise()
+    .query("SELECT * FROM group_message_media WHERE message_id = ?", [id]);
+
+  return {
+    ...message,
+    media: mediaRows || [],
+  };
 };
 
-const saveMessage = async (groupId, senderId, message) => {
+const saveMessage = async (groupId, senderId, message, media = null) => {
   const trimmed = (message || "").trim();
-  if (!trimmed) {
-    throw new Error("Message text is required");
-  }
 
   const id = uuidv4();
+
+  // Try to insert with media column, fallback if column doesn't exist
   await db
     .promise()
     .query(
       "INSERT INTO group_message (id, group_id, sender_id, message) VALUES (?, ?, ?, ?)",
       [id, groupId, senderId, trimmed]
     );
+
+  if (media) {
+    for (const item of media) {
+      await db
+        .promise()
+        .query(
+          "INSERT INTO group_message_media (id, group_id, sender_id, media_url, media_type , message_id) VALUES (?, ?, ?, ?, ?, ?)",
+          [
+            item.id,
+            item.group_id,
+            item.sender_id,
+            item.mediaUrl,
+            item.mediaType,
+            id,
+          ]
+        );
+    }
+  }
 
   return fetchMessageById(id);
 };
@@ -65,8 +94,22 @@ const getMessages = async (groupId, { limit = 50, before } = {}) => {
     params
   );
 
-  // Return messages in chronological order
-  return rows.reverse();
+  const messages = await Promise.all(
+    rows.map(async (message) => {
+      const [mediaRows] = await db
+        .promise()
+        .query("SELECT * FROM group_message_media WHERE message_id = ?", [
+          message.id,
+        ]);
+
+      return {
+        ...message,
+        media: mediaRows || [],
+      };
+    })
+  );
+
+  return messages.reverse();
 };
 
 module.exports = {

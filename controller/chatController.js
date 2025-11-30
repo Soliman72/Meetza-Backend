@@ -1,6 +1,12 @@
+const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 const { saveMessage, getMessages } = require("../services/chatMessageService");
 const { ensureGroupAccess, GroupAccessError } = require("../utils/groupAccess");
+const {
+  upload,
+  uploadToCloudinary,
+  uploadToCloudinaryResources,
+} = require("../utils/uploadFile");
 
 let ioInstance = null;
 
@@ -162,7 +168,7 @@ exports.getGroupMessages = async (req, res) => {
       });
     }
 
-    // get messages with search is not supported yet 
+    // get messages with search is not supported yet
     // why?
     // because it requires full text search implementation which is not yet done
 
@@ -185,33 +191,122 @@ exports.getGroupMessages = async (req, res) => {
   }
 };
 
-exports.sendMessage = async (req, res) => {
-  try {
-    const userId = req.user?.id;
-    const { groupId } = req.params;
-    const { message } = req.body;
-
-    if (!groupId) {
+// Send message with optional media (images, files, voice/audio)
+exports.sendMessage = (req, res) => {
+  // Apply multer upload middleware to handle file uploads
+  upload.fields([
+    { name: "media", maxCount: 10 }, // Allow multiple media files
+  ])(req, res, async (err) => {
+    if (err) {
       return res.status(400).json({
         success: false,
-        message: "groupId is required",
+        message: err.message || "File upload error",
       });
     }
 
-    await ensureGroupAccess(userId, groupId);
-    const savedMessage = await saveMessage(groupId, userId, message);
-    broadcastMessage(savedMessage);
+    try {
+      const userId = req.user?.id;
+      const { groupId } = req.params;
+      const { message } = req.body;
 
-    return res.status(201).json({
-      success: true,
-      data: savedMessage,
-    });
-  } catch (error) {
-    return handleError(res, error);
-  }
+      if (!groupId) {
+        return res.status(400).json({
+          success: false,
+          message: "groupId is required",
+        });
+      }
+
+      // At least message text or media file should be provided
+      const messageText = (message || "").trim();
+      const hasMedia = req.files?.media && req.files.media.length > 0;
+
+      if (!messageText && !hasMedia) {
+        return res.status(400).json({
+          success: false,
+          message: "Either message text or media file is required",
+        });
+      }
+
+      await ensureGroupAccess(userId, groupId);
+
+      // Handle media uploads first if any
+      const uploadedMedia = [];
+      if (hasMedia) {
+        for (const file of req.files.media) {
+          let mediaUrl;
+          let mediaType = "file";
+          let resourceType = "auto";
+
+          const mimeType = file.mimetype || "";
+
+          // Determine media type based on MIME type
+          if (mimeType.startsWith("image/")) {
+            mediaType = "image";
+            resourceType = "auto";
+          } else if (
+            mimeType.startsWith("audio/") ||
+            mimeType.includes("voice") ||
+            mimeType.includes("mpeg") ||
+            mimeType.includes("wav") ||
+            mimeType.includes("ogg")
+          ) {
+            mediaType = "voice";
+            resourceType = "auto";
+          } else {
+            // Documents, PDFs, etc.
+            mediaType = "file";
+            resourceType = "raw";
+          }
+
+          // Upload to Cloudinary
+          if (mediaType === "file") {
+            mediaUrl = await uploadToCloudinaryResources(
+              file,
+              "group_message_media",
+              resourceType
+            );
+          } else {
+            mediaUrl = await uploadToCloudinaryResources(
+              file,
+              "group_message_media",
+              resourceType
+            );
+          }
+
+          if (mediaUrl) {
+            uploadedMedia.push({
+              id: uuidv4(),
+              group_id: groupId,
+              sender_id: userId,
+              mediaUrl,
+              mediaType,
+            });
+          }
+        }
+      }
+
+      // Save the message with media (can be empty if only media is sent)
+      const savedMessage = await saveMessage(
+        groupId,
+        userId,
+        messageText || "",
+        uploadedMedia
+      );
+
+      // Broadcast the message with media
+      broadcastMessage(savedMessage);
+
+      return res.status(201).json({
+        success: true,
+        data: savedMessage,
+      });
+    } catch (error) {
+      return handleError(res, error);
+    }
+  });
 };
 
-// Delete message
+// Delete message (also deletes associated media)
 exports.deleteMessage = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -224,25 +319,41 @@ exports.deleteMessage = async (req, res) => {
     }
     await ensureGroupAccess(userId, groupId);
 
-    // Delete only if the user is the sender of the message
+    // First, fetch the message to get media info before deletion
+    const [messageRows] = await db
+      .promise()
+      .query(
+        "SELECT id, message FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
+        [messageId, userId, groupId]
+      );
+
+    if (messageRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found or you are not the sender",
+      });
+    }
+
+    // Delete the message (media is stored in the same row, so it will be deleted automatically)
     const [result] = await db
       .promise()
       .query(
         "DELETE FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
         [messageId, userId, groupId]
       );
+
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
         message: "Message not found or you are not the sender",
       });
     }
+
     return res.json({
       success: true,
       message: "Message deleted successfully",
     });
-  }
-  catch (error) {
+  } catch (error) {
     return handleError(res, error);
   }
 };
@@ -268,6 +379,7 @@ exports.updateMessage = async (req, res) => {
         "UPDATE group_message SET message = ? WHERE id = ? AND sender_id = ? AND group_id = ?",
         [message, messageId, userId, groupId]
       );
+
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
@@ -278,8 +390,7 @@ exports.updateMessage = async (req, res) => {
       success: true,
       message: "Message updated successfully",
     });
-  }
-  catch (error) {
+  } catch (error) {
     return handleError(res, error);
   }
 };
