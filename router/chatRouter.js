@@ -20,6 +20,18 @@ router.post(
 
 router.get("/groups/:groupId/info", verifyToken, chatController.getGroupInfo);
 
+router.delete(
+  "/groups/:groupId/messages/:messageId",
+  verifyToken,
+  chatController.deleteMessage
+);
+
+router.put(
+  "/groups/:groupId/messages/:messageId",
+  verifyToken,
+  chatController.updateMessage
+);
+
 // router.get(
 //   "/groups/:groupId/meetings",
 //   verifyToken,

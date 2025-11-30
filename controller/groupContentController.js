@@ -2,6 +2,8 @@ const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinaryResources } = require("../utils/uploadFile");
+const { createNotification } = require("../services/notificationService");
+
 
 // Controller to handle group content creation with file uploads
 exports.createGroupContent = (req, res) => {
@@ -15,7 +17,7 @@ exports.createGroupContent = (req, res) => {
     }
 
     try {
-      const { content_name, content_description } = req.body;
+      const { content_name, content_description, group_id } = req.body;
       const id = uuidv4();
 
       if (!content_name || !content_description || !req.user?.id) {
@@ -25,12 +27,40 @@ exports.createGroupContent = (req, res) => {
         });
       }
 
+      // Check if group_id valid
+      if (group_id) {
+        const [groupRows] = await db
+          .promise()
+          .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
+        if (groupRows.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid group_id: not found",
+          });
+        }
+      }
+
+      // Check if this group has already content
+      const [existingContentRows] = await db
+        .promise()
+        .query(
+          "SELECT * FROM group_content WHERE group_id = ?",
+          [group_id]
+        );
+      if (existingContentRows.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Group content for this group already exists",
+        });
+      }
+
       // Insert the group content into the database
       const query =
-        "INSERT INTO group_content (id, content_name, content_description, administrator_id) VALUES (?, ?, ?, ?)";
+        "INSERT INTO group_content (id, content_name, content_description, administrator_id, group_id) VALUES (?, ?, ?, ?, ?)";
       await db
         .promise()
-        .query(query, [id, content_name, content_description, req.user?.id]);
+        .query(query, [id, content_name, content_description, req.user?.id, group_id]);
+
 
       const uploadedResources = [];
 
@@ -90,7 +120,39 @@ exports.createGroupContent = (req, res) => {
           }
         }
       }
-
+      
+      // Set group_content_id in group
+      const updateGroupQuery = "UPDATE `group` SET group_content_id = ? WHERE id = ?";
+      if (group_id) {
+        await db.promise().query(updateGroupQuery, [id,  group_id]);
+      }
+      
+      // Get all members of this group to notify them
+      if (group_id) {
+        
+        const [groupMemberships] = await db.promise().query(
+          "SELECT member_id FROM group_membership WHERE group_id = ?",
+          [group_id]
+        );
+        // Send Notification about new group content (optional) to each member
+        // Using a loop to handle each notification separately
+        // in parallel
+        const [groupRows] = await db
+          .promise()
+          .query("SELECT group_name FROM `group` WHERE id = ?", [group_id]);
+        const groupName = groupRows.length > 0 ? groupRows[0].group_name : "the group";
+        console.log("Notifying members about new group content in group:", groupName);
+        console.log("Group memberships to notify:", groupMemberships);
+        for (const membership of groupMemberships) {
+          await createNotification({
+            memberId: membership.member_id,
+            senderId: req.user?.id,
+            title: `New Group Content in Group=${groupName}`,
+            message: `New group content "${content_name}" has been created. Check it out!`,
+          });
+        }
+      }
+      
       return res.status(201).json({
         success: true,
         message: "Group content created successfully",
@@ -216,20 +278,19 @@ exports.getGroupContentById = async (req, res) => {
 exports.updateGroupContentById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { content_name, content_description } = req.body;
+    const { content_name, content_description, group_id} = req.body;
 
-    if (!id || !content_name || !content_description) {
+    if (!id && !content_name && !content_description && !group_id) {
       return res.status(400).json({
         success: false,
-        message: "Content id, name, and description are required",
+        message: "Content id, name, description or group_id is required",
       });
     }
 
-    const query =
-      "UPDATE group_content SET content_name = ?, content_description = ? WHERE id = ?";
+    const query = 'UPDATE group_content SET content_name = COALESCE(?, content_name), content_description = COALESCE(?, content_description), group_id = COALESCE(?, group_id) WHERE id = ?';
     const [result] = await db
       .promise()
-      .query(query, [content_name, content_description, id]);
+      .query(query, [content_name, content_description, group_id, id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
@@ -371,6 +432,32 @@ exports.addFilesToGroupContent = (req, res) => {
           message: "Failed to upload any files",
         });
       }
+
+      // Get all members of this group to notify them about new files
+      const group_id = groupContent[0].group_id;
+      if (group_id) {
+      const [groupMemberships] = await db.promise().query(
+        "SELECT member_id FROM group_membership WHERE group_id = ?",
+        [group_id]
+      );
+      // Send Notification about new group content files to each member
+      // Using a loop to handle each notification separately in parallel
+      // with group name in the message
+      const [groupRows] = await db
+        .promise()
+        .query("SELECT group_name FROM `group` WHERE id = ?", [group_id]);
+      const groupName = groupRows.length > 0 ? groupRows[0].group_name : "the group";
+      await Promise.allSettled(
+        groupMemberships.map((membership) =>
+          createNotification(
+            membership.member_id,
+            req.user?.id,
+            `New Files in Group=${groupName}`,
+            `New files have been added to the content "${groupContent[0].content_name}". Check them out!`
+          )
+        )
+      );
+    }
 
       return res.status(200).json({
         success: true,

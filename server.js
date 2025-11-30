@@ -4,6 +4,7 @@ const path = require("path");
 const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
+
 const authRouter = require("./router/authRouter");
 const groupContentRouter = require("./router/groupContentRouter");
 const meetingRouter = require("./router/meetingRouter");
@@ -24,6 +25,11 @@ const positionRouter = require("./router/positionRouter"); // Use position route
 const commentRouter = require("./router/commentRouter");
 const saved_videoRouter = require("./router/saved_videoRouter");
 
+const { initNotificationSocket } = require("./services/notificationService");
+const registerNotificationSocket = require("./sockets/notificationSocket");
+const notificationRouter = require("./router/notificationRouter");
+
+
 // Use video router
 
 const app = express();
@@ -35,6 +41,10 @@ const io = new Server(server, {
 });
 chatController.registerChatIo(io);
 registerChatSocket(io);
+
+// Register notification socket
+initNotificationSocket(io);
+registerNotificationSocket(io);
 
 // Serve static files (videos, posters) from the uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -61,9 +71,10 @@ app.use("/api/like", require("./router/likeRouter"));
 app.use("/api/comment", commentRouter);
 app.use("/api/saved_video", saved_videoRouter);
 app.use("/api/chat", chatRouter);
+app.use("/api/notification", notificationRouter);
 
 app.get("/", (req, res) => {
-  res.send("اهلا يا شهد يا رخمه!!!");
+  res.send("Meetza Backend is running");
 });
 
 server.listen(port, () => {
