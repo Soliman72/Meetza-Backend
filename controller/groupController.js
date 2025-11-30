@@ -137,6 +137,16 @@ exports.createGroup = async (req, res) => {
             year,
             semester,
           ]);
+          // Add administrator as member of the group
+          const insertMembershipSql =
+            "INSERT INTO group_membership (id, group_id, member_id, role) VALUES (?, ?, ?, ?)";
+          const membershipId = uuidv4();
+          await db.promise().query(insertMembershipSql, [
+            membershipId,
+            id,
+            administrator_id,
+            "Admin",
+          ]);
         res.status(201).json({
           id,
           group_name,
@@ -269,6 +279,50 @@ exports.updateGroup = async (req, res) => {
           validateFileType(req.body.group_photo, "image");
           group_photo_url = req.body.group_photo; // Assuming it's a URL
         }
+
+        const [existingGroup] = await db
+          .promise()
+          .query("SELECT * FROM `group` WHERE id = ?", [id]);
+        if (existingGroup.length === 0) {
+          return res.status(404).json({ message: "Group not found" });
+        }
+
+        // remove this group from previous group content if group_content_id is being updated
+        if (group_content_id) {
+          const [prevGroupContent] = existingGroup[0].group_content_id;
+          if (prevGroupContent) {
+            const clearPrevGroupContentSql =
+              "UPDATE group_content SET group_id = null WHERE id = ?";
+            await db
+              .promise()
+              .query(clearPrevGroupContentSql, [prevGroupContent]);
+          }
+        }
+
+        // If position_id is being updated, check if it exists
+        if (position_id) {
+          const [positionRows] = await db
+            .promise()
+            .query("SELECT * FROM position WHERE id = ?", [position_id]);
+          if (positionRows.length === 0) {
+            return res
+              .status(400)
+              .json({ message: "Invalid position_id: not found" });
+          }
+        }
+        
+        // If group_content_id is being updated, check if it exists
+        if (group_content_id) {
+          const [groupContentRows] = await db
+            .promise()
+            .query("SELECT * FROM group_content WHERE id = ?", [group_content_id]);
+          if (groupContentRows.length === 0) {
+            return res
+              .status(400)
+              .json({ message: "Invalid group_content_id: not found" });
+          }
+        }
+
         const sql = `UPDATE \`group\` SET 
         group_name = COALESCE(?, group_name), 
         position_id = COALESCE(?, position_id),

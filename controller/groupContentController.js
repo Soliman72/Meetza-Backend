@@ -17,15 +17,29 @@ exports.createGroupContent = (req, res) => {
     }
 
     try {
-      const { content_name, content_description, group_id } = req.body;
+      const { content_name, content_description, group_id, role, administrator_id } = req.body;
       const id = uuidv4();
 
-      if (!content_name || !content_description || !req.user?.id) {
+      let admin_id;
+
+      if (!content_name || !content_description ) {
         return res.status(400).json({
           success: false,
-          message: "Content name, description or administrator_id is required",
+          message: "Content name and description is required",
         });
       }
+
+      // check administrator role is Administrator or Super_Admin
+    if (role === "Super_Admin") {
+      if (!administrator_id) {
+        return res.status(400).json({ message: "administrator_id is required" });
+      }
+      admin_id = administrator_id;
+    } else if (role === "Administrator") {
+      admin_id = req.user.id;
+    } else {
+      return res.status(400).json({ message: "Invalid role" });
+    }
 
       // Check if group_id valid
       if (group_id) {
@@ -59,7 +73,7 @@ exports.createGroupContent = (req, res) => {
         "INSERT INTO group_content (id, content_name, content_description, administrator_id, group_id) VALUES (?, ?, ?, ?, ?)";
       await db
         .promise()
-        .query(query, [id, content_name, content_description, req.user?.id, group_id]);
+        .query(query, [id, content_name, content_description, admin_id, group_id]);
 
 
       const uploadedResources = [];
@@ -146,9 +160,11 @@ exports.createGroupContent = (req, res) => {
         for (const membership of groupMemberships) {
           await createNotification({
             memberId: membership.member_id,
-            senderId: req.user?.id,
-            title: `New Group Content in Group=${groupName}`,
-            message: `New group content "${content_name}" has been created. Check it out!`,
+            senderId: admin_id,
+            title: `New Group Content in Group ${groupName}`,
+            message: `New content has just been uploaded to your group "${groupName}". 
+              Fresh learning material and updated data are now available for you to view.  
+              Open Meetza to check the latest update and stay up to date with your group activity!`,
           });
         }
       }
@@ -160,7 +176,7 @@ exports.createGroupContent = (req, res) => {
           id,
           content_name,
           content_description,
-          administrator_id: req.user?.id,
+          administrator_id,
           resources: uploadedResources,
         },
       });
@@ -285,6 +301,44 @@ exports.updateGroupContentById = async (req, res) => {
         success: false,
         message: "Content id, name, description or group_id is required",
       });
+    }
+
+    if (group_id) {
+      // Check if group_id valid
+      const [groupRows] = await db
+        .promise()
+        .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
+      if (groupRows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid group_id: not found",
+        });
+      }
+    }
+
+    // Update group 
+    if (group_id) {
+      const updateGroupQuery = "UPDATE `group` SET group_content_id = ? WHERE id = ?";
+      await db.promise().query(updateGroupQuery, [id,  group_id]);
+    }
+
+    const groupContentQuery = await db
+      .promise()
+      .query("SELECT * FROM group_content WHERE id = ?", [id]); 
+    if (groupContentQuery[0].length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Group content not found",
+      });
+    }
+
+    if (groupContentQuery[0][0].group_id) {
+      const previousGroupId = groupContentQuery[0][0].group_id;
+      // Remove group_content_id from previous group if changed
+      if (group_id && previousGroupId !== group_id) {
+        const removePreviousGroupContentQuery = "UPDATE `group` SET group_content_id = NULL WHERE id = ?";
+        await db.promise().query(removePreviousGroupContentQuery, [previousGroupId]);
+      }
     }
 
     const query = 'UPDATE group_content SET content_name = COALESCE(?, content_name), content_description = COALESCE(?, content_description), group_id = COALESCE(?, group_id) WHERE id = ?';
@@ -433,31 +487,31 @@ exports.addFilesToGroupContent = (req, res) => {
         });
       }
 
-      // Get all members of this group to notify them about new files
-      const group_id = groupContent[0].group_id;
-      if (group_id) {
-      const [groupMemberships] = await db.promise().query(
-        "SELECT member_id FROM group_membership WHERE group_id = ?",
-        [group_id]
-      );
-      // Send Notification about new group content files to each member
-      // Using a loop to handle each notification separately in parallel
-      // with group name in the message
-      const [groupRows] = await db
-        .promise()
-        .query("SELECT group_name FROM `group` WHERE id = ?", [group_id]);
-      const groupName = groupRows.length > 0 ? groupRows[0].group_name : "the group";
-      await Promise.allSettled(
-        groupMemberships.map((membership) =>
-          createNotification(
-            membership.member_id,
-            req.user?.id,
-            `New Files in Group=${groupName}`,
-            `New files have been added to the content "${groupContent[0].content_name}". Check them out!`
-          )
-        )
-      );
-    }
+      // Get administrator_id for notification senderId 
+      if(groupContent[0].group_id){
+        const group_id = groupContent[0].group_id;// Get all members of this group to notify them
+        const [groupMemberships] = await db.promise().query(
+          "SELECT member_id FROM group_membership WHERE group_id = ?",
+          [group_id]
+        );
+        // Send Notification about new group content (optional) to each member
+        // Using a loop to handle each notification separately
+        // in parallel
+        const [groupRows] = await db
+          .promise()
+          .query("SELECT group_name FROM `group` WHERE id = ?", [group_id]);
+        const groupName = groupRows.length > 0 ? groupRows[0].group_name : "the group";
+        for (const membership of groupMemberships) {
+          await createNotification({
+            memberId: membership.member_id,
+            senderId: groupContent[0].administrator_id,
+            title: `New Group Content in Group ${groupName}`,
+            message: `New content has just been uploaded to your group "${groupName}". 
+              Fresh learning material and updated data are now available for you to view.  
+              Open Meetza to check the latest update and stay up to date with your group activity!`,
+          });
+        }
+      }
 
       return res.status(200).json({
         success: true,
