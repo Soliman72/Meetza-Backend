@@ -1,6 +1,15 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
-const { saveMessage, getMessages } = require("../services/chatMessageService");
+const {
+  saveMessage,
+  getMessages,
+  markMessageAsRead,
+  markMessageAsUnread,
+  markMessagesAsRead,
+  getReadMessages,
+  getUnreadMessages,
+  getUnreadCount,
+} = require("../services/chatMessageService");
 const { ensureGroupAccess, GroupAccessError } = require("../utils/groupAccess");
 const {
   upload,
@@ -180,7 +189,7 @@ exports.getGroupMessages = async (req, res) => {
     }
 
     await ensureGroupAccess(userId, groupId);
-    const messages = await getMessages(groupId, { limit, before });
+    const messages = await getMessages(groupId, { limit, before, userId });
 
     return res.json({
       success: true,
@@ -386,8 +395,14 @@ exports.updateMessage = async (req, res) => {
         message: "Message not found or you are not the sender",
       });
     }
+    const [messageRows] = await db.promise().query(
+      "SELECT * FROM group_message WHERE id = ?",
+      [messageId]
+    );
+
     return res.json({
       success: true,
+      data: messageRows[0],
       message: "Message updated successfully",
     });
   } catch (error) {
@@ -534,6 +549,209 @@ exports.getGroupMeetings = async (req, res) => {
     return res.json({
       success: true,
       data: meetings,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// Mark message as read
+exports.markMessageAsRead = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId, messageId } = req.params;
+
+    if (!groupId || !messageId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId and messageId are required",
+      });
+    }
+
+    await ensureGroupAccess(userId, groupId);
+    await markMessageAsRead(messageId, userId);
+
+    // Emit socket event to notify others in the group
+    if (ioInstance) {
+      const [userRows] = await db
+        .promise()
+        .query("SELECT name FROM user WHERE id = ?", [userId]);
+      const userName = userRows[0]?.name || "User";
+
+      ioInstance.to(`group:${groupId}`).emit("messageRead", {
+        messageId,
+        userId,
+        userName,
+        readAt: new Date(),
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Message marked as read",
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// Mark message as unread
+exports.markMessageAsUnread = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId, messageId } = req.params;
+
+    if (!groupId || !messageId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId and messageId are required",
+      });
+    }
+
+    await ensureGroupAccess(userId, groupId);
+    await markMessageAsUnread(messageId, userId);
+
+    // Emit socket event to notify others in the group
+    if (ioInstance) {
+      const [userRows] = await db
+        .promise()
+        .query("SELECT name FROM user WHERE id = ?", [userId]);
+      const userName = userRows[0]?.name || "User";
+
+      ioInstance.to(`group:${groupId}`).emit("messageUnread", {
+        messageId,
+        userId,
+        userName,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Message marked as unread",
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// Mark all messages in a group as read
+exports.markAllMessagesAsRead = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId } = req.params;
+
+    if (!groupId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId is required",
+      });
+    }
+
+    await ensureGroupAccess(userId, groupId);
+
+    // Get all unread message IDs in the group
+    const unreadMessages = await getUnreadMessages(groupId, userId, { limit: 1000 });
+    const messageIds = unreadMessages.map((msg) => msg.id);
+
+    if (messageIds.length > 0) {
+      await markMessagesAsRead(messageIds, userId);
+    }
+
+    // Emit socket event to notify others in the group
+    if (ioInstance) {
+      const [userRows] = await db
+        .promise()
+        .query("SELECT name FROM user WHERE id = ?", [userId]);
+      const userName = userRows[0]?.name || "User";
+
+      ioInstance.to(`group:${groupId}`).emit("allMessagesRead", {
+        userId,
+        userName,
+        messageCount: messageIds.length,
+        readAt: new Date(),
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `${messageIds.length} messages marked as read`,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// Get read messages for a user in a group
+exports.getReadMessages = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId } = req.params;
+    const { limit, before } = req.query;
+
+    if (!groupId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId is required",
+      });
+    }
+
+    await ensureGroupAccess(userId, groupId);
+    const messages = await getReadMessages(groupId, userId, { limit, before });
+
+    return res.json({
+      success: true,
+      data: messages,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// Get unread messages for a user in a group
+exports.getUnreadMessages = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId } = req.params;
+    const { limit, before } = req.query;
+
+    if (!groupId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId is required",
+      });
+    }
+
+    await ensureGroupAccess(userId, groupId);
+    const messages = await getUnreadMessages(groupId, userId, { limit, before });
+
+    return res.json({
+      success: true,
+      data: messages,
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// Get unread count for a user in a group
+exports.getUnreadCount = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId } = req.params;
+
+    if (!groupId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId is required",
+      });
+    }
+
+    await ensureGroupAccess(userId, groupId);
+    const count = await getUnreadCount(groupId, userId);
+
+    return res.json({
+      success: true,
+      data: { unread_count: count },
     });
   } catch (error) {
     return handleError(res, error);

@@ -27,9 +27,46 @@ router.delete(
 );
 
 router.put(
-  "/groups/:groupId/messages/:messageId",
+  "/groups/:groupId/messages/:messageId/update",
   verifyToken,
   chatController.updateMessage
+);
+
+// Read/Unread messages endpoints
+router.put(
+  "/groups/:groupId/messages/:messageId/read",
+  verifyToken,
+  chatController.markMessageAsRead
+);
+
+router.put(
+  "/groups/:groupId/messages/:messageId/unread",
+  verifyToken,
+  chatController.markMessageAsUnread
+);
+
+router.put(
+  "/groups/:groupId/messages/read-all",
+  verifyToken,
+  chatController.markAllMessagesAsRead
+);
+
+router.get(
+  "/groups/:groupId/messages/read",
+  verifyToken,
+  chatController.getReadMessages
+);
+
+router.get(
+  "/groups/:groupId/messages/unread",
+  verifyToken,
+  chatController.getUnreadMessages
+);
+
+router.get(
+  "/groups/:groupId/unread-count",
+  verifyToken,
+  chatController.getUnreadCount
 );
 
 // router.get(

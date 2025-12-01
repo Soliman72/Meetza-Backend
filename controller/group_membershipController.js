@@ -7,8 +7,18 @@ exports.createGroupMembership = async (req, res) => {
   try {
     const { group_id, member_id } = req.body;
 
-    if (!group_id || !member_id) {
+    let memberId;
+    if (!group_id ) {
       return res.status(400).json({ message: "group_id is required" });
+    }
+
+    if (req.user.role === "Super_Admin" || req.user.role === "Administrator") {
+      if (!member_id) {
+        return res.status(400).json({ message: "member_id is required" });
+      }
+      memberId = member_id;
+    } else {
+      memberId = req.user.id;
     }
 
     // Check if the group already exists
@@ -22,7 +32,7 @@ exports.createGroupMembership = async (req, res) => {
     // check if the member already exists
     const [member] = await db
       .promise()
-      .query("SELECT * FROM member WHERE user_id = ?", [member_id]);
+      .query("SELECT * FROM member WHERE user_id = ?", [memberId]);
     if (member.length === 0) {
       return res.status(400).json({ message: "Invalid member_id: not found" });
     }
@@ -32,7 +42,7 @@ exports.createGroupMembership = async (req, res) => {
       .promise()
       .query(
         "SELECT * FROM group_membership WHERE group_id = ? AND member_id = ?",
-        [group_id, member_id]
+        [group_id, memberId]
       );
     if (existingMembership.length > 0) {
       return res.status(409).json({ message: "Membership already exists" });
@@ -41,8 +51,8 @@ exports.createGroupMembership = async (req, res) => {
     const id = uuidv4();
     const sql =
       "INSERT INTO group_membership (id, group_id, member_id) VALUES (?, ?, ?)";
-    const [result] = await db.promise().query(sql, [id, group_id, member_id]);
-    res.status(201).json({ id: id, group_id, member_id });
+    const [result] = await db.promise().query(sql, [id, group_id, memberId]);
+    res.status(201).json({ id: id, group_id, memberId });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
