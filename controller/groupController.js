@@ -169,7 +169,9 @@ exports.createGroup = async (req, res) => {
 exports.getAllGroups = async (req, res) => {
   try {
     const { name , year, semester} = req.query;
-    let sql = "SELECT * FROM `group`";
+
+    // get all groups with admin info
+    let sql = "SELECT `group`.*, user.name as admin_name, user.email as admin_email, user.user_photo as admin_photo FROM `group` JOIN user ON `group`.administrator_id = user.id";
     let params = [];
 
 

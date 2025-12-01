@@ -7,10 +7,16 @@ All routes require a valid JWT via the `Authorization: Bearer <token>` header an
 | Method | Route | Description |
 | --- | --- | --- |
 | GET | `/api/chat/groups` | Lists every group where the authenticated user is the administrator or a member. Includes last message snippet and member counts. |
-| GET | `/api/chat/groups/:groupId/messages?limit=50&before=<ISO>` | Returns chronological chat history with simple pagination through the optional `before` cursor. |
+| GET | `/api/chat/groups/:groupId/messages?limit=50&before=<ISO>` | Returns chronological chat history with simple pagination through the optional `before` cursor. Includes `is_read` and `read_at` for each message. |
 | POST | `/api/chat/groups/:groupId/messages` | Persists a chat message (also echoes to websocket listeners). Body: `{ "message": "..." }`. |
 | GET | `/api/chat/groups/:groupId/info` | Aggregates group profile, members (admin + students), and the attached group content/resources. |
 | GET | `/api/chat/groups/:groupId/meetings?from=<ISO>&to=<ISO>` | Lists scheduled meetings for the group, filtered by optional date range for the calendar widget. |
+| PUT | `/api/chat/groups/:groupId/messages/:messageId/read` | Marks a specific message as read for the authenticated user. |
+| PUT | `/api/chat/groups/:groupId/messages/:messageId/unread` | Marks a specific message as unread for the authenticated user. |
+| PUT | `/api/chat/groups/:groupId/messages/read-all` | Marks all unread messages in a group as read for the authenticated user. |
+| GET | `/api/chat/groups/:groupId/messages/read?limit=50&before=<ISO>` | Returns all read messages for the authenticated user in a group. |
+| GET | `/api/chat/groups/:groupId/messages/unread?limit=50&before=<ISO>` | Returns all unread messages for the authenticated user in a group. |
+| GET | `/api/chat/groups/:groupId/unread-count` | Returns the count of unread messages for the authenticated user in a group. |
 
 ### Websocket Gateway (`/socket.io`)
 
@@ -24,10 +30,20 @@ const socket = io("https://<host>", {
 
 Events:
 
-- `joinGroup` – payload `{ groupId }`. Subscribes the socket to the room `group:<groupId>`.
-- `leaveGroup` – payload `{ groupId }`. Removes subscription.
-- `sendMessage` – payload `{ groupId, message }`. Persists and broadcasts the chat message. Ack signature `{ ok: boolean, data?, message? }`.
-- `message` – emitted by the server to everyone in the room; shape mirrors the REST response: `{ id, group_id, sender_id, sender_name, sender_email, sender_photo, message, created_at }`.
+**Client → Server:**
+- `joinGroup` – payload `{ groupId }`. Subscribes the socket to the room `group:<groupId>`. Ack: `{ ok: boolean, message? }`.
+- `leaveGroup` – payload `{ groupId }`. Removes subscription from the room.
+- `sendMessage` – payload `{ groupId, message }`. Persists and broadcasts the chat message. Ack: `{ ok: boolean, data?, message? }`.
+- `markMessageRead` – payload `{ groupId, messageId }`. Marks a message as read. Ack: `{ ok: boolean, unreadCount?, message? }`.
+- `markMessageUnread` – payload `{ groupId, messageId }`. Marks a message as unread. Ack: `{ ok: boolean, unreadCount?, message? }`.
+- `markAllMessagesRead` – payload `{ groupId }`. Marks all messages in a group as read. Ack: `{ ok: boolean, unreadCount?, messageCount?, message? }`.
+- `getUnreadCount` – payload `{ groupId }`. Gets the unread message count for the user. Ack: `{ ok: boolean, unreadCount?, message? }`.
+
+**Server → Client:**
+- `message` – emitted to everyone in the room when a new message is sent. Shape: `{ id, group_id, sender_id, sender_name, sender_email, sender_photo, message, created_at, media?, is_read?, read_at? }`.
+- `messageRead` – emitted to everyone in the room when a message is marked as read. Shape: `{ messageId, userId, userName, readAt }`.
+- `messageUnread` – emitted to everyone in the room when a message is marked as unread. Shape: `{ messageId, userId, userName }`.
+- `allMessagesRead` – emitted to everyone in the room when all messages are marked as read. Shape: `{ userId, userName, messageCount, readAt }`.
 
 ### Persistence
 

@@ -3,7 +3,7 @@ const db = require("../config/db");
 // Get Member Notifications
 exports.getMemberNotifications = async (req, res) => {
     try {
-        const memberId = req.params.id;
+        const memberId = req.user.id;
 
         const [notifications] = await db.promise().query(
             "SELECT * FROM notifications WHERE member_id = ? ORDER BY created_at DESC",
@@ -13,6 +13,7 @@ exports.getMemberNotifications = async (req, res) => {
         return res.status(200).json({ success: true, notifications });
 
     } catch (err) {
+        console.error("Error getting notifications:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -20,7 +21,7 @@ exports.getMemberNotifications = async (req, res) => {
 // Get Unread Notifications Count
 exports.getUnreadCount = async (req, res) => {
     try {
-        const memberId = req.params.id;
+        const memberId = req.user.id;
         const [rows] = await db.promise().query(
             "SELECT COUNT(*) AS unreadCount FROM notifications WHERE member_id = ? AND is_read = 0",
             [memberId]
@@ -29,6 +30,7 @@ exports.getUnreadCount = async (req, res) => {
         return res.status(200).json({ success: true, unreadCount });
 
     } catch (err) {
+        console.error("Error getting unread count:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -37,23 +39,32 @@ exports.getUnreadCount = async (req, res) => {
 exports.markAsRead = async (req, res) => {
     try {
         const notifId = req.params.id;
+        const memberId = req.user.id;
 
-       
+        // Verify notification belongs to user and update
         const [result] = await db.promise().query(
-            "UPDATE notifications SET is_read = 1 WHERE id = ?",
-            [notifId]
+            "UPDATE notifications SET is_read = 1 WHERE id = ? AND member_id = ?",
+            [notifId, memberId]
         );
+        
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: "Notification not found" });
         }
 
+        // Fetch updated notification
+        const [notifications] = await db.promise().query(
+            "SELECT * FROM notifications WHERE id = ?",
+            [notifId]
+        );
+
         return res.status(200).json({
             success: true,
-            notification,
+            notification: notifications[0],
             message: "Notification marked as read"
         });
 
     } catch (err) {
+        console.error("Error marking notification as read:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -61,7 +72,7 @@ exports.markAsRead = async (req, res) => {
 // Mark All Notifications as Read for a Member
 exports.markAllAsRead = async (req, res) => {
     try {
-        const memberId = req.params.id;
+        const memberId = req.user.id;
         const [result] = await db.promise().query(
             "UPDATE notifications SET is_read = 1 WHERE member_id = ? AND is_read = 0",
             [memberId]
@@ -71,6 +82,7 @@ exports.markAllAsRead = async (req, res) => {
             message: `${result.affectedRows} notifications marked as read`
         });
     } catch (err) {
+        console.error("Error marking all notifications as read:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -102,6 +114,7 @@ exports.deleteNotification = async (req, res) => {
             message: "Notification deleted successfully"
         });
     } catch (err) {
+        console.error("Error deleting notification:", err);
         return res.status(500).json({ error: "Server error" });
     }   
 };

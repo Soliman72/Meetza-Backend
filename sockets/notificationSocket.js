@@ -43,12 +43,29 @@ const authenticateSocket = async (socket, next) => {
 const registerNotificationSocket = (io) => {
     io.use(authenticateSocket);
     io.on("connection", (socket) => {
-        console.log("Notification socket connected:", socket.id);
+        console.log("Notification socket connected:", socket.id, "User:", socket.user?.id);
 
-        // User joins his own room
-        socket.on("join_notifications", (memberId) => {
-        socket.join("member_" + memberId);
-        console.log(`Member ${memberId} joined notifications room`);
+        // User automatically joins his own room on connection
+        if (socket.user?.id) {
+            const memberId = socket.user.id;
+            socket.join("member_" + memberId);
+            console.log(`Member ${memberId} joined notifications room`);
+        }
+
+        // Optional: Allow explicit join (for security, use authenticated user ID)
+        socket.on("join_notifications", () => {
+            if (socket.user?.id) {
+                const memberId = socket.user.id;
+                socket.join("member_" + memberId);
+                console.log(`Member ${memberId} joined notifications room`);
+            } else {
+                console.error("Unauthorized: User not authenticated");
+            }
+        });
+
+        // Handle disconnect
+        socket.on("disconnect", () => {
+            console.log("Notification socket disconnected:", socket.id);
         });
     });
 };

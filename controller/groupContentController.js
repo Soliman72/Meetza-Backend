@@ -505,9 +505,8 @@ exports.addFilesToGroupContent = (req, res) => {
           await createNotification({
             memberId: membership.member_id,
             senderId: groupContent[0].administrator_id,
-            title: `New Group Content in Group ${groupName}`,
-            message: `New content has just been uploaded to your group "${groupName}". 
-              Fresh learning material and updated data are now available for you to view.  
+            title: `${groupContent[0].content_name} has been updated in ${groupName}`,
+            message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}". 
               Open Meetza to check the latest update and stay up to date with your group activity!`,
           });
         }
