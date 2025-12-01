@@ -13,7 +13,6 @@ router.get(
 router.post(
   "/",
   verifyToken,
-  checkAdminPermission,
   groupMembershipController.createGroupMembership
 );
 router.get(
@@ -31,7 +30,6 @@ router.put(
 router.delete(
   "/:id",
   verifyToken,
-  checkAdminPermission,
   groupMembershipController.deleteGroupMembership
 );
 
