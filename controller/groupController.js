@@ -17,12 +17,21 @@ exports.createGroup = async (req, res) => {
         });
       }
       try {
-        const { group_name, position_id, group_content_id, description, year, semester } =
-          req.body;
+        const {
+          group_name,
+          position_id,
+          group_content_id,
+          description,
+          year,
+          semester,
+        } = req.body;
         if (!group_name || !position_id || !year || !semester) {
           return res
             .status(400)
-            .json({ message: "group_name, position_id, year and semester are required" });
+            .json({
+              message:
+                "group_name, position_id, year and semester are required",
+            });
         }
 
         // check year is 1,2,3,4
@@ -56,10 +65,9 @@ exports.createGroup = async (req, res) => {
         if (group_content_id) {
           const [existingGroup] = await db
             .promise()
-            .query(
-              "SELECT * FROM `group` WHERE group_content_id = ?",
-              [group_content_id]
-            );
+            .query("SELECT * FROM `group` WHERE group_content_id = ?", [
+              group_content_id,
+            ]);
           if (existingGroup.length > 0) {
             return res.status(409).json({
               message:
@@ -137,16 +145,16 @@ exports.createGroup = async (req, res) => {
             year,
             semester,
           ]);
-          // Add administrator as member of the group
-          const insertMembershipSql =
-            "INSERT INTO group_membership (id, group_id, member_id, role) VALUES (?, ?, ?, ?)";
-          const membershipId = uuidv4();
-          await db.promise().query(insertMembershipSql, [
-            membershipId,
-            id,
-            administrator_id,
-            "Admin",
-          ]);
+        // // Add administrator as member of the group
+        // const insertMembershipSql =
+        //   "INSERT INTO group_membership (id, group_id, member_id, role) VALUES (?, ?, ?, ?)";
+        // const membershipId = uuidv4();
+        // await db.promise().query(insertMembershipSql, [
+        //   membershipId,
+        //   id,
+        //   administrator_id,
+        //   "Admin",
+        // ]);
         res.status(201).json({
           id,
           group_name,
@@ -168,13 +176,12 @@ exports.createGroup = async (req, res) => {
 // Read all
 exports.getAllGroups = async (req, res) => {
   try {
-    const { name , year, semester} = req.query;
+    const { name, year, semester } = req.query;
 
     // get all groups with admin info
-    let sql = "SELECT `group`.*, user.name as admin_name, user.email as admin_email, user.user_photo as admin_photo FROM `group` JOIN user ON `group`.administrator_id = user.id";
+    let sql =
+      "SELECT `group`.*, user.name as admin_name, user.email as admin_email, user.user_photo as admin_photo FROM `group` JOIN user ON `group`.administrator_id = user.id";
     let params = [];
-
-
 
     // Apply ownership filter for regular admins
     const ownershipFilter = getOwnershipFilter(req, "administrator_id");
@@ -247,8 +254,14 @@ exports.updateGroup = async (req, res) => {
       }
       try {
         const { id } = req.params;
-        const { group_name, position_id, description, group_content_id , year, semester} =
-          req.body;
+        const {
+          group_name,
+          position_id,
+          description,
+          group_content_id,
+          year,
+          semester,
+        } = req.body;
         if (!id) {
           return res.status(400).json({ message: "id is required" });
         }
@@ -259,8 +272,8 @@ exports.updateGroup = async (req, res) => {
           !description &&
           !req.files?.group_photo &&
           !group_content_id &&
-          !req.body.group_photo&&
-          !year&&
+          !req.body.group_photo &&
+          !year &&
           !semester
         ) {
           return res
@@ -312,12 +325,14 @@ exports.updateGroup = async (req, res) => {
               .json({ message: "Invalid position_id: not found" });
           }
         }
-        
+
         // If group_content_id is being updated, check if it exists
         if (group_content_id) {
           const [groupContentRows] = await db
             .promise()
-            .query("SELECT * FROM group_content WHERE id = ?", [group_content_id]);
+            .query("SELECT * FROM group_content WHERE id = ?", [
+              group_content_id,
+            ]);
           if (groupContentRows.length === 0) {
             return res
               .status(400)

@@ -5,11 +5,11 @@ const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 // Create
 exports.createPosition = async (req, res) => {
   try {
-    const { title, role, administrator_id } = req.body;
+    const { title, administrator_id } = req.body;
 
     let admin_id;
     // Validate required fields
-    if (!title || !role) {
+    if (!title) {
       return res.status(400).json({ message: "title and role are required" });
     }
 
@@ -22,12 +22,14 @@ exports.createPosition = async (req, res) => {
     }
 
     // check administrator role is Administrator or Super_Admin
-    if (role === "Super_Admin") {
+    if (req.user.role === "Super_Admin") {
       if (!administrator_id) {
-        return res.status(400).json({ message: "administrator_id is required" });
+        return res
+          .status(400)
+          .json({ message: "administrator_id is required" });
       }
       admin_id = administrator_id;
-    } else if (role === "Administrator") {
+    } else if (req.user.role === "Administrator") {
       admin_id = req.user.id;
     } else {
       return res.status(400).json({ message: "Invalid role" });
@@ -38,19 +40,17 @@ exports.createPosition = async (req, res) => {
       .promise()
       .query("SELECT * FROM administrator WHERE user_id = ?", [admin_id]);
     if (administratorRows.length === 0) {
-      return res.status(400).json({ message: "Invalid administrator_id: not found" });
+      return res
+        .status(400)
+        .json({ message: "Invalid administrator_id: not found" });
     }
 
     const id = uuidv4();
 
     const sql =
       "INSERT INTO `position` (id, title, administrator_id) VALUES (?, ?, ?)";
-    await db
-      .promise()
-      .query(sql, [id, title, admin_id]);
-    res
-      .status(201)
-      .json({ id: id, title, administrator_id: admin_id });
+    await db.promise().query(sql, [id, title, admin_id]);
+    res.status(201).json({ id: id, title, administrator_id: admin_id });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

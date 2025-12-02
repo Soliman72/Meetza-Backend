@@ -149,6 +149,7 @@ exports.getMyGroups = async (req, res) => {
         WHERE g.administrator_id = ? OR gm.member_id IS NOT NULL
         ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
       `;
+
       queryParams = [userId, userId, userId];
     }
 
@@ -245,6 +246,7 @@ exports.sendMessage = (req, res) => {
           let mediaUrl;
           let mediaType = "file";
           let resourceType = "auto";
+          let fileName = file.originalname;
 
           const mimeType = file.mimetype || "";
 
@@ -289,6 +291,7 @@ exports.sendMessage = (req, res) => {
               sender_id: userId,
               mediaUrl,
               mediaType,
+              fileName,
             });
           }
         }
@@ -395,10 +398,9 @@ exports.updateMessage = async (req, res) => {
         message: "Message not found or you are not the sender",
       });
     }
-    const [messageRows] = await db.promise().query(
-      "SELECT * FROM group_message WHERE id = ?",
-      [messageId]
-    );
+    const [messageRows] = await db
+      .promise()
+      .query("SELECT * FROM group_message WHERE id = ?", [messageId]);
 
     return res.json({
       success: true,
@@ -650,7 +652,9 @@ exports.markAllMessagesAsRead = async (req, res) => {
     await ensureGroupAccess(userId, groupId);
 
     // Get all unread message IDs in the group
-    const unreadMessages = await getUnreadMessages(groupId, userId, { limit: 1000 });
+    const unreadMessages = await getUnreadMessages(groupId, userId, {
+      limit: 1000,
+    });
     const messageIds = unreadMessages.map((msg) => msg.id);
 
     if (messageIds.length > 0) {
@@ -722,7 +726,10 @@ exports.getUnreadMessages = async (req, res) => {
     }
 
     await ensureGroupAccess(userId, groupId);
-    const messages = await getUnreadMessages(groupId, userId, { limit, before });
+    const messages = await getUnreadMessages(groupId, userId, {
+      limit,
+      before,
+    });
 
     return res.json({
       success: true,

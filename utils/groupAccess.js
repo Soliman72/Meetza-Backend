@@ -24,35 +24,31 @@ const ensureGroupAccess = async (userId, groupId) => {
 
   if (userRole === "Super_Admin") {
     // If Super_Admin, allow access to any group
-    // const [groupRows] = await db.promise().query(
-    //   `
-    //     SELECT
-    //       g.id AS group_id,
-    //       g.group_name,
-    //       g.description,
-    //       g.group_photo,
-    //       g.group_content_id,
-    //       g.administrator_id,
-    //       u.name,
-    //       u.email,
-    //       u.user_photo,
-    //       'Super_Admin' AS membership_role
-    //     FROM \`group\` g
-    //     JOIN user u ON u.id = g.administrator_id
-    //     WHERE g.id = ?
-    //     LIMIT 1
-    //   `,
-    //   [groupId]
-    // );
-    // if (!groupRows.length) {
-    //   throw new GroupAccessError("Group not found", 404);
-    // }
-    // groupData = groupRows[0];
-    // membershipRole = "Super_Admin";
-
-    // throw error
-    throw new GroupAccessError("Group not found", 404);
-
+    const [groupRows] = await db.promise().query(
+      `
+        SELECT
+          g.id AS group_id,
+          g.group_name,
+          g.description,
+          g.group_photo,
+          g.group_content_id,
+          g.administrator_id,
+          u.name,
+          u.email,
+          u.user_photo,
+          'Super_Admin' AS membership_role
+        FROM \`group\` g
+        JOIN user u ON u.id = g.administrator_id
+        WHERE g.id = ?
+        LIMIT 1
+      `,
+      [groupId]
+    );
+    if (!groupRows.length) {
+      throw new GroupAccessError("Group not found", 404);
+    }
+    groupData = groupRows[0];
+    membershipRole = "Super_Admin";
   } else {
     // Else, check if administrator or member of the group
     const [rows] = await db.promise().query(

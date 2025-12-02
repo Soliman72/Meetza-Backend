@@ -81,7 +81,7 @@ const saveMessageReadStatus = async (messageId, groupId, senderId) => {
           .map(() => "(?, ?, ?, ?, ?, ?)")
           .join(", ");
         const params = [];
-        
+
         readStatusRecords.forEach((record) => {
           params.push(
             record.id,
@@ -107,7 +107,10 @@ const saveMessageReadStatus = async (messageId, groupId, senderId) => {
         );
       } catch (insertError) {
         // If batch insert fails, try inserting one by one
-        console.warn("Batch insert failed, trying individual inserts:", insertError);
+        console.warn(
+          "Batch insert failed, trying individual inserts:",
+          insertError
+        );
         for (const record of readStatusRecords) {
           try {
             await db.promise().query(
@@ -162,13 +165,14 @@ const saveMessage = async (groupId, senderId, message, media = null) => {
       await db
         .promise()
         .query(
-          "INSERT INTO group_message_media (id, group_id, sender_id, media_url, media_type , message_id) VALUES (?, ?, ?, ?, ?, ?)",
+          "INSERT INTO group_message_media (id, group_id, sender_id, media_url, media_type , file_name ,message_id) VALUES (?, ?, ?, ?, ?, ? , ?)",
           [
             item.id,
             item.group_id,
             item.sender_id,
             item.mediaUrl,
             item.mediaType,
+            item.fileName,
             id,
           ]
         );
@@ -341,10 +345,15 @@ const markMessagesAsRead = async (messageIds, userId) => {
 };
 
 // Get read messages for a user in a group
-const getReadMessages = async (groupId, userId, { limit = 50, before } = {}) => {
+const getReadMessages = async (
+  groupId,
+  userId,
+  { limit = 50, before } = {}
+) => {
   const safeLimit = Math.min(Number(limit) || 50, 200);
   const params = [groupId, userId];
-  let whereClause = "WHERE gm.group_id = ? AND mrs.user_id = ? AND mrs.is_read = 1";
+  let whereClause =
+    "WHERE gm.group_id = ? AND mrs.user_id = ? AND mrs.is_read = 1";
 
   if (before) {
     const beforeDate = new Date(before);
@@ -396,7 +405,11 @@ const getReadMessages = async (groupId, userId, { limit = 50, before } = {}) => 
 };
 
 // Get unread messages for a user in a group
-const getUnreadMessages = async (groupId, userId, { limit = 50, before } = {}) => {
+const getUnreadMessages = async (
+  groupId,
+  userId,
+  { limit = 50, before } = {}
+) => {
   const safeLimit = Math.min(Number(limit) || 50, 200);
   const params = [groupId, userId];
   let whereClause = `
