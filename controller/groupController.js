@@ -47,8 +47,31 @@ exports.createGroup = async (req, res) => {
             .json({ message: "semester must be Fall, Spring, or Summer" });
         }
 
+        // Check if user is authenticated and has a valid id
+        if (req.user && req.user.id !== undefined) {
+        } else {
+          return res.status(401).json({
+            success: false,
+            message: "Unauthorized: administrator_id is required",
+          });
+        }
+
+        if( position_id ){
+          // Chieck if position_id exists
+          const [positionRows] = await db
+            .promise()
+            .query("SELECT * FROM position WHERE id = ?", [position_id]);
+          if (positionRows.length === 0) {
+            return res
+              .status(400)
+              .json({ message: "Invalid position_id: not found" });
+          }
+        }
+
+
         // Check if group content id exists
         if (group_content_id) {
+
           const checkGroupContentQuery =
             "SELECT * FROM group_content WHERE id = ?";
           const [results] = await db
@@ -60,9 +83,8 @@ exports.createGroup = async (req, res) => {
               message: "Invalid group_content_id: not found",
             });
           }
-        }
-        // Check if this group content is already used in another group
-        if (group_content_id) {
+
+          // Check if this group content is already used in another group
           const [existingGroup] = await db
             .promise()
             .query("SELECT * FROM `group` WHERE group_content_id = ?", [
@@ -74,7 +96,9 @@ exports.createGroup = async (req, res) => {
                 "This group_content_id is already associated with another group",
             });
           }
+
         }
+        
         let group_photo_url;
         if (req.files?.group_photo) {
           const group_photo = req.files.group_photo[0];
@@ -91,43 +115,10 @@ exports.createGroup = async (req, res) => {
           validateFileType(req.body.group_photo, "image");
 
           group_photo_url = req.body.group_photo; // Assuming it's a URL
-        }
-        // Chieck if position_id exists
-        const [positionRows] = await db
-          .promise()
-          .query("SELECT * FROM position WHERE id = ?", [position_id]);
-        if (positionRows.length === 0) {
-          return res
-            .status(400)
-            .json({ message: "Invalid position_id: not found" });
-        }
-        // Check if user is authenticated and has a valid id
-        if (req.user && req.user.id !== undefined) {
-        } else {
-          return res.status(401).json({
-            success: false,
-            message: "Unauthorized: administrator_id is required",
-          });
-        }
-
-        // Check if group content id exists
-        if (group_content_id) {
-          const checkGroupContentQuery =
-            "SELECT * FROM group_content WHERE id = ?";
-          const [results] = await db
-            .promise()
-            .query(checkGroupContentQuery, [group_content_id]);
-
-          if (results.length === 0) {
-            return res.status(400).json({
-              success: false,
-              message: "Invalid group_content_id: not found",
-            });
-          }
-        }
+        } 
 
         // get administrator_id from position_id
-        administrator_id = positionRows[0].administrator_id;
+        let administrator_id = positionRows[0].administrator_id;
 
         const id = uuidv4();
         const sql =
@@ -145,16 +136,7 @@ exports.createGroup = async (req, res) => {
             year,
             semester,
           ]);
-        // // Add administrator as member of the group
-        // const insertMembershipSql =
-        //   "INSERT INTO group_membership (id, group_id, member_id, role) VALUES (?, ?, ?, ?)";
-        // const membershipId = uuidv4();
-        // await db.promise().query(insertMembershipSql, [
-        //   membershipId,
-        //   id,
-        //   administrator_id,
-        //   "Admin",
-        // ]);
+          
         res.status(201).json({
           id,
           group_name,
@@ -281,38 +263,27 @@ exports.updateGroup = async (req, res) => {
             .json({ message: "At least one field to update is required" });
         }
 
-        let group_photo_url;
-        if (req.files?.group_photo) {
-          const group_photo = req.files.group_photo[0];
-          // Validate file types BEFORE uploading
-          validateFileType(group_photo, "image");
-          // Upload files to Cloudinary
-          group_photo_url = await uploadToCloudinary(group_photo, "posters");
-        } else if (req.body?.group_photo) {
-          // If URLs are provided in the body (from cloudinary)
-          // Validate file types BEFORE uploading
-          validateFileType(req.body.group_photo, "image");
-          group_photo_url = req.body.group_photo; // Assuming it's a URL
+        // Check if group exists
+        const checkGroupQuery = "SELECT * FROM `group` WHERE id = ?";
+        const [groupRows] = await db.promise().query(checkGroupQuery, [id]);
+        if (groupRows.length === 0) {
+          return res
+            .status(404)
+            .json({ message: "Group not found with the provided id" });
         }
 
-        const [existingGroup] = await db
-          .promise()
-          .query("SELECT * FROM `group` WHERE id = ?", [id]);
-        if (existingGroup.length === 0) {
-          return res.status(404).json({ message: "Group not found" });
+        // Check year is 1,2,3,4
+        if (year && !["1", "2", "3", "4"].includes(year.toString())) {
+          return res
+            .status(400)
+            .json({ message: "year must be 1, 2, 3, or 4" });
         }
-
-        // remove this group from previous group content if group_content_id is being updated
-        if (group_content_id) {
-          const [prevGroupContent] = existingGroup[0].group_content_id;
-          if (prevGroupContent) {
-            const clearPrevGroupContentSql =
-              "UPDATE group_content SET group_id = null WHERE id = ?";
-            await db
-              .promise()
-              .query(clearPrevGroupContentSql, [prevGroupContent]);
-          }
+        if (semester && !["Fall", "Spring", "Summer"].includes(semester)) {
+          return res
+            .status(400)
+            .json({ message: "semester must be Fall, Spring, or Summer" });
         }
+        
 
         // If position_id is being updated, check if it exists
         if (position_id) {
@@ -326,19 +297,69 @@ exports.updateGroup = async (req, res) => {
           }
         }
 
-        // If group_content_id is being updated, check if it exists
+
+        // remove this group from previous group content if group_content_id is being updated
         if (group_content_id) {
-          const [groupContentRows] = await db
+          // Check if group content id exists
+          const checkGroupContentQuery =
+            "SELECT * FROM group_content WHERE id = ?";
+          const [results] = await db
             .promise()
-            .query("SELECT * FROM group_content WHERE id = ?", [
-              group_content_id,
-            ]);
-          if (groupContentRows.length === 0) {
-            return res
-              .status(400)
-              .json({ message: "Invalid group_content_id: not found" });
+            .query(checkGroupContentQuery, [group_content_id]);
+          if (results.length === 0) {
+            return res.status(400).json({
+              success: false,
+              message: "Invalid group_content_id: not found",
+            });
           }
+
+         // Check if this group content is already used in another group
+         const [existingGroup] = await db
+           .promise()
+           .query("SELECT * FROM `group` WHERE group_content_id = ? AND id != ?", [
+             group_content_id,
+             id,
+           ]);
+          if (existingGroup.length > 0) {
+            return res.status(409).json({
+              message:
+                "This group_content_id is already associated with another group",
+            });
+          }
+
+          // remove this group from previous group content
+          const [currentGroupRows] = await db
+            .promise()
+            .query("SELECT * FROM `group` WHERE id = ?", [id]);
+          if (currentGroupRows.length > 0) {
+            const previousGroupContentId = currentGroupRows[0].group_content_id;
+            if (previousGroupContentId && previousGroupContentId !== group_content_id) {
+              await db
+                .promise()
+                .query(
+                  "UPDATE `group_content` SET group_id = NULL WHERE id = ?",
+                  [previousGroupContentId]
+                );
+            }
+          }
+
         }
+
+
+        let group_photo_url;
+        if (req.files?.group_photo) {
+          const group_photo = req.files.group_photo[0];
+          // Validate file types BEFORE uploading
+          validateFileType(group_photo, "image");
+          // Upload files to Cloudinary
+          group_photo_url = await uploadToCloudinary(group_photo, "posters");
+        } else if (req.body?.group_photo) {
+          // If URLs are provided in the body (from cloudinary)
+          // Validate file types BEFORE uploading
+          validateFileType(req.body.group_photo, "image");
+          group_photo_url = req.body.group_photo; // Assuming it's a URL
+        }
+        
 
         const sql = `UPDATE \`group\` SET 
         group_name = COALESCE(?, group_name), 
@@ -361,6 +382,9 @@ exports.updateGroup = async (req, res) => {
             semester,
             id,
           ]);
+          if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Group not found" });
+          }
         res.json({ message: "Group updated successfully" });
       } catch (err) {
         res.status(500).json({ message: err.message });

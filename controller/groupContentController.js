@@ -17,7 +17,7 @@ exports.createGroupContent = (req, res) => {
     }
 
     try {
-      const { content_name, content_description, group_id, role, administrator_id } = req.body;
+      const { content_name, content_description, group_id, administrator_id } = req.body;
       const id = uuidv4();
 
       let admin_id;
@@ -30,12 +30,12 @@ exports.createGroupContent = (req, res) => {
       }
 
       // check administrator role is Administrator or Super_Admin
-    if (role === "Super_Admin") {
+    if (req.user.role === "Super_Admin") {
       if (!administrator_id) {
         return res.status(400).json({ message: "administrator_id is required" });
       }
       admin_id = administrator_id;
-    } else if (role === "Administrator") {
+    } else if (req.user.role === "Administrator") {
       admin_id = req.user.id;
     } else {
       return res.status(400).json({ message: "Invalid role" });
@@ -52,21 +52,23 @@ exports.createGroupContent = (req, res) => {
             message: "Invalid group_id: not found",
           });
         }
+
+         // Check if this group has already content
+        const [existingContentRows] = await db
+          .promise()
+          .query(
+            "SELECT * FROM group_content WHERE group_id = ?",
+            [group_id]
+          );
+        if (existingContentRows.length > 0) {
+          return res.status(409).json({
+            success: false,
+            message: "Group content for this group already exists",
+          });
+        }
       }
 
-      // Check if this group has already content
-      const [existingContentRows] = await db
-        .promise()
-        .query(
-          "SELECT * FROM group_content WHERE group_id = ?",
-          [group_id]
-        );
-      if (existingContentRows.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: "Group content for this group already exists",
-        });
-      }
+     
 
       // Insert the group content into the database
       const query =
@@ -303,6 +305,16 @@ exports.updateGroupContentById = async (req, res) => {
       });
     }
 
+    // Check if group content exists
+    const checkQuery = "SELECT * FROM group_content WHERE id = ?";
+    const [groupContent] = await db.promise().query(checkQuery, [id]);
+    if (groupContent.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Group content not found",
+      });
+    }
+
     if (group_id) {
       // Check if group_id valid
       const [groupRows] = await db
@@ -314,32 +326,41 @@ exports.updateGroupContentById = async (req, res) => {
           message: "Invalid group_id: not found",
         });
       }
-    }
 
-    // Update group 
-    if (group_id) {
+      // Check if this group has already content
+      const [existingContentRows] = await db
+        .promise()
+        .query(
+          "SELECT * FROM group_content WHERE group_id = ? AND id != ?",
+          [group_id, id]
+        );
+      if (existingContentRows.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Group content for this group already exists",
+        });
+      }
+
+      // remove group_content_id from previous group if changed
+      const [currentContentRows] = await db
+        .promise()
+        .query(
+          "SELECT group_id FROM group_content WHERE id = ?",
+          [id]
+        );
+      if (currentContentRows.length > 0) {
+        const previousGroupId = currentContentRows[0].group_id;
+        if (previousGroupId && previousGroupId !== group_id) {
+          const removePreviousGroupContentQuery = "UPDATE `group` SET group_content_id = NULL WHERE id = ?";
+          await db.promise().query(removePreviousGroupContentQuery, [previousGroupId]);
+        }
+      }  
+
+      // Set group_content_id in new group
       const updateGroupQuery = "UPDATE `group` SET group_content_id = ? WHERE id = ?";
       await db.promise().query(updateGroupQuery, [id,  group_id]);
     }
-
-    const groupContentQuery = await db
-      .promise()
-      .query("SELECT * FROM group_content WHERE id = ?", [id]); 
-    if (groupContentQuery[0].length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Group content not found",
-      });
-    }
-
-    if (groupContentQuery[0][0].group_id) {
-      const previousGroupId = groupContentQuery[0][0].group_id;
-      // Remove group_content_id from previous group if changed
-      if (group_id && previousGroupId !== group_id) {
-        const removePreviousGroupContentQuery = "UPDATE `group` SET group_content_id = NULL WHERE id = ?";
-        await db.promise().query(removePreviousGroupContentQuery, [previousGroupId]);
-      }
-    }
+ 
 
     const query = 'UPDATE group_content SET content_name = COALESCE(?, content_name), content_description = COALESCE(?, content_description), group_id = COALESCE(?, group_id) WHERE id = ?';
     const [result] = await db
