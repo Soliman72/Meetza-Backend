@@ -6,11 +6,14 @@ const { verifyToken } = require("../utils/verifyToken");
 // chats/
 router.get("/groups", verifyToken, chatController.getMyGroups);
 
+router.get("/groups/unread", verifyToken, chatController.getUnreadGroups);
+
 router.get(
   "/groups/:groupId/messages",
   verifyToken,
   chatController.getGroupMessages
 );
+
 
 router.post(
   "/groups/:groupId/messages",

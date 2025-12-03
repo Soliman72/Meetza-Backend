@@ -164,6 +164,88 @@ exports.getMyGroups = async (req, res) => {
   }
 };
 
+// Get unread groups (FIXED VERSION)
+exports.getUnreadGroups = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const [rows] = await db.promise().query(
+      `
+      SELECT DISTINCT
+        g.id,
+        g.group_name,
+        g.description,
+        g.group_photo,
+        g.group_content_id,
+        g.position_id,
+        COALESCE(stats.member_count, 0) + 1 AS member_count,
+        CASE
+          WHEN g.administrator_id = ? THEN 'Administrator'
+          WHEN gm.member_id IS NOT NULL THEN 'Member'
+          ELSE NULL
+        END AS membership_role,
+        msg.message AS last_message,
+        msg.created_at AS last_message_at,
+        msg.sender_name AS last_sender_name,
+        unread_stats.unread_count
+      FROM \`group\` g
+      LEFT JOIN group_membership gm
+        ON gm.group_id = g.id AND gm.member_id = ?
+      LEFT JOIN (
+        SELECT
+          gm_inner.group_id,
+          gm_inner.message,
+          gm_inner.created_at,
+          u.name AS sender_name
+        FROM group_message gm_inner
+        JOIN (
+          SELECT group_id, MAX(created_at) AS latest_created_at
+          FROM group_message
+          GROUP BY group_id
+        ) latest
+          ON gm_inner.group_id = latest.group_id
+          AND gm_inner.created_at = latest.latest_created_at
+        JOIN user u ON u.id = gm_inner.sender_id
+      ) msg ON msg.group_id = g.id
+      LEFT JOIN (
+        SELECT group_id, COUNT(*) AS member_count
+        FROM group_membership
+        GROUP BY group_id
+      ) stats ON stats.group_id = g.id
+
+      LEFT JOIN (
+        SELECT
+          gm.group_id,
+          COUNT(*) AS unread_count
+        FROM group_message gm
+        WHERE gm.id NOT IN (
+          SELECT message_id
+          FROM message_read_status
+          WHERE user_id = ?
+        )
+        GROUP BY gm.group_id
+      ) unread_stats ON unread_stats.group_id = g.id
+
+      WHERE unread_stats.unread_count > 0
+        AND (g.administrator_id = ? OR gm.member_id IS NOT NULL)
+
+      ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
+      `,
+      [userId, userId, userId, userId]
+    );
+
+    return res.json({ success: true, data: rows });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
 exports.getGroupMessages = async (req, res) => {
   try {
     const userId = req.user?.id;
