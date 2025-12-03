@@ -56,16 +56,15 @@ exports.createGroup = async (req, res) => {
           });
         }
 
-        if( position_id ){
-          // Chieck if position_id exists
-          const [positionRows] = await db
-            .promise()
-            .query("SELECT * FROM position WHERE id = ?", [position_id]);
-          if (positionRows.length === 0) {
-            return res
-              .status(400)
-              .json({ message: "Invalid position_id: not found" });
-          }
+        // Chieck if position_id exists
+        const [positionRows] = await db
+          .promise()
+          .query("SELECT * FROM `position` WHERE id = ?", [position_id]);
+          
+        if (positionRows.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "Invalid position_id: not found" });
         }
 
 
