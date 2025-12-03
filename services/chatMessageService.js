@@ -73,72 +73,27 @@ const saveMessageReadStatus = async (messageId, groupId, senderId) => {
       });
     }
 
-    // Insert all read status records in batch using ON DUPLICATE KEY UPDATE
-    // to handle cases where record might already exist
-    if (readStatusRecords.length > 0) {
+    // Insert all read status records one by one (sequential)
+    for (const record of readStatusRecords) {
       try {
-        const values = readStatusRecords
-          .map(() => "(?, ?, ?, ?, ?, ?)")
-          .join(", ");
-        const params = [];
-
-        readStatusRecords.forEach((record) => {
-          params.push(
+        await db.promise().query(
+          `
+          INSERT INTO message_read_status 
+          (id, message_id, user_id, is_read, read_at) 
+          VALUES (? , ? , ? , ? , ?)
+        `,
+          [
             record.id,
             record.message_id,
             record.user_id,
             record.is_read,
             record.read_at,
-            record.created_at
-          );
-        });
-
-        await db.promise().query(
-          `
-            INSERT INTO message_read_status 
-            (id, message_id, user_id, is_read, read_at, created_at) 
-            VALUES ${values}
-            ON DUPLICATE KEY UPDATE
-              is_read = VALUES(is_read),
-              read_at = VALUES(read_at),
-              updated_at = VALUES(created_at)
-          `,
-          params
+          ]
         );
-      } catch (insertError) {
-        // If batch insert fails, try inserting one by one
-        console.warn(
-          "Batch insert failed, trying individual inserts:",
-          insertError
-        );
-        for (const record of readStatusRecords) {
-          try {
-            await db.promise().query(
-              `
-                INSERT INTO message_read_status 
-                (id, message_id, user_id, is_read, read_at, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                  is_read = VALUES(is_read),
-                  read_at = VALUES(read_at),
-                  updated_at = VALUES(created_at)
-              `,
-              [
-                record.id,
-                record.message_id,
-                record.user_id,
-                record.is_read,
-                record.read_at,
-                record.created_at,
-              ]
-            );
-          } catch (individualError) {
-            console.error(
-              `Error inserting read status for user ${record.user_id}, message ${messageId}:`,
-              individualError
-            );
-          }
-        }
+        // Log the result of the DB query (e.g., number of affected rows)
+        console.log("Record inserted:", record);
+      } catch (error) {
+        console.error("Error inserting record:", record, error);
       }
     }
   } catch (error) {
@@ -146,6 +101,7 @@ const saveMessageReadStatus = async (messageId, groupId, senderId) => {
     // Don't throw error - message is already saved, read status is optional
   }
 };
+
 
 const saveMessage = async (groupId, senderId, message, media = null) => {
   const trimmed = (message || "").trim();
