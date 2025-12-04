@@ -344,6 +344,9 @@ exports.sendMessage = (req, res) => {
           ) {
             mediaType = "voice";
             resourceType = "auto";
+          } else if (mimeType.startsWith("video/")) {
+            mediaType = "video";
+            resourceType = "auto";
           } else {
             // Documents, PDFs, etc.
             mediaType = "file";
@@ -410,30 +413,51 @@ exports.deleteMessage = async (req, res) => {
         message: "groupId and messageId are required",
       });
     }
+
     await ensureGroupAccess(userId, groupId);
 
-    // First, fetch the message to get media info before deletion
-    const [messageRows] = await db
-      .promise()
-      .query(
-        "SELECT id, message FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
-        [messageId, userId, groupId]
-      );
-
-    if (messageRows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Message not found or you are not the sender",
-      });
+    if (req.user.role === "Administrator") {
+      const [messageRows] = await db
+        .promise()
+        .query(
+          "SELECT id, message FROM group_message WHERE id = ? AND group_id = ?",
+          [messageId, groupId]
+        );
+      if (messageRows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Message not found or you are not the sender",
+        });
+      }
+    } else if (req.user.role === "Member") {
+      const [messageRows] = await db
+        .promise()
+        .query(
+          "SELECT id, message FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
+          [messageId, userId, groupId]
+        );
+      if (messageRows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Message not found or you are not the sender",
+        });
+      }
     }
 
     // Delete the message (media is stored in the same row, so it will be deleted automatically)
+    // check member of admin
+    let whereClause = "";
+    const params = [];
+    if (req.user.role === "Administrator") {
+      whereClause = "WHERE id = ? AND group_id = ?";
+      params.push(messageId, groupId);
+    } else if (req.user.role === "Member") {
+      whereClause = "WHERE id = ? AND sender_id = ? AND group_id = ?";
+      params.push(messageId, userId, groupId);
+    }
     const [result] = await db
       .promise()
-      .query(
-        "DELETE FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
-        [messageId, userId, groupId]
-      );
+      .query(`DELETE FROM group_message ${whereClause}`, params);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
