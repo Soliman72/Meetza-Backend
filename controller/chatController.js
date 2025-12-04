@@ -224,11 +224,10 @@ exports.getUnreadGroups = async (req, res) => {
           gm.group_id,
           COUNT(*) AS unread_count
         FROM group_message gm
-        WHERE gm.id NOT IN (
-          SELECT message_id
-          FROM message_read_status
-          WHERE user_id = ?
-        )
+        JOIN message_read_status gmrs
+          ON gm.id = gmrs.message_id
+        WHERE gmrs.user_id = ?
+          AND gmrs.read_at IS NULL
         GROUP BY gm.group_id
       ) unread_stats ON unread_stats.group_id = g.id
 
