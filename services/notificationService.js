@@ -1,4 +1,4 @@
-const sendEmail = require('../utils/sendEmail');
+const sendEmail = require("../utils/sendEmail");
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 
@@ -6,64 +6,71 @@ const db = require("../config/db");
 let io = null;
 
 const initNotificationSocket = (socketIo) => {
-    io = socketIo;
+  io = socketIo;
 };
 
-
 // Create Notification Function (NOT an endpoint)
-const createNotification = async ({ senderId, memberId, title, message }) => {
-    try {
-        if (!memberId || !title || !message || !senderId) {
-            return { success: false, error: "Missing fields" };
-        }
+const createNotification = async ({
+  senderId,
+  memberId,
+  title,
+  message,
+  group_name,
+}) => {
+  try {
+    if (!memberId || !title || !message || !senderId) {
+      return { success: false, error: "Missing fields" };
+    }
 
-        const id = uuidv4();
+    const id = uuidv4();
 
-        // 1) Save to DB
-        await db.promise().query(
-            "INSERT INTO notifications (id, member_id, sender_id, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [id, memberId, senderId, title, message, 0, new Date()]
-        );
+    // 1) Save to DB
+    await db
+      .promise()
+      .query(
+        "INSERT INTO notifications (id, member_id, sender_id, title, message, is_read, group_name ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [id, memberId, senderId, title, message, 0, group_name]
+      );
 
-        const notification = {
-            id,
-            memberId,
-            senderId,
-            title,
-            message,
-            is_read: 0,
-            created_at: new Date(),
-        };
-        console.log("Notification created:", notification);
-        
-        // 2) Send socket notification
-        if (io) {
-            try {
-                console.log("Emitting notification via socket to member:", memberId);
-                io.to("member_" + memberId).emit("new_notification", notification);
-                console.log("Notification sent via socket to member:", memberId);
-            } catch (socketError) {
-                console.error("Error sending socket notification:", socketError);
-                // Continue even if socket fails
-            }
-        } else {
-            console.warn("Socket.IO not initialized, notification not sent via socket");
-        }
-        // 3) Send email
-        const [[member]] = await db.promise().query(
-            "SELECT email, name FROM user WHERE id = ?",
-            [memberId]
-        );
+    const notification = {
+      id,
+      memberId,
+      senderId,
+      title,
+      message,
+      is_read: 0,
+      group_name,
+    };
+    console.log("Notification created:", notification);
 
-        const [[sender]] = await db.promise().query(
-            "SELECT name FROM user WHERE id = ?",
-            [senderId]
-        );
+    // 2) Send socket notification
+    if (io) {
+      try {
+        console.log("Emitting notification via socket to member:", memberId);
+        io.to("member_" + memberId).emit("new_notification", notification);
+        console.log("Notification sent via socket to member:", memberId);
+      } catch (socketError) {
+        console.error("Error sending socket notification:", socketError);
+        // Continue even if socket fails
+      }
+    } else {
+      console.warn(
+        "Socket.IO not initialized, notification not sent via socket"
+      );
+    }
+    // 3) Send email
+    const [[member]] = await db
+      .promise()
+      .query("SELECT email, name FROM user WHERE id = ?", [memberId]);
 
-        const senderName = sender ? sender.name : "Meetza Team";
+    const [[sender]] = await db
+      .promise()
+      .query("SELECT name FROM user WHERE id = ?", [senderId]);
 
-        // Email template with beautiful design
-        const emailTemplate = `
+    const senderName = sender ? sender.name : "Meetza Team";
+
+    // Email template with beautiful design
+    const emailTemplate = `
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -151,35 +158,35 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
         </body>
         </html>`;
 
-        // 3) Send email (non-blocking)
-        if (member?.email) {
-            sendEmail({
-                to: member.email,
-                subject: `New Notification: ${title}`,
-                html: emailTemplate,
-            }).then(() => {
-                console.log("Notification Email sent to:", member.email);
-            })
-            .catch((err) => {
-                console.error("Email Error:", err);
-                // Email failure should not block notification creation
-            });
-        } else {
-            console.warn(`Member ${memberId} has no email address`);
-        }
-        console.log("Notification process completed for member:", memberId);
-        return { success: true, notification };
-
-    } catch (err) {
-        console.error("Notification Error:", err);
-        return { 
-            success: false, 
-            error: err.message || "Failed to create notification" 
-        };
+    // 3) Send email (non-blocking)
+    if (member?.email) {
+      sendEmail({
+        to: member.email,
+        subject: `New Notification: ${title}`,
+        html: emailTemplate,
+      })
+        .then(() => {
+          console.log("Notification Email sent to:", member.email);
+        })
+        .catch((err) => {
+          console.error("Email Error:", err);
+          // Email failure should not block notification creation
+        });
+    } else {
+      console.warn(`Member ${memberId} has no email address`);
     }
+    console.log("Notification process completed for member:", memberId);
+    return { success: true, notification };
+  } catch (err) {
+    console.error("Notification Error:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to create notification",
+    };
+  }
 };
 
 module.exports = {
-    initNotificationSocket,
-    createNotification,
+  initNotificationSocket,
+  createNotification,
 };
