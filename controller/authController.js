@@ -389,136 +389,97 @@ exports.resetPassword = async (req, res) => {
 };
 
 // Social Authentication
+
 exports.socialAuth = (req, res, next) => {
-  const role = req.query.role; // Administrator or Member
+  const role = req.query.role || "Member";
+  if (!["Member", "Administrator", "Super_Admin"].includes(role)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid role specified",
+    });
+  }
   const state = JSON.stringify({ role });
 
-  const scope = ["email", "profile"];
-  
   passport.authenticate("google", {
-    scope,
+    scope: ["email", "profile"],
     session: false,
     state,
-    callbackURL: process.env.CALLBACK_URL,
   })(req, res, next);
 };
 
+
 // Social Authentication Callback
 exports.socialAuthCallback = (req, res, next) => {
-  console.log("CALLBACK_URL used:", process.env.CALLBACK_URL);
-  passport.authenticate("google", { session: false }, async (err, profile) => {
-    if (err) {
-      console.error("Passport error:", err);
-      return res.status(500).json({
-        success: false,
-        message: `google callback error`,
-        error: err.message || err,
-      });
+  passport.authenticate("google", { session: false }, async (err, user, info) => {
+
+    if (err) return res.status(500).json({ success: false, message: err.message });
+
+    const profile = user;
+    if (!profile) return res.status(400).json({ success: false, message: "login failed" });
+
+    const stateObj = req.query.state ? JSON.parse(req.query.state) : {};
+    const role = stateObj.role || "Member";
+
+    const email = profile._json.email;
+    const providerId = profile.id;
+    const name = profile.displayName;
+
+    let dbUser;
+
+    // lookup provider
+    const [linked] = await db.promise().query(
+      "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
+      ["google", providerId]
+    );
+
+    if (linked.length > 0) {
+      const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
+      dbUser = users[0];
+      return proceedWithUser(dbUser, "google", res);
     }
-    if (!profile) {
-      return res
-        .status(400)
-        .json({ success: false, message: `${"google"} login failed` });
-    }
-    // console.log("Google profile received:", profile);
 
+    // check email exists
+    const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
 
-    try {
-      // parse state
-      const stateObj = req.query.state
-        ? JSON.parse(req.query.state)
-        : { role: "" };
-      const role = stateObj.role;
+    if (existing.length > 0) {
+      dbUser = existing[0];
 
-      // extract email and provider id
-      let user;
-      const actualProfile = profile.profile || profile;
-      const email = actualProfile._json?.email || actualProfile.emails?.[0]?.value;
-
-      // console.log("email",email);
-      const providerId = actualProfile.id;
-      const name =
-        actualProfile.displayName ||
-        `${actualProfile.name?.givenName || ""} ${actualProfile.name?.familyName || ""}`.trim() ||
-        "NoName";
-
-
-      // 1 Check user_providers for provider + provider_id
-      const [rows] = await db
-        .promise()
-        .query(
-          "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
-          ["google", providerId]
-        );
-      if (rows.length > 0) {
-        // linked provider exists -> get user
-        const [users] = await db
-          .promise()
-          .query("SELECT * FROM user WHERE email = ? LIMIT 1", [email]);
-        user = users[0];
-        return proceedWithUser(user, "google", res);
-      } else if (email) {
-        // 2 If user with email exists -> auto-link
-        const [rowsEmail] = await db
-          .promise()
-          .query("SELECT * FROM user WHERE email = ? LIMIT 1", [email]);
-        if (rowsEmail.length > 0) {
-          user = rowsEmail[0];
-          // insert into social_auth (ignore duplicate errors)
-          await social_authController.createSocialAuth({
-            user_id: user.id,
-            provider: "google",
-            provider_id: providerId,
-          });
-          // ensure email verification true
-          await db.promise().query(
-            "UPDATE user SET ? WHERE email_verification = true"
-          );
-          return proceedWithUser(user, "google", res);
-        } else {
-          // 3 Create new user and link provider
-          await userController.createUser({
-            body: {
-              name,
-              email,
-              password: uuidv4(), // random password
-              role,
-              verification_code: "0000",
-              email_verification: true,
-            },
-          });
-          const id = (
-            await db
-              .promise()
-              .query("SELECT id FROM user WHERE email = ?", [email])
-          )[0][0].id;
-          await social_authController.createSocialAuth({
-            user_id: id,
-            provider: "google",
-            provider_id: providerId,
-          });
-          // Fetch new user details
-          const [newRows] = await db
-            .promise()
-            .query("SELECT * FROM user WHERE email = ?", [email]);
-          user = newRows[0];
-          return proceedWithUser(user, "google", res);
-        }
-      } else {
-        console.error("Social callback error: No email provided");
-        return res.status(500).json({
+      if (!dbUser) {
+        return res.status(400).json({
           success: false,
-          message: "There is no email!",
+          message: "User not found"
         });
       }
-    } catch (error) {
-      console.error("Social callback error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Server error",
-        error: error.message,
-      });
+
+      await db.promise().query(
+        `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
+        [uuidv4(), dbUser.id, "google", providerId]
+      );
+
+      await db.promise().query(
+        "UPDATE user SET email_verification = true, verification_code = 0 WHERE id = ?",
+        [dbUser.id]
+      );
+
+
+      return proceedWithUser(dbUser, "google", res);
     }
+
+    // create new user
+    const newId = uuidv4();
+    await db.promise().query(
+      `INSERT INTO user (id,name,email,password,role,email_verification,verification_code) VALUES (?,?,?,?,?,true,0)`,
+      [newId, name, email, uuidv4(), role]
+    );
+
+    await db.promise().query(
+      `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
+      [uuidv4(), newId, "google", providerId]
+    );
+
+    const [newU] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
+
+    return proceedWithUser(newU[0], "google", res);
   })(req, res, next);
 };
 
@@ -575,10 +536,10 @@ const sendVerificationEmail = (email, verificationCode, msg) => {
                     ${msg.includes('register') ? 'Welcome to Meetza!' : 'Password Reset Request'}
                   </h2>
                   <p style="margin:0 auto 30px;color:#4a5568;font-size:15px;line-height:1.7;text-align:center;max-width:520px;">
-                    ${msg.replace(/<[^>]*>/g, '').replace('Thank you for registering!', '').trim() || 
-                      (msg.includes('register') 
-                        ? 'Thanks for joining Meetza. Use the verification code below to confirm your email and activate your workspace.'
-                        : 'Use the verification code below to reset your password safely.')}
+                    ${msg.replace(/<[^>]*>/g, '').replace('Thank you for registering!', '').trim() ||
+    (msg.includes('register')
+      ? 'Thanks for joining Meetza. Use the verification code below to confirm your email and activate your workspace.'
+      : 'Use the verification code below to reset your password safely.')}
                   </p>
                   <!-- Code box -->
                   <div style="margin:28px auto 32px;background:#0f172a;border-radius:18px;padding:32px 24px;text-align:center;">
@@ -594,9 +555,9 @@ const sendVerificationEmail = (email, verificationCode, msg) => {
                   <div style="background:#f8fafc;border-left:4px solid #0f172a;padding:20px 24px;border-radius:12px;margin-bottom:26px;">
                     <p style="margin:0;color:#1f2a37;font-size:14px;line-height:1.7;">
                       <strong style="text-transform:uppercase;letter-spacing:1px;font-size:12px;color:#0f172a;">Instructions</strong><br>
-                      ${msg.includes('register') 
-                        ? 'Copy the code, head to the verification screen, and finish activating your Meetza account.'
-                        : 'Enter the code on the password reset page to securely set a new password.'}
+                      ${msg.includes('register')
+      ? 'Copy the code, head to the verification screen, and finish activating your Meetza account.'
+      : 'Enter the code on the password reset page to securely set a new password.'}
                     </p>
                   </div>
                   <p style="margin:0;text-align:center;color:#94a3b8;font-size:12px;line-height:1.7;border-top:1px solid #e2e8f0;padding-top:20px;">
