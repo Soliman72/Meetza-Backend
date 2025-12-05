@@ -8,7 +8,7 @@ exports.getMemberNotifications = async (req, res) => {
     const [notifications] = await db
       .promise()
       .query(
-        "SELECT * FROM notifications WHERE member_id = ? ORDER BY created_at DESC",
+        "SELECT notifications.*, user.name AS administrator_name, user.user_photo AS administrator_photo, user.email AS administrator_email FROM notifications JOIN user ON notifications.sender_id = user.id WHERE member_id = ? ORDER BY created_at DESC",
         [memberId]
       );
 
