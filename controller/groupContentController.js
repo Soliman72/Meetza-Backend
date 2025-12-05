@@ -158,14 +158,9 @@ exports.createGroupContent = (req, res) => {
         // in parallel
         const [groupRows] = await db
           .promise()
-          .query(
-            "SELECT group_name, administrator_id FROM `group` WHERE id = ?",
-            [group_id]
-          );
+          .query("SELECT group_name FROM `group` WHERE id = ?", [group_id]);
         const groupName =
           groupRows.length > 0 ? groupRows[0].group_name : "the group";
-        const groupAdministratorId =
-          groupRows.length > 0 ? groupRows[0].administrator_id : admin_id;
         console.log(
           "Notifying members about new group content in group:",
           groupName
@@ -179,7 +174,6 @@ exports.createGroupContent = (req, res) => {
             message: `New content has just been uploaded to your group "${groupName}". 
               Fresh learning material and updated data are now available for you to view.  
               Open Meetza to check the latest update and stay up to date with your group activity!`,
-            group_name: groupName,
           });
         }
       }
@@ -191,7 +185,7 @@ exports.createGroupContent = (req, res) => {
           id,
           content_name,
           content_description,
-          administrator_id: admin_id,
+          administrator_id,
           resources: uploadedResources,
         },
       });
@@ -535,25 +529,16 @@ exports.addFilesToGroupContent = (req, res) => {
         // in parallel
         const [groupRows] = await db
           .promise()
-          .query(
-            "SELECT group_name, administrator_id FROM `group` WHERE id = ?",
-            [group_id]
-          );
+          .query("SELECT group_name FROM `group` WHERE id = ?", [group_id]);
         const groupName =
           groupRows.length > 0 ? groupRows[0].group_name : "the group";
-        const groupAdministratorId =
-          groupRows.length > 0
-            ? groupRows[0].administrator_id
-            : groupContent[0].administrator_id;
         for (const membership of groupMemberships) {
           await createNotification({
             memberId: membership.member_id,
-            senderId: groupAdministratorId,
+            senderId: groupContent[0].administrator_id,
             title: `${groupContent[0].content_name} has been updated in ${groupName}`,
             message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}". 
               Open Meetza to check the latest update and stay up to date with your group activity!`,
-            group_name: groupName,
-            administrator_id: groupAdministratorId,
           });
         }
       }

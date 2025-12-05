@@ -2,119 +2,125 @@ const db = require("../config/db");
 
 // Get Member Notifications
 exports.getMemberNotifications = async (req, res) => {
-    try {
-        const memberId = req.user.id;
+  try {
+    const memberId = req.user.id;
 
-        const [notifications] = await db.promise().query(
-            "SELECT * FROM notifications WHERE member_id = ? ORDER BY created_at DESC",
-            [memberId]
-        );
+    const [notifications] = await db
+      .promise()
+      .query(
+        "SELECT * FROM notifications WHERE member_id = ? ORDER BY created_at DESC",
+        [memberId]
+      );
 
-        return res.status(200).json({ success: true, notifications });
-
-    } catch (err) {
-        console.error("Error getting notifications:", err);
-        return res.status(500).json({ error: "Server error" });
-    }
+    return res.status(200).json({ success: true, notifications });
+  } catch (err) {
+    console.error("Error getting notifications:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 };
 
 // Get Unread Notifications Count
 exports.getUnreadCount = async (req, res) => {
-    try {
-        const memberId = req.user.id;
-        const [rows] = await db.promise().query(
-            "SELECT COUNT(*) AS unreadCount FROM notifications WHERE member_id = ? AND is_read = 0",
-            [memberId]
-        );
-        const unreadCount = rows[0].unreadCount;
-        return res.status(200).json({ success: true, unreadCount });
-
-    } catch (err) {
-        console.error("Error getting unread count:", err);
-        return res.status(500).json({ error: "Server error" });
-    }
+  try {
+    const memberId = req.user.id;
+    const [rows] = await db
+      .promise()
+      .query(
+        "SELECT COUNT(*) AS unreadCount FROM notifications WHERE member_id = ? AND is_read = 0",
+        [memberId]
+      );
+    const unreadCount = rows[0].unreadCount;
+    return res.status(200).json({ success: true, unreadCount });
+  } catch (err) {
+    console.error("Error getting unread count:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 };
 
 // Mark Notification as Read
 exports.markAsRead = async (req, res) => {
-    try {
-        const notifId = req.params.id;
-        const memberId = req.user.id;
+  try {
+    const notifId = req.params.id;
+    const memberId = req.user.id;
 
-        // Verify notification belongs to user and update
-        const [result] = await db.promise().query(
-            "UPDATE notifications SET is_read = 1 WHERE id = ? AND member_id = ?",
-            [notifId, memberId]
-        );
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Notification not found" });
-        }
+    // Verify notification belongs to user and update
+    const [result] = await db
+      .promise()
+      .query(
+        "UPDATE notifications SET is_read = 1 WHERE id = ? AND member_id = ?",
+        [notifId, memberId]
+      );
 
-        // Fetch updated notification
-        const [notifications] = await db.promise().query(
-            "SELECT * FROM notifications WHERE id = ?",
-            [notifId]
-        );
-
-        return res.status(200).json({
-            success: true,
-            notification: notifications[0],
-            message: "Notification marked as read"
-        });
-
-    } catch (err) {
-        console.error("Error marking notification as read:", err);
-        return res.status(500).json({ error: "Server error" });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Notification not found" });
     }
+
+    // Fetch updated notification
+    const [notifications] = await db
+      .promise()
+      .query("SELECT * FROM notifications WHERE id = ?", [notifId]);
+
+    return res.status(200).json({
+      success: true,
+      notification: notifications[0],
+      message: "Notification marked as read",
+    });
+  } catch (err) {
+    console.error("Error marking notification as read:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 };
 
 // Mark All Notifications as Read for a Member
 exports.markAllAsRead = async (req, res) => {
-    try {
-        const memberId = req.user.id;
-        const [result] = await db.promise().query(
-            "UPDATE notifications SET is_read = 1 WHERE member_id = ? AND is_read = 0",
-            [memberId]
-        );
-        return res.status(200).json({
-            success: true,
-            message: `${result.affectedRows} notifications marked as read`
-        });
-    } catch (err) {
-        console.error("Error marking all notifications as read:", err);
-        return res.status(500).json({ error: "Server error" });
-    }
+  try {
+    const memberId = req.user.id;
+    const [result] = await db
+      .promise()
+      .query(
+        "UPDATE notifications SET is_read = 1 WHERE member_id = ? AND is_read = 0",
+        [memberId]
+      );
+    return res.status(200).json({
+      success: true,
+      message: `${result.affectedRows} notifications marked as read`,
+    });
+  } catch (err) {
+    console.error("Error marking all notifications as read:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 };
 
 // Delete Notification
 exports.deleteNotification = async (req, res) => {
-    try {
-        const notifId = req.params.id;
-        const memberId = req.user.id;
-        // check if member who is deleting the notification is the owner
-        // const memberId = req.body.memberId;
-        // const [rows] = await db.promise().query(
-        //     "SELECT * FROM notifications WHERE id = ? AND member_id = ?",
-        //     [notifId, memberId]
-        // );
-        // if (rows.length === 0) {
-        //     return res.status(403).json({ error: "Unauthorized to delete this notification" });
-        // }
+  try {
+    const notifId = req.params.id;
+    const memberId = req.user.id;
+    // check if member who is deleting the notification is the owner
+    // const memberId = req.body.memberId;
+    // const [rows] = await db.promise().query(
+    //     "SELECT * FROM notifications WHERE id = ? AND member_id = ?",
+    //     [notifId, memberId]
+    // );
+    // if (rows.length === 0) {
+    //     return res.status(403).json({ error: "Unauthorized to delete this notification" });
+    // }
 
-        const [result] = await db.promise().query(
-            "DELETE FROM notifications WHERE id = ? AND member_id = ?",
-            [notifId, memberId]
-        );
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Notification not found" });
-        }
-        return res.status(200).json({
-            success: true,
-            message: "Notification deleted successfully"
-        });
-    } catch (err) {
-        console.error("Error deleting notification:", err);
-        return res.status(500).json({ error: "Server error" });
-    }   
+    const [result] = await db
+      .promise()
+      .query("DELETE FROM notifications WHERE id = ? AND member_id = ?", [
+        notifId,
+        memberId,
+      ]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Notification not found" });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Notification deleted successfully",
+    });
+  } catch (err) {
+    console.error("Error deleting notification:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 };

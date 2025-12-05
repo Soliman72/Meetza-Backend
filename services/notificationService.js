@@ -10,13 +10,7 @@ const initNotificationSocket = (socketIo) => {
 };
 
 // Create Notification Function (NOT an endpoint)
-const createNotification = async ({
-  senderId,
-  memberId,
-  title,
-  message,
-  group_name,
-}) => {
+const createNotification = async ({ senderId, memberId, title, message }) => {
   try {
     if (!memberId || !title || !message || !senderId) {
       return { success: false, error: "Missing fields" };
@@ -24,22 +18,28 @@ const createNotification = async ({
 
     const id = uuidv4();
 
+    // get name of sender
+    const [rows] = await db
+      .promise()
+      .query("SELECT name FROM user WHERE id = ?", [senderId]);
+
+    const senderName = rows.length > 0 ? rows[0].name : "Meetza Team";
     // 1) Save to DB
     await db
       .promise()
       .query(
-        "INSERT INTO notifications (id, member_id, sender_id, title, message, is_read, group_name ) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [id, memberId, senderId, title, message, 0, group_name]
+        "INSERT INTO notifications (id, member_id, sender_id, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [id, memberId, senderName, title, message, 0, new Date()]
       );
 
     const notification = {
       id,
       memberId,
-      senderId,
+      senderName,
       title,
       message,
       is_read: 0,
-      group_name,
+      created_at: new Date(),
     };
     console.log("Notification created:", notification);
 
@@ -61,13 +61,7 @@ const createNotification = async ({
     // 3) Send email
     const [[member]] = await db
       .promise()
-      .query("SELECT email, name FROM user WHERE id = ?", [memberId]);
-
-    const [[sender]] = await db
-      .promise()
-      .query("SELECT name FROM user WHERE id = ?", [senderId]);
-
-    const senderName = sender ? sender.name : "Meetza Team";
+      .query("SELECT email FROM user WHERE id = ?", [memberId]);
 
     // Email template with beautiful design
     const emailTemplate = `
