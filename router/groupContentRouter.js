@@ -5,12 +5,7 @@ const { verifyToken } = require("../utils/verifyToken");
 const { checkAdminPermission } = require("../utils/checkAdminPermission");
 
 router.get("/", verifyToken, groupContentController.getAllGroupContents);
-router.post(
-  "/",
-  verifyToken,
-  checkAdminPermission,
-  groupContentController.createGroupContent
-);
+
 router.get("/:id", verifyToken, groupContentController.getGroupContentById);
 router.put(
   "/:id",
@@ -29,12 +24,6 @@ router.delete(
   verifyToken,
   checkAdminPermission,
   groupContentController.deleteFileFromGroupContent
-);
-router.delete(
-  "/:id",
-  verifyToken,
-  checkAdminPermission,
-  groupContentController.deleteGroupContentById
 );
 
 module.exports = router;
