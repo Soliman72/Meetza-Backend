@@ -19,29 +19,28 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
     const id = uuidv4();
 
     // get name of sender
-    const [rows] = await db
+    const [sender] = await db
       .promise()
-      .query("SELECT name FROM user WHERE id = ?", [senderId]);
+      .query("SELECT * FROM user WHERE id = ?", [senderId]);
 
-    const senderName = rows.length > 0 ? rows[0].name : "Meetza Team";
+    const senderName = rows.length > 0 ? sender[0].name : "Meetza Team";
     // 1) Save to DB
     await db
       .promise()
       .query(
-        "INSERT INTO notifications (id, member_id, sender_id, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [id, memberId, senderName, title, message, 0, new Date()]
+        "INSERT INTO notifications (id, member_id, sender_id, title, message, is_read) VALUES (?, ?, ?, ?, ?, ?)",
+        [id, memberId, senderId, title, message, 0]
       );
 
     const notification = {
       id,
       memberId,
-      senderName,
+      senderId,
       title,
       message,
       is_read: 0,
       created_at: new Date(),
     };
-    console.log("Notification created:", notification);
 
     // 2) Send socket notification
     if (io) {
