@@ -1,4 +1,4 @@
-const imageExtensions = ["jpg", "jpeg", "png", "webp"];
+const imageExtensions = ["jpg", "jpeg", "png", "webp", "gif", "svg", "avif"];
 const videoExtensions = ["mp4", "mov", "mkv", "avi"];
 
 exports.validateFileType = (file, type) => {

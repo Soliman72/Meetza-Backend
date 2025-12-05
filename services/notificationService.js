@@ -23,7 +23,7 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
       .promise()
       .query("SELECT * FROM user WHERE id = ?", [senderId]);
 
-    const senderName = rows.length > 0 ? sender[0].name : "Meetza Team";
+    const senderName = sender.length > 0 ? sender[0].name : "Meetza Team";
     // 1) Save to DB
     await db
       .promise()
