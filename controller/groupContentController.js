@@ -170,7 +170,7 @@ exports.updateGroupContentById = async (req, res) => {
     const { id } = req.params;
     const { content_name, content_description} = req.body;
 
-    if (!id && !content_name && !content_description && !group_id) {
+    if (!id && !content_name && !content_description) {
       return res.status(400).json({
         success: false,
         message: "Content id, name or description is required",
@@ -417,7 +417,7 @@ exports.deleteFileFromGroupContent = async (req, res) => {
       const [userContent] = await db
         .promise()
         .query(
-          `SELECT * FROM group_content JOIN \`group\` ON group_content.group_id = \`group\`.id ${ownershipFilter.whereClause} AND group_content.id = ? `,
+          `SELECT * FROM group_content JOIN \`group\` ON group_content.group_id = \`group\`.\id ${ownershipFilter.whereClause} AND group_content.id = ? `,
           [...ownershipFilter.params, id]
         );
       if (userContent.length === 0) {
