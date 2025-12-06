@@ -62,18 +62,6 @@ exports.createGroup = async (req, res) => {
         // get administrator_id from position_id
         let administrator_id = positionRows[0].administrator_id;
 
-        // Create group content if group_content_name is provided
-        const content_body = {
-          content_name: group_content_name,
-          content_description: group_content_description || "",
-          administrator_id: administrator_id,
-        };
-        const group_content = await createGroupContent (content_body, req);
-
-        if(!group_content.success){
-          return res.status(500).json({ message: `Failed to create group content ${group_content.message}` });
-        }
-
         let group_photo_url;
         if (req.files?.group_photo) {
           const group_photo = req.files.group_photo[0];
@@ -94,7 +82,7 @@ exports.createGroup = async (req, res) => {
         
         const id = uuidv4();
         const sql =
-          "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo , group_content_id, year, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+          "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo, year, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         const [result] = await db
           .promise()
           .query(sql, [
@@ -104,11 +92,21 @@ exports.createGroup = async (req, res) => {
             administrator_id,
             description,
             group_photo_url,
-            group_content?.data?.id,
             year,
             semester,
           ]);
           
+          // Create group content if group_content_name is provided
+        const content_body = {
+          content_name: group_content_name,
+          content_description: group_content_description || "",
+          group_id: id,
+        };
+        const group_content = await createGroupContent (content_body, req);
+
+        if(!group_content.success){
+          return res.status(500).json({ message: `Failed to create group content ${group_content.message}` });
+        }
 
         res.status(201).json({
           id,
