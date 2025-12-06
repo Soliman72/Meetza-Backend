@@ -68,7 +68,7 @@ exports.createGroupContent = async (content_body, req) => {
 exports.getAllGroupContents = async (req, res) => {
   try {
     const { name } = req.query;
-    let query = "SELECT group_content.*, user.id, user.name, user.email FROM group_content JOIN \`group` ON group_content.group_id = `group`.id JOIN user ON `group`.administrator_id = user.id";
+    let query = "SELECT group_content.*, user.id AS administrator_id, user.name, user.email FROM group_content JOIN \`group` ON group_content.group_id = `group`.id JOIN user ON `group`.administrator_id = user.id";
     let params = [];
 
     // Apply ownership filter for regular admins
