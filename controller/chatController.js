@@ -71,8 +71,8 @@ exports.getMyGroups = async (req, res) => {
           g.group_name,
           g.description,
           g.group_photo,
-          g.group_content_id,
           g.position_id,
+          gc.id AS group_content_id,
           COALESCE(stats.member_count, 0) + 1 AS member_count,
           'Super_Admin' AS membership_role,
           msg.message AS last_message,
@@ -100,6 +100,7 @@ exports.getMyGroups = async (req, res) => {
           FROM group_membership
           GROUP BY group_id
         ) stats ON stats.group_id = g.id
+        LEFT JOIN group_content gc ON gc.group_id = g.id
         ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
       `;
       queryParams = [];
@@ -111,8 +112,8 @@ exports.getMyGroups = async (req, res) => {
           g.group_name,
           g.description,
           g.group_photo,
-          g.group_content_id,
           g.position_id,
+          gc.id AS group_content_id,
           COALESCE(stats.member_count, 0) + 1 AS member_count,
           CASE
             WHEN g.administrator_id = ? THEN 'Administrator'
@@ -146,6 +147,7 @@ exports.getMyGroups = async (req, res) => {
           FROM group_membership
           GROUP BY group_id
         ) stats ON stats.group_id = g.id
+        LEFT JOIN group_content gc ON gc.group_id = g.id
         WHERE g.administrator_id = ? OR gm.member_id IS NOT NULL
         ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
       `;
@@ -182,8 +184,8 @@ exports.getUnreadGroups = async (req, res) => {
         g.group_name,
         g.description,
         g.group_photo,
-        g.group_content_id,
         g.position_id,
+        gc.id AS group_content_id,
         COALESCE(stats.member_count, 0) + 1 AS member_count,
         CASE
           WHEN g.administrator_id = ? THEN 'Administrator'
@@ -230,7 +232,7 @@ exports.getUnreadGroups = async (req, res) => {
           AND gmrs.read_at IS NULL
         GROUP BY gm.group_id
       ) unread_stats ON unread_stats.group_id = g.id
-
+      LEFT JOIN group_content gc ON gc.group_id = g.id
       WHERE unread_stats.unread_count > 0
         AND (g.administrator_id = ? OR gm.member_id IS NOT NULL)
 
@@ -550,12 +552,12 @@ exports.getGroupInfo = async (req, res) => {
     );
 
     let content = null;
-    if (group.group_content_id) {
+    if (groupId) {
       const [contentRows] = await db
         .promise()
         .query(
-          "SELECT id, content_name, content_description FROM group_content WHERE id = ?",
-          [group.group_content_id]
+          "SELECT id, content_name, content_description FROM group_content WHERE group_id = ?",
+          [groupId]
         );
       if (contentRows.length) {
         const [resources] = await db.promise().query(
@@ -571,7 +573,7 @@ exports.getGroupInfo = async (req, res) => {
               WHERE group_content_id = ?
               ORDER BY created_at DESC
             `,
-          [group.group_content_id]
+          [contentRows[0].id]
         );
 
         content = {
