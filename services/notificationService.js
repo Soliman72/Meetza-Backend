@@ -62,6 +62,7 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
       .promise()
       .query("SELECT email FROM user WHERE id = ?", [memberId]);
 
+      const messageMail = message + `\nOpen Meetza to check the latest update and stay up to date with your group activity!`;
     // Email template with beautiful design
     const emailTemplate = `
         <!DOCTYPE html>
@@ -111,7 +112,7 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
                       </h2>
 
                       <p style="margin:0 auto;color:#4a5568;font-size:15px;line-height:1.7;text-align:center;max-width:520px;">
-                        ${message}
+                        ${messageMail}
                       </p>
 
                       <!-- Highlight Box -->
