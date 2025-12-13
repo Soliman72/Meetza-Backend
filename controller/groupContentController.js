@@ -138,6 +138,44 @@ exports.createGroupContent = (req, res) => {
           }
         }
       }
+      // Handle file url if any files are provided
+      if (req.body.files) {
+        for (const file of req.body.files) {
+          try {
+            const fileUrl = file;
+            const fileName = file.split("/").pop();
+            const fileType = file.split("/").pop();
+            const fileSize = file.split("/").pop();
+            // Generate resource ID
+            const resourceId = uuidv4();
+
+            // Insert resource into database
+            const resourceQuery =
+              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
+            await db
+              .promise()
+              .query(resourceQuery, [
+                resourceId,
+                id,
+                fileUrl,
+                fileName,
+                fileType,
+                file.size,
+              ]);
+
+            uploadedResources.push({
+              id: resourceId,
+              file_url: fileUrl,
+              file_name: fileName,
+              file_type: fileType,
+              file_size: fileSize,
+            });
+          } catch (fileError) {
+            console.error(`Error uploading file ${fileName}:`, fileError);
+            // Continue with other files even if one fails
+          }
+        }
+      }
 
       // Set group_content_id in group
       const updateGroupQuery =
