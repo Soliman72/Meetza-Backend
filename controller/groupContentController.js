@@ -575,8 +575,7 @@ exports.addFilesToGroupContent = (req, res) => {
             memberId: membership.member_id,
             senderId: groupContent[0].administrator_id,
             title: `${groupContent[0].content_name} has been updated in ${groupName}`,
-            message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}". 
-              Open Meetza to check the latest update and stay up to date with your group activity!`,
+            message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}".`,
           });
         }
       }

@@ -31,14 +31,15 @@ const ensureGroupAccess = async (userId, groupId) => {
           g.group_name,
           g.description,
           g.group_photo,
-          g.group_content_id,
           g.administrator_id,
+          gc.id AS group_content_id,
           u.name,
           u.email,
           u.user_photo,
           'Super_Admin' AS membership_role
         FROM \`group\` g
         JOIN user u ON u.id = g.administrator_id
+        LEFT JOIN group_content gc ON gc.group_id = g.id
         WHERE g.id = ?
         LIMIT 1
       `,
@@ -58,8 +59,8 @@ const ensureGroupAccess = async (userId, groupId) => {
           g.group_name,
           g.description,
           g.group_photo,
-          g.group_content_id,
           g.administrator_id,
+          gc.id AS group_content_id,
           u.name,
           u.email,
           u.user_photo,
@@ -72,6 +73,7 @@ const ensureGroupAccess = async (userId, groupId) => {
         LEFT JOIN group_membership gm
           ON gm.group_id = g.id AND gm.member_id = ?
         JOIN user u ON u.id = g.administrator_id
+        LEFT JOIN group_content gc ON gc.group_id = g.id
         WHERE g.id = ?
         LIMIT 1
       `,

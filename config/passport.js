@@ -8,12 +8,14 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: process.env.CALLBACK_URL,
+      passReqToCallback: true,
     },
-    (accessToken, refreshToken, profile, done) => {
-      return done(null, { profile });
+    async (req, accessToken, refreshToken, profile, done) => {
+      return done(null, profile);
     }
   )
 );
+
 
 
 module.exports = passport;
