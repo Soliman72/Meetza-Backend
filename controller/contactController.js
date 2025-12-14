@@ -84,15 +84,17 @@ exports.createContact = async (req, res) => {
         </html>
       `;
 
-      // Send email asynchronously (don't wait for it)
-      sendEmail({
-        to: adminEmail,
-        subject: `New Contact Message: ${message}`,
-        html: emailTemplate,
-      }).catch((err) => {
+      // Send email and wait for success
+      try {
+        await sendEmail({
+          to: adminEmail,
+          subject: `New Contact Message: ${message}`,
+          html: emailTemplate,
+        });
+      } catch (err) {
         console.error("Error sending contact email:", err);
         // Don't fail the request if email fails
-      });
+      }
     }
 
     // Send confirmation email to user
@@ -146,14 +148,16 @@ exports.createContact = async (req, res) => {
     `;
 
     // Send confirmation email to user (asynchronously)
-    sendEmail({
-      to: email,
-      subject: "We Received Your Message - Meetza",
-      html: confirmationTemplate,
-    }).catch((err) => {
+    try {
+      await sendEmail({
+        to: email,
+        subject: "We Received Your Message - Meetza",
+        html: confirmationTemplate,
+      });
+    } catch (err) {
       console.error("Error sending confirmation email:", err);
       // Don't fail the request if email fails
-    });
+    }
 
     res.status(201).json({
       success: true,
