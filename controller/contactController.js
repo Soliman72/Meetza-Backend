@@ -27,7 +27,7 @@ exports.createContact = async (req, res) => {
     const id = uuidv4();
 
     // Send email notification to admin (optional - you can set this in .env)
-    const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+    const adminEmail = process.env.EMAIL_USER;
 
     if (adminEmail) {
       const emailTemplate = `
