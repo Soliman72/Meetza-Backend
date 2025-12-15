@@ -28,6 +28,7 @@ const saved_videoRouter = require("./router/saved_videoRouter");
 const { initNotificationSocket } = require("./services/notificationService");
 const registerNotificationSocket = require("./sockets/notificationSocket");
 const notificationRouter = require("./router/notificationRouter");
+const contactRouter = require("./router/contactRouter");
 
 // Use video router
 
@@ -71,6 +72,7 @@ app.use("/api/comment", commentRouter);
 app.use("/api/saved_video", saved_videoRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/notification", notificationRouter);
+app.use("/api/contact", contactRouter);
 
 app.get("/", (req, res) => {
   res.send("اهلا يا شهد يا رخمه!!!");

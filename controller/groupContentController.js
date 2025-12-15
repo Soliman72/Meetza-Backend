@@ -7,72 +7,67 @@ const { createNotification } = require("../services/notificationService");
 // Controller to handle group content creation with file uploads
 exports.createGroupContent = async (content_body, req) => {
   try {
-      const {
+    const { content_name, content_description, group_id } = content_body;
+    const id = uuidv4();
+
+    if (!content_name) {
+      return {
+        success: false,
+        message: "Content name is required",
+      };
+    }
+
+    // Check if the group exists
+    const [groupRows] = await db
+      .promise()
+      .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
+    if (groupRows.length === 0) {
+      return {
+        success: false,
+        message: "Group not found",
+      };
+    }
+
+    // Insert the group content into the database
+    const query =
+      "INSERT INTO group_content (id, content_name, content_description, group_id) VALUES (?, ?, ?, ?)";
+    await db
+      .promise()
+      .query(query, [id, content_name, content_description, group_id]);
+    console.log("Group content created with ID:", id);
+
+    return {
+      success: true,
+      message: "Group content created successfully",
+      data: {
+        id,
         content_name,
         content_description,
         group_id,
-      } = content_body;
-      const id = uuidv4();
-
-      if (!content_name) {
-        return {
-          success: false,
-          message: "Content name is required",
-        };
-      }
-
-      // Check if the group exists
-      const [groupRows] = await db
-        .promise()
-        .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
-      if (groupRows.length === 0) {
-        return {
-          success: false,
-          message: "Group not found",
-        };
-      }
-
-      // Insert the group content into the database
-      const query =
-        "INSERT INTO group_content (id, content_name, content_description, group_id) VALUES (?, ?, ?, ?)";
-      await db
-        .promise()
-        .query(query, [
-          id,
-          content_name,
-          content_description,
-          group_id,
-        ]);
-        console.log("Group content created with ID:", id );
-        
-      return {
-          success: true,
-          message: "Group content created successfully",
-          data: {
-            id,
-            content_name,
-            content_description,
-            group_id,
-          }
-      };
-    } catch (err) {
-      return {
-        success: false,
-        message: "Database error",
-        error: err.message,
-      };
-    }
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: "Database error",
+      error: err.message,
+    };
+  }
 };
 
 // Controller to get all group contents
 exports.getAllGroupContents = async (req, res) => {
   try {
     const { name } = req.query;
-    let query = "SELECT group_content.*, user.id AS administrator_id, user.name, user.email FROM group_content JOIN \`group` ON group_content.group_id = `group`.id JOIN user ON `group`.administrator_id = user.id";
+    let query =
+      "SELECT group_content.*, user.id AS administrator_id, user.name, user.email FROM group_content JOIN `group` ON group_content.group_id = `group`.id JOIN user ON `group`.administrator_id = user.id";
     let params = [];
 
     // Apply ownership filter for regular admins
-    const ownershipFilter = getOwnershipFilter(req, "\`group\`.administrator_id ");
+    const ownershipFilter = getOwnershipFilter(
+      req,
+      "`group`.administrator_id "
+    );
 
     if (ownershipFilter.whereClause) {
       query += " " + ownershipFilter.whereClause;
@@ -168,7 +163,7 @@ exports.getGroupContentById = async (req, res) => {
 exports.updateGroupContentById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { content_name, content_description} = req.body;
+    const { content_name, content_description } = req.body;
 
     if (!id && !content_name && !content_description) {
       return res.status(400).json({
@@ -246,7 +241,10 @@ exports.addFilesToGroupContent = (req, res) => {
       }
 
       // Check if user has permission (ownership check)
-      const ownershipFilter = getOwnershipFilter(req, "\`group\`.administrator_id");
+      const ownershipFilter = getOwnershipFilter(
+        req,
+        "`group`.administrator_id"
+      );
       if (ownershipFilter.whereClause) {
         const [userContent] = await db
           .promise()
@@ -335,21 +333,6 @@ exports.addFilesToGroupContent = (req, res) => {
       }
 
       const group_id = groupContent[0].group_id;
-      
-        const [groupMemberships] = await db
-          .promise()
-          .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
-            group_id,
-          ]);
-        // Send Notification about new group content (optional) to each member
-        // Using a loop to handle each notification separately
-        const [groupRows] = await db
-          .promise()
-          .query("SELECT group_name, administrator_id FROM `group` WHERE id = ?", [group_id]);
-        const groupName =
-          groupRows.length > 0 ? groupRows[0].group_name : "the group";
-        const senderId =
-          groupRows.length > 0 ? groupRows[0].administrator_id : null;
 
         for (const membership of groupMemberships) {
           await createNotification({
@@ -359,8 +342,34 @@ exports.addFilesToGroupContent = (req, res) => {
             message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}".`,
           });
         }
-      
 
+      const [groupMemberships] = await db
+        .promise()
+        .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
+          group_id,
+        ]);
+      // Send Notification about new group content (optional) to each member
+      // Using a loop to handle each notification separately
+      const [groupRows] = await db
+        .promise()
+        .query(
+          "SELECT group_name, administrator_id FROM `group` WHERE id = ?",
+          [group_id]
+        );
+      const groupName =
+        groupRows.length > 0 ? groupRows[0].group_name : "the group";
+      const senderId =
+        groupRows.length > 0 ? groupRows[0].administrator_id : null;
+
+      for (const membership of groupMemberships) {
+        await createNotification({
+          memberId: membership.member_id,
+          senderId: senderId,
+          title: `${groupContent[0].content_name} has been updated in ${groupName}`,
+          message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}".`,
+        });
+      }
+      
       return res.status(200).json({
         success: true,
         message: "Files added successfully",
@@ -411,7 +420,7 @@ exports.deleteFileFromGroupContent = async (req, res) => {
     }
 
     // Check if user has permission (ownership check)
-    const ownershipFilter = getOwnershipFilter(req, "\`group\`.administrator_id");
+    const ownershipFilter = getOwnershipFilter(req, "`group`.administrator_id");
     if (ownershipFilter.whereClause) {
       const [userContent] = await db
         .promise()
