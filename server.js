@@ -75,7 +75,7 @@ app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
 
 app.get("/", (req, res) => {
-  res.send("اهلا يا شهد يا رخمه!!!");
+  res.send("اهلا يا شهد يا رخمهههه!!!");
 });
 
 server.listen(port, () => {
