@@ -3,6 +3,7 @@ const db = require("../config/db");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinaryResources } = require("../utils/uploadFile");
 const { createNotification } = require("../services/notificationService");
+const validator = require("validator");
 
 // Controller to handle group content creation with file uploads
 exports.createGroupContent = async (content_body, req) => {
@@ -260,8 +261,8 @@ exports.addFilesToGroupContent = (req, res) => {
           });
         }
       }
-
-      if (!req.files || req.files.length === 0) {
+      
+      if ((!req.files || req.files.length === 0 ) && (!req.body.links || req.body.links.length === 0)) {
         return res.status(400).json({
           success: false,
           message: "No files provided",
@@ -269,79 +270,127 @@ exports.addFilesToGroupContent = (req, res) => {
       }
 
       const uploadedResources = [];
+      
+      if (req.files?.length > 0) {
+        
+        // Handle file uploads
+        for (const file of req.files) {
+          try {
+            // Determine resource type based on file MIME type
+            // Use "raw" for documents (PDF, DOC, etc.), "auto" for images/videos
+            const isDocument =
+              file.mimetype &&
+              (file.mimetype.includes("pdf") ||
+                file.mimetype.includes("document") ||
+                file.mimetype.includes("msword") ||
+                file.mimetype.includes("spreadsheet") ||
+                file.mimetype.includes("presentation") ||
+                file.mimetype.includes("text"));
+            const resourceType = isDocument ? "raw" : "auto";
 
-      // Handle file uploads
-      for (const file of req.files) {
-        try {
-          // Determine resource type based on file MIME type
-          // Use "raw" for documents (PDF, DOC, etc.), "auto" for images/videos
-          const isDocument =
-            file.mimetype &&
-            (file.mimetype.includes("pdf") ||
-              file.mimetype.includes("document") ||
-              file.mimetype.includes("msword") ||
-              file.mimetype.includes("spreadsheet") ||
-              file.mimetype.includes("presentation") ||
-              file.mimetype.includes("text"));
-          const resourceType = isDocument ? "raw" : "auto";
+            // Upload file to separate Cloudinary for group content resources (large files)
+            const fileUrl = await uploadToCloudinaryResources(
+              file,
+              "group_content_resources",
+              resourceType
+            );
 
-          // Upload file to separate Cloudinary for group content resources (large files)
-          const fileUrl = await uploadToCloudinaryResources(
-            file,
-            "group_content_resources",
-            resourceType
-          );
+            // Generate resource ID
+            const resourceId = uuidv4();
 
-          // Generate resource ID
-          const resourceId = uuidv4();
+            // Insert resource into database
+            const resourceQuery =
+              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
+            await db
+              .promise()
+              .query(resourceQuery, [
+                resourceId,
+                id,
+                fileUrl,
+                file.originalname,
+                file.mimetype,
+                file.size,
+              ]);
 
-          // Insert resource into database
-          const resourceQuery =
-            "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
-          await db
-            .promise()
-            .query(resourceQuery, [
-              resourceId,
-              id,
-              fileUrl,
-              file.originalname,
-              file.mimetype,
-              file.size,
-            ]);
+            uploadedResources.push({
+              id: resourceId,
+              file_url: fileUrl,
+              file_name: file.originalname,
+              file_type: file.mimetype,
+              file_size: file.size,
+            });
+          } catch (fileError) {
+            console.error(
+              `Error uploading file ${file.originalname}:`,
+              fileError
+            );
+            // Continue with other files even if one fails
+          }
+        }
 
-          uploadedResources.push({
-            id: resourceId,
-            file_url: fileUrl,
-            file_name: file.originalname,
-            file_type: file.mimetype,
-            file_size: file.size,
+        if (uploadedResources.length === 0) {
+          return res.status(500).json({
+            success: false,
+            message: "Failed to upload any files",
           });
-        } catch (fileError) {
-          console.error(
-            `Error uploading file ${file.originalname}:`,
-            fileError
-          );
-          // Continue with other files even if one fails
+        }
+      }
+      if (req.body.links?.length > 0) {
+        // Handle link uploads
+        const links = Array.isArray(req.body.links)
+          ? req.body.links
+          : [req.body.links];
+        for (const link of links) {
+          try {
+            if (!validator.isURL(link, {
+              require_protocol: true,
+              protocols: ["http", "https"],
+            })) {
+              return res.status(400).json({
+                success: false,
+                message: "Invalid URL",
+              });
+            }
+            if (link.startsWith("javascript:") || link.startsWith("data:")) {
+              return res.status(400).json({
+                success: false,
+                message: "Unsafe URL detected",
+              });
+            }
+            // Generate resource ID
+            const resourceId = uuidv4();
+            // Insert link as resource into database
+            const resourceQuery =
+              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
+            await db
+              .promise()
+              .query(resourceQuery, [
+                resourceId,
+                id,
+                link,
+                link,
+                "link",
+                0,
+              ]);
+            uploadedResources.push({
+              id: resourceId,
+              file_url: link,
+              file_name: link,
+              file_type: "link",
+              file_size: 0,
+            });
+
+
+          } catch (linkError) {
+            console.error(`Error adding link ${link}:`, linkError);
+            // Continue with other links even if one fails
+          }
         }
       }
 
-      if (uploadedResources.length === 0) {
-        return res.status(500).json({
-          success: false,
-          message: "Failed to upload any files",
-        });
-      }
 
       const group_id = groupContent[0].group_id;
 
-        for (const membership of groupMemberships) {
-          await createNotification({
-            memberId: membership.member_id,
-            senderId: senderId,
-            title: `${groupContent[0].content_name} has been updated in ${groupName}`,
-            message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}".`,
-          });
-        }
 
       const [groupMemberships] = await db
         .promise()
@@ -369,7 +418,7 @@ exports.addFilesToGroupContent = (req, res) => {
           message: `The content "${groupContent[0].content_name}" has been updated in your group "${groupName}".`,
         });
       }
-      
+
       return res.status(200).json({
         success: true,
         message: "Files added successfully",
