@@ -9,6 +9,37 @@ const initNotificationSocket = (socketIo) => {
   io = socketIo;
 };
 
+// Send unread count update via socket
+const sendUnreadCountUpdate = async (memberId) => {
+  try {
+    if (!io) {
+      console.warn("Socket.IO not initialized, unread count update not sent");
+      return;
+    }
+
+    // Get unread count from database
+    const [rows] = await db
+      .promise()
+      .query(
+        "SELECT COUNT(*) AS unreadCount FROM notifications WHERE member_id = ? AND is_read = 0",
+        [memberId]
+      );
+    
+    const unreadCount = rows[0]?.unreadCount || 0;
+
+    // Emit count update to the member's notification room
+    io.to("member_" + memberId).emit("notification_count_update", {
+      unreadCount: parseInt(unreadCount),
+      memberId,
+    });
+    
+    console.log(`Unread count update sent to member ${memberId}: ${unreadCount}`);
+  } catch (error) {
+    console.error("Error sending unread count update:", error);
+    // Don't throw, this is non-critical
+  }
+};
+
 // Create Notification Function (NOT an endpoint)
 const createNotification = async ({ senderId, memberId, title, message }) => {
   try {
@@ -57,7 +88,11 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
         "Socket.IO not initialized, notification not sent via socket"
       );
     }
-    // 3) Send email
+
+    // 3) Send updated unread count
+    await sendUnreadCountUpdate(memberId);
+    
+    // 4) Send email
     const [[member]] = await db
       .promise()
       .query("SELECT email FROM user WHERE id = ?", [memberId]);
@@ -152,7 +187,7 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
         </body>
         </html>`;
 
-    // 3) Send email (non-blocking)
+    // 4) Send email (non-blocking)
     if (member?.email) {
       sendEmail({
         to: member.email,
@@ -183,4 +218,5 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
 module.exports = {
   initNotificationSocket,
   createNotification,
+  sendUnreadCountUpdate,
 };

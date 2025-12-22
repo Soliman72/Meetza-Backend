@@ -20,5 +20,7 @@ RUN mkdir -p uploads
 EXPOSE 4000
 
 # Start the application
+# Use npm run dev for development (with nodemon for hot reload)
+# For production, you can change this to: CMD ["node", "server.js"]
 CMD ["npm", "run", "dev"]
 
