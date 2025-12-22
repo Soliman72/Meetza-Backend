@@ -49,7 +49,7 @@ registerNotificationSocket(io);
 // Serve static files (videos, posters) from the uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-const port = process.env.PORT || 4000;
+const port = process.env.PORT;
 app.use(cors());
 app.use(express.json());
 app.use(passport.initialize());
@@ -78,6 +78,6 @@ app.get("/", (req, res) => {
   res.send("اهلا يا شهد يا رخمهههه!!!");
 });
 
-server.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}...`);
+server.listen(port, "0.0.0.0", () => {
+  console.log(`Server running at http://0.0.0.0:${port}...`);
 });
