@@ -7,10 +7,14 @@ services:
     container_name: meetza-backend
     restart: unless-stopped
     ports:
-      - "${PORT:-4000}:4000"
+      # Expose port 4000 on all network interfaces (accessible from anywhere)
+      # Format: "host_port:container_port" or "0.0.0.0:host_port:container_port"
+      - "0.0.0.0:${PORT:-4000}:4000"
     environment:
       - NODE_ENV=production
       - PORT=4000
+      - DOCKER_ENV=true
+      - IN_DOCKER=true
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT:-3306}
       - DB_USER=${DB_USER}
@@ -33,3 +37,9 @@ services:
       - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
     volumes:
       - ./uploads:/app/uploads
+    networks:
+      - meetza-network
+
+networks:
+  meetza-network:
+    driver: bridge

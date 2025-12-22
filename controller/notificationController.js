@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { sendUnreadCountUpdate } = require("../services/notificationService");
 
 // Get Member Notifications
 exports.getMemberNotifications = async (req, res) => {
@@ -60,6 +61,9 @@ exports.markAsRead = async (req, res) => {
       .promise()
       .query("SELECT * FROM notifications WHERE id = ?", [notifId]);
 
+    // Send updated unread count via socket
+    await sendUnreadCountUpdate(memberId);
+
     return res.status(200).json({
       success: true,
       notification: notifications[0],
@@ -81,6 +85,10 @@ exports.markAllAsRead = async (req, res) => {
         "UPDATE notifications SET is_read = 1 WHERE member_id = ? AND is_read = 0",
         [memberId]
       );
+    
+    // Send updated unread count via socket
+    await sendUnreadCountUpdate(memberId);
+
     return res.status(200).json({
       success: true,
       message: `${result.affectedRows} notifications marked as read`,
@@ -115,6 +123,10 @@ exports.deleteNotification = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: "Notification not found" });
     }
+
+    // Send updated unread count via socket
+    await sendUnreadCountUpdate(memberId);
+
     return res.status(200).json({
       success: true,
       message: "Notification deleted successfully",

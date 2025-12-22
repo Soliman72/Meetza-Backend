@@ -1,0 +1,33 @@
+# Docker Compose with ngrok for public internet access
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.ngrok.yml up -d
+
+version: "3.8"
+
+services:
+  # Ngrok tunnel service for public internet access
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: meetza-ngrok
+    restart: unless-stopped
+    command:
+      - start
+      - --all
+      - --config
+      - /etc/ngrok.yml
+    volumes:
+      # Mount ngrok config file (create ngrok.yml with your authtoken)
+      - ./ngrok.yml:/etc/ngrok.yml:ro
+      # Optional: Mount logs directory
+      - ./ngrok-logs:/var/log/ngrok
+    ports:
+      # ngrok web interface
+      - "4040:4040"
+    depends_on:
+      - backend
+    networks:
+      - meetza-network
+
+networks:
+  meetza-network:
+    driver: bridge
+
