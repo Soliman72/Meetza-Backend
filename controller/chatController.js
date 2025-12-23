@@ -1,5 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
+const validator = require("validator");
+
 const {
   saveMessage,
   getMessages,
@@ -324,6 +326,24 @@ exports.sendMessage = (req, res) => {
 
       // Handle media uploads first if any
       const uploadedMedia = [];
+
+
+      // if text is link then check if it is valid url and push it to uploadedMedia
+      if (validator.isURL(messageText, {
+        require_protocol: true,
+        protocols: ["http", "https"],
+      })){
+        // if it is valid url then push it to uploadedMedia
+        uploadedMedia.push({
+          id: uuidv4(),
+          group_id: groupId,
+          sender_id: userId,
+          mediaUrl: messageText,
+          mediaType: "link",
+          fileName: messageText,
+        });
+      }
+      // if there is media then upload it
       if (hasMedia) {
         for (const file of req.files.media) {
           let mediaUrl;
@@ -382,7 +402,6 @@ exports.sendMessage = (req, res) => {
           }
         }
       }
-
       // Save the message with media (can be empty if only media is sent)
       const savedMessage = await saveMessage(
         groupId,
