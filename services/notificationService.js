@@ -24,7 +24,7 @@ const sendUnreadCountUpdate = async (memberId) => {
         "SELECT COUNT(*) AS unreadCount FROM notifications WHERE member_id = ? AND is_read = 0",
         [memberId]
       );
-    
+
     const unreadCount = rows[0]?.unreadCount || 0;
 
     // Emit count update to the member's notification room
@@ -32,8 +32,10 @@ const sendUnreadCountUpdate = async (memberId) => {
       unreadCount: parseInt(unreadCount),
       memberId,
     });
-    
-    console.log(`Unread count update sent to member ${memberId}: ${unreadCount}`);
+
+    console.log(
+      `Unread count update sent to member ${memberId}: ${unreadCount}`
+    );
   } catch (error) {
     console.error("Error sending unread count update:", error);
     // Don't throw, this is non-critical
@@ -91,13 +93,15 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
 
     // 3) Send updated unread count
     await sendUnreadCountUpdate(memberId);
-    
+
     // 4) Send email
     const [[member]] = await db
       .promise()
       .query("SELECT email FROM user WHERE id = ?", [memberId]);
 
-      const messageMail = message + `\nOpen Meetza to check the latest update and stay up to date with your group activity!`;
+    const messageMail =
+      message +
+      `\nOpen Meetza to check the latest update and stay up to date with your group activity!`;
     // Email template with beautiful design
     const emailTemplate = `
         <!DOCTYPE html>
@@ -189,21 +193,21 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
 
     // 4) Send email (non-blocking)
     if (member?.email) {
-      sendEmail({
-        to: member.email,
-        subject: `New Notification: ${title}`,
-        html: emailTemplate,
-      })
-        .then(() => {
-          console.log("Notification Email sent to:", member.email);
-        })
-        .catch((err) => {
-          console.error("Email Error:", err);
-          // Email failure should not block notification creation
+      try {
+        await sendEmail({
+          to: member.email,
+          subject: `New Notification: ${title}`,
+          html: emailTemplate,
         });
+        console.log("Notification Email sent to:", member.email);
+      } catch (err) {
+        console.error("Email Error:", err);
+        // Email failure should not block notification creation
+      }
     } else {
       console.warn(`Member ${memberId} has no email address`);
     }
+
     console.log("Notification process completed for member:", memberId);
     return { success: true, notification };
   } catch (err) {
