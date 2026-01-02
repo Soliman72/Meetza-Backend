@@ -26,7 +26,8 @@ exports.createUser = async (data) => {
       !password ||
       !role ||
       !verification_code ||
-      !email_verification
+      email_verification === undefined ||
+      email_verification === null
     ) {
       throw new Error("One or more fields are required");
     }

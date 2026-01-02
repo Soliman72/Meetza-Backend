@@ -43,7 +43,7 @@ exports.register = async (req, res) => {
         password,
         role,
         verification_code: verificationCode,
-        email_verification: `false`,
+        email_verification: false,
       },
     };
     await userController.createUser(userData);
@@ -392,13 +392,23 @@ exports.resetPassword = async (req, res) => {
 
 exports.socialAuth = (req, res, next) => {
   const role = req.query.role || "Member";
+  const redirect = req.query.redirect || "/home";
+
   if (!["Member", "Administrator", "Super_Admin"].includes(role)) {
     return res.status(400).json({
       success: false,
       message: "Invalid role specified",
     });
   }
-  const state = JSON.stringify({ role });
+
+  if (!redirect) {
+    return res.status(400).json({
+      success: false,
+      message: "Redirect URL is required",
+    });
+  }
+
+  const state = JSON.stringify({ role, redirect });
 
   passport.authenticate("google", {
     scope: ["email", "profile"],
@@ -409,80 +419,248 @@ exports.socialAuth = (req, res, next) => {
 
 
 // Social Authentication Callback
+// exports.socialAuthCallback = (req, res, next) => {
+//   passport.authenticate("google", { session: false }, async (err, user, info) => {
+
+//     if (err) return res.status(500).json({ success: false, message: err.message });
+
+//     const profile = user;
+//     if (!profile) return res.status(400).json({ success: false, message: "login failed" });
+
+//     const stateObj = req.query.state ? JSON.parse(req.query.state) : {};
+//     const role = stateObj.role || "Member";
+//     const redirect = stateObj.redirect;
+
+//     const email = profile._json.email;
+//     const providerId = profile.id;
+//     const name = profile.displayName;
+
+//     let dbUser;
+
+//     // lookup provider
+//     const [linked] = await db.promise().query(
+//       "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
+//       ["google", providerId]
+//     );
+
+//     if (linked.length > 0) {
+//       const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
+//       dbUser = users[0];
+//       console.log("Redirecting to:", redirect);
+
+//       return proceedWithUser(dbUser, "google", res, redirect);
+//     }
+
+//     // check email exists
+//     const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
+
+//     if (existing.length > 0) {
+//       dbUser = existing[0];
+
+//       if (!dbUser) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "User not found"
+//         });
+//       }
+
+//       await db.promise().query(
+//         `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
+//         [uuidv4(), dbUser.id, "google", providerId]
+//       );
+
+//       await db.promise().query(
+//         "UPDATE user SET email_verification = true, verification_code = 0 WHERE id = ?",
+//         [dbUser.id]
+//       );
+
+//       console.log("Redirecting to:", redirect);
+//       return proceedWithUser(dbUser, "google", res, redirect);
+//     }
+
+//     // create new user
+//     const newId = uuidv4();
+//     await db.promise().query(
+//       `INSERT INTO user (id,name,email,password,role,email_verification,verification_code) VALUES (?,?,?,?,?,true,0)`,
+//       [newId, name, email, uuidv4(), role]
+//     );
+
+//     await db.promise().query(
+//       `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
+//       [uuidv4(), newId, "google", providerId]
+//     );
+
+//     const [newU] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
+
+//     console.log("Redirecting to:", redirect);
+//     return proceedWithUser(newU[0], "google", res, redirect);
+//   })(req, res, next);
+// };
+
 exports.socialAuthCallback = (req, res, next) => {
-  passport.authenticate("google", { session: false }, async (err, user, info) => {
-
-    if (err) return res.status(500).json({ success: false, message: err.message });
-
-    const profile = user;
-    if (!profile) return res.status(400).json({ success: false, message: "login failed" });
-
-    const stateObj = req.query.state ? JSON.parse(req.query.state) : {};
-    const role = stateObj.role || "Member";
-
-    const email = profile._json.email;
-    const providerId = profile.id;
-    const name = profile.displayName;
-
-    let dbUser;
-
-    // lookup provider
-    const [linked] = await db.promise().query(
-      "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
-      ["google", providerId]
-    );
-
-    if (linked.length > 0) {
-      const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
-      dbUser = users[0];
-      return proceedWithUser(dbUser, "google", res);
-    }
-
-    // check email exists
-    const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
-
-    if (existing.length > 0) {
-      dbUser = existing[0];
-
-      if (!dbUser) {
-        return res.status(400).json({
-          success: false,
-          message: "User not found"
-        });
+  passport.authenticate("google", { session: false }, async (err, profile) => {
+    try {
+      if (err) {
+        console.error("Passport error:", err);
+        return res.redirect("http://localhost:3000/login?error=oauth");
       }
 
-      await db.promise().query(
-        `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
-        [uuidv4(), dbUser.id, "google", providerId]
+      if (!profile) {
+        return res.redirect("http://localhost:3000/login?error=no_user");
+      }
+
+      const stateObj = req.query.state
+        ? JSON.parse(req.query.state)
+        : {};
+
+      const redirectUrl = stateObj.redirect || "http://localhost:3000/home";
+      const role = stateObj.role || "Member";
+
+      console.log("REDIRECT URL:", redirectUrl);
+      console.log("ROLE:", role);
+
+      // Extract data from Google profile
+      const email = profile._json?.email || profile.emails?.[0]?.value;
+      const providerId = profile.id;
+      const name = profile.displayName || profile._json?.name || profile.name?.givenName + " " + profile.name?.familyName;
+
+      if (!email || !providerId || !name) {
+        return res.redirect("http://localhost:3000/login?error=missing_profile_data");
+      }
+
+      let dbUser;
+
+      // Check if social_auth already exists for this provider_id
+      const [linked] = await db.promise().query(
+        "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
+        ["google", providerId]
       );
 
+      if (linked.length > 0) {
+        // User already linked, get the user from database
+        const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
+        dbUser = users[0];
+        
+        if (!dbUser) {
+          return res.redirect("http://localhost:3000/login?error=user_not_found");
+        }
+
+        console.log("Existing user found, redirecting to:", redirectUrl);
+        return proceedWithUser(dbUser, redirectUrl, res);
+      }
+
+      // Check if user exists by email
+      const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
+
+      if (existing.length > 0) {
+        // User exists, link the social auth
+        dbUser = existing[0];
+
+        // Create social_auth link
+        await social_authController.createSocialAuth({
+          user_id: dbUser.id,
+          provider: "google",
+          provider_id: providerId
+        });
+
+        // Mark email as verified (Google emails are already verified)
+        await db.promise().query(
+          "UPDATE user SET email_verification = true, verification_code = NULL WHERE id = ?",
+          [dbUser.id]
+        );
+
+        console.log("User linked with Google, redirecting to:", redirectUrl);
+        return proceedWithUser(dbUser, redirectUrl, res);
+      }
+
+      // Create new user
+      const newId = uuidv4();
+      const randomPassword = uuidv4(); // Generate random password for social auth users
+
+      // Hash the random password
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      // Insert new user
       await db.promise().query(
-        "UPDATE user SET email_verification = true, verification_code = 0 WHERE id = ?",
-        [dbUser.id]
+        `INSERT INTO user (id, name, email, password, role, email_verification, verification_code) VALUES (?, ?, ?, ?, ?, true, NULL)`,
+        [newId, name, email, hashedPassword, role]
       );
 
+      // Create corresponding record based on role
+      if (role === "Administrator" || role === "Super_Admin") {
+        const administratorController = require("./administratorController");
+        const reqadmin = { body: { user_id: newId, role } };
+        await administratorController.createAdministrator(reqadmin);
+      } else if (role === "Member") {
+        const memberController = require("./memberController");
+        const reqmember = { body: { user_id: newId } };
+        await memberController.createMember(reqmember);
+      }
 
-      return proceedWithUser(dbUser, "google", res);
+      // Create social_auth link
+      await social_authController.createSocialAuth({
+        user_id: newId,
+        provider: "google",
+        provider_id: providerId
+      });
+
+      // Get the newly created user
+      const [newUsers] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
+      dbUser = newUsers[0];
+
+      console.log("New user created, redirecting to:", redirectUrl);
+      return proceedWithUser(dbUser, redirectUrl, res);
+
+    } catch (e) {
+      console.error("Callback crash:", e);
+      return res.redirect("http://localhost:3000/login?error=callback_crash");
     }
-
-    // create new user
-    const newId = uuidv4();
-    await db.promise().query(
-      `INSERT INTO user (id,name,email,password,role,email_verification,verification_code) VALUES (?,?,?,?,?,true,0)`,
-      [newId, name, email, uuidv4(), role]
-    );
-
-    await db.promise().query(
-      `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
-      [uuidv4(), newId, "google", providerId]
-    );
-
-    const [newU] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
-
-    return proceedWithUser(newU[0], "google", res);
   })(req, res, next);
 };
 
+// Helper function to proceed with user creation and token generation
+function proceedWithUser(user, redirectUrl, res) {
+  const safeUser = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    email_verification: user.email_verification,
+    created_at: user.created_at,
+    updated_at: user.updated_at
+  };
+
+  const tokenPayload = { id: user.id, email: user.email, role: user.role };
+  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: "24h" });
+
+  const allowedOrigins = [
+    "https://meetza-front-end.vercel.app",
+    "https://meetza-front-end-admin.vercel.app",
+    "http://localhost:3000",
+  ];
+
+  try {
+    const url = new URL(redirectUrl);
+    
+    // Check if origin is allowed (for production)
+    if (process.env.NODE_ENV === "production" && !allowedOrigins.some(origin => url.origin.includes(origin.replace(/^https?:\/\//, "")))) {
+      return res.redirect("http://localhost:3000/login?error=invalid_redirect");
+    }
+
+    url.searchParams.set("token", token);
+    url.searchParams.set(
+      "user",
+      encodeURIComponent(JSON.stringify(safeUser))
+    );
+
+    return res.redirect(url.toString());
+  } catch (urlError) {
+    console.error("URL error:", urlError);
+    // If redirectUrl is not a valid URL, append token as query params
+    const separator = redirectUrl.includes("?") ? "&" : "?";
+    return res.redirect(`${redirectUrl}${separator}token=${token}&user=${encodeURIComponent(JSON.stringify(safeUser))}`);
+  }
+}
 // Helper function to send the verification email
 const sendVerificationEmail = (email, verificationCode, msg) => {
   const transporter = nodemailer.createTransport({
@@ -590,25 +768,4 @@ const sendVerificationEmail = (email, verificationCode, msg) => {
   return transporter.sendMail(mailOptions);
 };
 
-// Helper function to proceed with user creation and token generation
-function proceedWithUser(user, platform, res) {
-  const safeUser = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    email_verification: user.email_verification,
-    created_at: user.created_at,
-    updated_at: user.updated_at
-  };
 
-  const tokenPayload = { id: user.id, email: user.email, role: user.role };
-  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: "24h" });
-
-  return res.status(200).json({
-    success: true,
-    message: `${platform} login successful`,
-    token,
-    user: safeUser,
-  });
-}
