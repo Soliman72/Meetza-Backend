@@ -90,26 +90,46 @@ exports.login = async (req, res) => {
     if (!email || !password || !role) {
       return res.status(400).json({
         success: false,
-        message: "Email , password , captchaToken and role are required",
+        message: "Email, password, and role are required",
       });
     }
 
-    // const verifyUrl = "https://www.google.com/recaptcha/api/siteverify";
-    // const response = await axios.post(verifyUrl, null, {
-    //   params: {
-    //     secret: process.env.RECAPTCHA_SECRET_KEY,
-    //     response: captchaToken,
-    //   },
-    // });
+    // Validate and verify reCAPTCHA token
+    if (captchaToken) {
+      try {
+        const verifyUrl = "https://www.google.com/recaptcha/api/siteverify";
+        const response = await axios.post(verifyUrl, null, {
+          params: {
+            secret: process.env.RECAPTCHA_SECRET_KEY,
+            response: captchaToken,
+          },
+        });
 
-    // const { success, score, action } = response.data;
+        const { success, score } = response.data;
 
-    // if (!success) {
-    //   return res
-    //     .status(400)
-    //     .json({ success: false, message: "CAPTCHA verification failed" });
-    // }
+        if (!success) {
+          return res.status(400).json({
+            success: false,
+            message: "CAPTCHA verification failed. Please try again.",
+          });
+        }
 
+        // Optional: Check score for reCAPTCHA v3 (score should be > 0.5)
+        if (score !== undefined && score < 0.5) {
+          return res.status(400).json({
+            success: false,
+            message: "CAPTCHA verification failed. Low score detected.",
+          });
+        }
+      } catch (captchaError) {
+        console.error("reCAPTCHA verification error:", captchaError);
+        return res.status(500).json({
+          success: false,
+          message: "Error verifying CAPTCHA. Please try again.",
+          error: captchaError.message,
+        });
+      }
+    }
     // Check if user exists
     const [rows] = await db
       .promise()
@@ -626,6 +646,7 @@ function proceedWithUser(user, redirectUrl, res) {
     email: user.email,
     role: user.role,
     email_verification: user.email_verification,
+    user_photo: user.user_photo,
     created_at: user.created_at,
     updated_at: user.updated_at
   };
