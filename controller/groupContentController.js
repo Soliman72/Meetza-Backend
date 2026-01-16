@@ -35,8 +35,7 @@ exports.createGroupContent = async (content_body, req) => {
     await db
       .promise()
       .query(query, [id, content_name, content_description, group_id]);
-    console.log("Group content created with ID:", id);
-
+    
     return {
       success: true,
       message: "Group content created successfully",

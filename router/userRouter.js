@@ -6,6 +6,7 @@ const { checkAdminPermission } = require("../utils/checkAdminPermission");
 
 router.get("/", verifyToken, checkAdminPermission, controller.getAllUsers);
 router.get("/:id", verifyToken, checkAdminPermission, controller.getUserById);
+router.get("/email/:email", verifyToken, checkAdminPermission, controller.getUserByEmail);
 router.patch("/:id", verifyToken, controller.updateUser);
 router.delete("/:id", verifyToken, checkAdminPermission, controller.deleteUser);
 

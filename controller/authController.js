@@ -409,11 +409,12 @@ exports.resetPassword = async (req, res) => {
 };
 
 // Social Authentication
-
 exports.socialAuth = (req, res, next) => {
   const role = req.query.role || "Member";
-  const redirect = req.query.redirect || "/home";
+  const redirect = req.query.redirect || "http://localhost:3000/home";
+  const type = req.query.type || "signin"; // signin or signup
 
+  // Validate role
   if (!["Member", "Administrator", "Super_Admin"].includes(role)) {
     return res.status(400).json({
       success: false,
@@ -421,14 +422,25 @@ exports.socialAuth = (req, res, next) => {
     });
   }
 
-  if (!redirect) {
+  // Validate type
+  if (!["signin", "signup"].includes(type)) {
     return res.status(400).json({
       success: false,
-      message: "Redirect URL is required",
+      message: "Invalid type specified",
     });
   }
 
-  const state = JSON.stringify({ role, redirect });
+  // Validate redirect URL format
+  try {
+    new URL(redirect);
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid redirect URL format",
+    });
+  }
+
+  const state = JSON.stringify({ role, redirect, type });
 
   passport.authenticate("google", {
     scope: ["email", "profile"],
@@ -437,85 +449,6 @@ exports.socialAuth = (req, res, next) => {
   })(req, res, next);
 };
 
-
-// Social Authentication Callback
-// exports.socialAuthCallback = (req, res, next) => {
-//   passport.authenticate("google", { session: false }, async (err, user, info) => {
-
-//     if (err) return res.status(500).json({ success: false, message: err.message });
-
-//     const profile = user;
-//     if (!profile) return res.status(400).json({ success: false, message: "login failed" });
-
-//     const stateObj = req.query.state ? JSON.parse(req.query.state) : {};
-//     const role = stateObj.role || "Member";
-//     const redirect = stateObj.redirect;
-
-//     const email = profile._json.email;
-//     const providerId = profile.id;
-//     const name = profile.displayName;
-
-//     let dbUser;
-
-//     // lookup provider
-//     const [linked] = await db.promise().query(
-//       "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
-//       ["google", providerId]
-//     );
-
-//     if (linked.length > 0) {
-//       const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
-//       dbUser = users[0];
-//       console.log("Redirecting to:", redirect);
-
-//       return proceedWithUser(dbUser, "google", res, redirect);
-//     }
-
-//     // check email exists
-//     const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
-
-//     if (existing.length > 0) {
-//       dbUser = existing[0];
-
-//       if (!dbUser) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "User not found"
-//         });
-//       }
-
-//       await db.promise().query(
-//         `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
-//         [uuidv4(), dbUser.id, "google", providerId]
-//       );
-
-//       await db.promise().query(
-//         "UPDATE user SET email_verification = true, verification_code = 0 WHERE id = ?",
-//         [dbUser.id]
-//       );
-
-//       console.log("Redirecting to:", redirect);
-//       return proceedWithUser(dbUser, "google", res, redirect);
-//     }
-
-//     // create new user
-//     const newId = uuidv4();
-//     await db.promise().query(
-//       `INSERT INTO user (id,name,email,password,role,email_verification,verification_code) VALUES (?,?,?,?,?,true,0)`,
-//       [newId, name, email, uuidv4(), role]
-//     );
-
-//     await db.promise().query(
-//       `INSERT INTO social_auth (id, user_id, provider, provider_id) VALUES (?, ?, ?, ?)`,
-//       [uuidv4(), newId, "google", providerId]
-//     );
-
-//     const [newU] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
-
-//     console.log("Redirecting to:", redirect);
-//     return proceedWithUser(newU[0], "google", res, redirect);
-//   })(req, res, next);
-// };
 
 exports.socialAuthCallback = (req, res, next) => {
   passport.authenticate("google", { session: false }, async (err, profile) => {
@@ -529,20 +462,28 @@ exports.socialAuthCallback = (req, res, next) => {
         return res.redirect("http://localhost:3000/login?error=no_user");
       }
 
-      const stateObj = req.query.state
-        ? JSON.parse(req.query.state)
-        : {};
+      // Parse state safely
+      let stateObj = {};
+      if (req.query.state) {
+        try {
+          stateObj = JSON.parse(req.query.state);
+        } catch (parseError) {
+          console.error("State parse error:", parseError);
+          return res.redirect("http://localhost:3000/login?error=invalid_state");
+        }
+      }
 
       const redirectUrl = stateObj.redirect || "http://localhost:3000/home";
       const role = stateObj.role || "Member";
-
-      console.log("REDIRECT URL:", redirectUrl);
-      console.log("ROLE:", role);
+      const type = stateObj.type || "signin";
 
       // Extract data from Google profile
       const email = profile._json?.email || profile.emails?.[0]?.value;
       const providerId = profile.id;
-      const name = profile.displayName || profile._json?.name || profile.name?.givenName + " " + profile.name?.familyName;
+      const name = profile.displayName || profile._json?.name || 
+                   (profile.name?.givenName && profile.name?.familyName 
+                    ? `${profile.name.givenName} ${profile.name.familyName}` 
+                    : null);
 
       if (!email || !providerId || !name) {
         return res.redirect("http://localhost:3000/login?error=missing_profile_data");
@@ -550,87 +491,117 @@ exports.socialAuthCallback = (req, res, next) => {
 
       let dbUser;
 
-      // Check if social_auth already exists for this provider_id
-      const [linked] = await db.promise().query(
-        "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
-        ["google", providerId]
-      );
+      if (type === "signin") {
+        // Signin flow
+        const [linked] = await db.promise().query(
+          "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
+          ["google", providerId]
+        );
 
-      if (linked.length > 0) {
-        // User already linked, get the user from database
-        const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
-        dbUser = users[0];
-        
-        if (!dbUser) {
-          return res.redirect("http://localhost:3000/login?error=user_not_found");
+        if (linked.length === 0) {
+          // Link doesn't exist - check if user exists by email and create link
+          const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
+          
+          if (existing.length === 0) {
+            return res.redirect("http://localhost:3000/login?error=user_not_found");
+          }
+
+          dbUser = existing[0];
+          
+          // Check role match
+          if (dbUser.role !== role) {
+            return res.redirect("http://localhost:3000/login?error=role_mismatch");
+          }
+
+          // Create social_auth link
+          await social_authController.createSocialAuth({
+            user_id: dbUser.id,
+            provider: "google",
+            provider_id: providerId
+          });
+
+          // Mark email as verified (Google emails are already verified)
+          await db.promise().query(
+            "UPDATE user SET email_verification = true, verification_code = NULL WHERE id = ?",
+            [dbUser.id]
+          );
+
+          return proceedWithUser(dbUser, redirectUrl, res);
+        } else {
+          // User already linked - get the user from database
+          const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
+          
+          if (users.length === 0) {
+            return res.redirect("http://localhost:3000/login?error=user_not_found");
+          }
+
+          dbUser = users[0];
+
+          // Check role match
+          if (dbUser.role !== role) {
+            return res.redirect("http://localhost:3000/login?error=role_mismatch");
+          }
+
+          return proceedWithUser(dbUser, redirectUrl, res);
+        }
+      } else if (type === "signup") {
+        // Signup flow
+        // Check if social_auth already exists for this provider_id
+        const [linked] = await db.promise().query(
+          "SELECT * FROM social_auth WHERE provider = ? AND provider_id = ? LIMIT 1",
+          ["google", providerId]
+        );
+
+        if (linked.length > 0) {
+          return res.redirect("http://localhost:3000/login?error=already_linked");
         }
 
-        console.log("Existing user found, redirecting to:", redirectUrl);
-        return proceedWithUser(dbUser, redirectUrl, res);
-      }
+        // Check if user exists by email
+        const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
 
-      // Check if user exists by email
-      const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
+        if (existing.length > 0) {
+          return res.redirect("http://localhost:3000/login?error=email_exists");
+        }
 
-      if (existing.length > 0) {
-        // User exists, link the social auth
-        dbUser = existing[0];
+        // Create new user
+        const newId = uuidv4();
+        const randomPassword = uuidv4(); // Generate random password for social auth users
+
+        // Hash the random password
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+        // Insert new user
+        await db.promise().query(
+          `INSERT INTO user (id, name, email, password, role, email_verification, verification_code) VALUES (?, ?, ?, ?, ?, true, NULL)`,
+          [newId, name, email, hashedPassword, role]
+        );
+
+        // Create corresponding record based on role
+        if (role === "Administrator" || role === "Super_Admin") {
+          await db.promise().query("INSERT INTO administrator (user_id, role) VALUES (?, ?)", [newId, role]);
+        } else if (role === "Member") {
+          await db.promise().query("INSERT INTO member (user_id) VALUES (?)", [newId]);
+        }
 
         // Create social_auth link
         await social_authController.createSocialAuth({
-          user_id: dbUser.id,
+          user_id: newId,
           provider: "google",
           provider_id: providerId
         });
 
-        // Mark email as verified (Google emails are already verified)
-        await db.promise().query(
-          "UPDATE user SET email_verification = true, verification_code = NULL WHERE id = ?",
-          [dbUser.id]
-        );
+        // Get the newly created user
+        const [newUsers] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
+        
+        if (newUsers.length === 0) {
+          return res.redirect("http://localhost:3000/login?error=user_creation_failed");
+        }
 
-        console.log("User linked with Google, redirecting to:", redirectUrl);
+        dbUser = newUsers[0];
         return proceedWithUser(dbUser, redirectUrl, res);
+      } else {
+        return res.redirect("http://localhost:3000/login?error=invalid_type");
       }
-
-      // Create new user
-      const newId = uuidv4();
-      const randomPassword = uuidv4(); // Generate random password for social auth users
-
-      // Hash the random password
-      const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-      // Insert new user
-      await db.promise().query(
-        `INSERT INTO user (id, name, email, password, role, email_verification, verification_code) VALUES (?, ?, ?, ?, ?, true, NULL)`,
-        [newId, name, email, hashedPassword, role]
-      );
-
-      // Create corresponding record based on role
-      if (role === "Administrator" || role === "Super_Admin") {
-        const administratorController = require("./administratorController");
-        const reqadmin = { body: { user_id: newId, role } };
-        await administratorController.createAdministrator(reqadmin);
-      } else if (role === "Member") {
-        const memberController = require("./memberController");
-        const reqmember = { body: { user_id: newId } };
-        await memberController.createMember(reqmember);
-      }
-
-      // Create social_auth link
-      await social_authController.createSocialAuth({
-        user_id: newId,
-        provider: "google",
-        provider_id: providerId
-      });
-
-      // Get the newly created user
-      const [newUsers] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
-      dbUser = newUsers[0];
-
-      console.log("New user created, redirecting to:", redirectUrl);
-      return proceedWithUser(dbUser, redirectUrl, res);
-
     } catch (e) {
       console.error("Callback crash:", e);
       return res.redirect("http://localhost:3000/login?error=callback_crash");

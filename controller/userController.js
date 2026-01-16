@@ -131,6 +131,26 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+
+// get by Email
+exports.getUserByEmail = async (req, res) => {
+  try {
+    const { email } = req.params;
+    if (!email) {
+      return res.status(400).json({ message: "email is required" });
+    }
+    const [rows] = await db
+      .promise()
+      .query("SELECT * FROM user WHERE email = ?", [email]);
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // Update
 exports.updateUser = async (req, res) => {
   // Apply multer upload middleware to handle file uploads
