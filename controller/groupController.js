@@ -149,16 +149,34 @@ exports.getAllGroups = async (req, res) => {
       params.push(`%${name}%`);
     }
 
+    // Allow multiple years (comma or array in querystring)
+    let yearsArray = [];
     if (year) {
-      sql += ownershipFilter.whereClause || name ? " AND" : " WHERE";
-      sql += " year = ?";
-      params.push(year);
+      if (Array.isArray(year)) {
+        yearsArray = year.filter(y => !!y);
+      } else if (typeof year === "string") {
+        yearsArray = year.split(",").map(y => y.trim()).filter(y => !!y);
+      }
+    }
+    if (yearsArray.length > 0) {
+      sql += (ownershipFilter.whereClause || name) ? " AND" : " WHERE";
+      sql += ` year IN (${yearsArray.map(() => "?").join(",")})`;
+      params.push(...yearsArray);
     }
 
+    // Allow multiple semesters (comma or array in querystring)
+    let semestersArray = [];
     if (semester) {
-      sql += ownershipFilter.whereClause || name || year ? " AND" : " WHERE";
-      sql += " semester = ?";
-      params.push(semester);
+      if (Array.isArray(semester)) {
+        semestersArray = semester.filter(s => !!s);
+      } else if (typeof semester === "string") {
+        semestersArray = semester.split(",").map(s => s.trim()).filter(s => !!s);
+      }
+    }
+    if (semestersArray.length > 0) {
+      sql += (ownershipFilter.whereClause || name || yearsArray.length > 0) ? " AND" : " WHERE";
+      sql += ` semester IN (${semestersArray.map(() => "?").join(",")})`;
+      params.push(...semestersArray);
     }
 
     const [rows] = await db.promise().query(sql, params);
