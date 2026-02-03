@@ -450,32 +450,62 @@ exports.socialAuth = (req, res, next) => {
 };
 
 
+// Helper function to redirect with error - redirects to login or signup based on type
+function redirectWithError(errorCode, errorMessage, res, type = "signin", redirect) {
+
+  const baseUrl = redirect.includes("https://meetza-front-end.vercel.app") ? "https://meetza-front-end.vercel.app" : "https://meetza-front-end-admin.vercel.app";
+  const redirectPath = type == "signin" ? "/login" : "/signup";
+  const separator = redirect.includes("?") ? "&" : "?";
+  return res.redirect(`${baseUrl}${redirectPath}${separator}error=${errorCode}&error_message=${encodeURIComponent(errorMessage)}&redirect_url=${redirect} &type=${type}`);
+}
+
 exports.socialAuthCallback = (req, res, next) => {
   passport.authenticate("google", { session: false }, async (err, profile) => {
     try {
-      if (err) {
-        console.error("Passport error:", err);
-        return res.redirect("http://localhost:3000/login?error=oauth");
-      }
-
-      if (!profile) {
-        return res.redirect("http://localhost:3000/login?error=no_user");
-      }
-
-      // Parse state safely
+      // Parse state first to get redirectUrl and type for success redirects
       let stateObj = {};
+      let redirectUrl = "http://localhost:3000/home"; // Default redirect for success
+      let type = "signin"; // Default type
+      
       if (req.query.state) {
         try {
           stateObj = JSON.parse(req.query.state);
+          redirectUrl = stateObj.redirect || "http://localhost:3000/home";
+          type = stateObj.type || "signin";
         } catch (parseError) {
           console.error("State parse error:", parseError);
-          return res.redirect("http://localhost:3000/login?error=invalid_state");
+          return redirectWithError(
+            "invalid_state",
+            "Invalid state parameter",
+            res,
+            "signin",
+            redirectUrl // Default to signin if state parsing fails
+          );
         }
       }
 
-      const redirectUrl = stateObj.redirect || "http://localhost:3000/home";
+      if (err) {
+        console.error("Passport error:", err);
+        return redirectWithError(
+          "oauth_failed",
+          "OAuth authentication failed",
+          res,
+          type,
+          redirectUrl
+        );
+      }
+
+      if (!profile) {
+        return redirectWithError(
+          "no_profile",
+          "No user profile received from Google",
+          res,
+          type,
+          redirectUrl
+        );
+      }
+
       const role = stateObj.role || "Member";
-      const type = stateObj.type || "signin";
 
       // Extract data from Google profile
       const email = profile._json?.email || profile.emails?.[0]?.value;
@@ -486,7 +516,13 @@ exports.socialAuthCallback = (req, res, next) => {
                     : null);
 
       if (!email || !providerId || !name) {
-        return res.redirect("http://localhost:3000/login?error=missing_profile_data");
+        return redirectWithError(
+          "missing_data",
+          "Missing required profile data from Google",
+          res,
+          type,
+          redirectUrl
+        );
       }
 
       let dbUser;
@@ -503,14 +539,25 @@ exports.socialAuthCallback = (req, res, next) => {
           const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
           
           if (existing.length === 0) {
-            return res.redirect("http://localhost:3000/login?error=user_not_found");
+            return redirectWithError(
+              "user_not_found",
+              "User not found. Please sign up first.",
+              res,
+              type,
+              redirectUrl
+            );
           }
 
           dbUser = existing[0];
           
           // Check role match
           if (dbUser.role !== role) {
-            return res.redirect("http://localhost:3000/login?error=role_mismatch");
+            return redirectWithError(
+              "role_mismatch",
+              "Role mismatch. Please use the correct role for sign in.",
+              res,
+              type
+            );
           }
 
           // Create social_auth link
@@ -532,14 +579,26 @@ exports.socialAuthCallback = (req, res, next) => {
           const [users] = await db.promise().query("SELECT * FROM user WHERE id = ?", [linked[0].user_id]);
           
           if (users.length === 0) {
-            return res.redirect("http://localhost:3000/login?error=user_not_found");
+            return redirectWithError(
+              "user_not_found",
+              "User not found in database",
+              res,
+              type,
+              redirectUrl
+            );
           }
 
           dbUser = users[0];
 
           // Check role match
           if (dbUser.role !== role) {
-            return res.redirect("http://localhost:3000/login?error=role_mismatch");
+            return redirectWithError(
+              "role_mismatch",
+              "Role mismatch. Please use the correct role for sign in.",
+              res,
+              type,
+              redirectUrl
+            );
           }
 
           return proceedWithUser(dbUser, redirectUrl, res);
@@ -553,14 +612,26 @@ exports.socialAuthCallback = (req, res, next) => {
         );
 
         if (linked.length > 0) {
-          return res.redirect("http://localhost:3000/login?error=already_linked");
+          return redirectWithError(
+            "already_linked",
+            "This Google account is already linked to an existing account",
+            res,
+            type,
+            redirectUrl
+          );
         }
 
         // Check if user exists by email
         const [existing] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
 
         if (existing.length > 0) {
-          return res.redirect("http://localhost:3000/login?error=email_exists");
+          return redirectWithError(
+            "email_exists",
+            "Email already exists. Please sign in instead.",
+            res,
+            type,
+            redirectUrl
+          );
         }
 
         // Create new user
@@ -594,17 +665,45 @@ exports.socialAuthCallback = (req, res, next) => {
         const [newUsers] = await db.promise().query("SELECT * FROM user WHERE id = ?", [newId]);
         
         if (newUsers.length === 0) {
-          return res.redirect("http://localhost:3000/login?error=user_creation_failed");
+          return redirectWithError(
+            "creation_failed",
+            "Failed to create user account",
+            res,
+            type,
+            redirectUrl
+          );
         }
 
         dbUser = newUsers[0];
         return proceedWithUser(dbUser, redirectUrl, res);
       } else {
-        return res.redirect("http://localhost:3000/login?error=invalid_type");
+        return redirectWithError(
+          "invalid_type",
+          "Invalid authentication type. Must be 'signin' or 'signup'",
+          res,
+          type,
+          redirectUrl
+        );
       }
     } catch (e) {
       console.error("Callback crash:", e);
-      return res.redirect("http://localhost:3000/login?error=callback_crash");
+      // Try to get type from state if available
+      let errorType = "signin";
+      if (req.query.state) {
+        try {
+          const stateObj = JSON.parse(req.query.state);
+          errorType = stateObj.type || "signin";
+        } catch (parseError) {
+          // Keep default signin
+        }
+      }
+      return redirectWithError(
+        "server_error",
+        "Internal server error during authentication",
+        res,
+        errorType,
+        redirectUrl
+      );
     }
   })(req, res, next);
 };

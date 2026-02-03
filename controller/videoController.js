@@ -56,11 +56,11 @@ exports.createVideo = (req, res) => {
       }
 
       // Validate required fields
-      if (! group_id || !title || !date_recorded || !description) {
+      if (! group_id || !title ) {
         return res.status(400).json({
           success: false,
           message:
-            " group_id , title, description, and date_recorded are required",
+            " group_id , title are required",
         });
       }
 
@@ -102,18 +102,22 @@ exports.createVideo = (req, res) => {
         });
       }
 
+      // Set default date_recorded to current date if not provided (date_recorded is NOT NULL in DB)
+      const finalDateRecorded = date_recorded || new Date().toISOString().split('T')[0];
+      // description can be NULL, so we keep it as is
+
       // Insert the video into the database
       const query =
         "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, date_recorded, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, ? ,? , ?)";
       await db.promise().query(query, [
         id,
         title,
-        meeting_id,
+        meeting_id || null,
         videoUrl, // Store the video file path
         posterUrl, // Store the poster file path
         req.body.administrator_id,
-        date_recorded,
-        description,
+        finalDateRecorded,
+        description || null,
         group_id
       ]);
 
@@ -123,11 +127,11 @@ exports.createVideo = (req, res) => {
         data: {
           id,
           title,
-          meeting_id,
+          meeting_id: meeting_id || null,
           video_url: videoUrl,
           poster_url: posterUrl,
-          date_recorded,
-          description,
+          date_recorded: finalDateRecorded,
+          description: description || null,
           administrator_id: req.body.administrator_id,
           group_id
         },
