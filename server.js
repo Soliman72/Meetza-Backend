@@ -46,6 +46,8 @@ const io = new Server(server, {
 });
 chatController.registerChatIo(io);
 registerChatSocket(io);
+const registerMeetingSocket = require("./sockets/meetingSocket");
+registerMeetingSocket(io);
 
 // Register notification socket
 initNotificationSocket(io);
@@ -89,7 +91,7 @@ const getLocalIP = () => {
   const interfaces = os.networkInterfaces();
   const preferredNames = ["Wi-Fi", "Ethernet", "eth0", "wlan0"];
   const virtualNames = ["vEthernet", "WSL", "Hyper-V", "VMware", "VirtualBox"];
-  
+
   // First pass: Look for preferred interfaces (Wi-Fi, Ethernet)
   for (const preferredName of preferredNames) {
     for (const name of Object.keys(interfaces)) {
@@ -102,19 +104,21 @@ const getLocalIP = () => {
       }
     }
   }
-  
+
   // Second pass: Look for any non-virtual interface
   for (const name of Object.keys(interfaces)) {
-    const isVirtual = virtualNames.some(virtualName => name.includes(virtualName));
+    const isVirtual = virtualNames.some((virtualName) =>
+      name.includes(virtualName)
+    );
     if (isVirtual) continue;
-    
+
     for (const iface of interfaces[name]) {
       if (iface.family === "IPv4" && !iface.internal) {
         return iface.address;
       }
     }
   }
-  
+
   // Fallback: Return first available (even if virtual)
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
@@ -123,19 +127,22 @@ const getLocalIP = () => {
       }
     }
   }
-  
+
   return "localhost";
 };
 
 server.listen(port, "0.0.0.0", () => {
   const localIP = getLocalIP();
-  const isDocker = process.env.DOCKER_ENV === "true" || process.env.IN_DOCKER === "true" || fs.existsSync("/.dockerenv");
-  
+  const isDocker =
+    process.env.DOCKER_ENV === "true" ||
+    process.env.IN_DOCKER === "true" ||
+    fs.existsSync("/.dockerenv");
+
   console.log("\n" + "=".repeat(60));
   console.log(`✅ Server is running!`);
   console.log("=".repeat(60));
   console.log(`📱 Local access:    http://localhost:${port}`);
-  
+
   // In Docker, the internal IP isn't useful for external access
   if (!isDocker && localIP !== "localhost") {
     console.log(`🌐 Network access:  http://${localIP}:${port}`);
@@ -150,8 +157,12 @@ server.listen(port, "0.0.0.0", () => {
     console.log(`🔌 Socket.IO URL:   http://localhost:${port}`);
     console.log("=".repeat(60));
     console.log(`\n💡 Access options:`);
-    console.log(`   1. Same network: Use your host IP address (run 'npm run get-ip' on host)`);
-    console.log(`   2. Different network: Use ngrok service (if enabled in docker-compose)`);
+    console.log(
+      `   1. Same network: Use your host IP address (run 'npm run get-ip' on host)`
+    );
+    console.log(
+      `   2. Different network: Use ngrok service (if enabled in docker-compose)`
+    );
     console.log(`   3. Check docker-compose.yml for ngrok public URL\n`);
   } else {
     console.log(`🌐 Network access:  http://${localIP}:${port}`);

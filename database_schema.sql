@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS `meeting` (
     `id` VARCHAR(36) PRIMARY KEY,
     `title` VARCHAR(255) NOT NULL,
     `datetime` DATETIME NOT NULL,
+    `duration_minutes` INT NULL DEFAULT 60 COMMENT 'Meeting duration in minutes; used to prevent overlapping meetings',
     `status` ENUM('Scheduled', 'Completed', 'Cancelled') NOT NULL,
     `administrator_id` VARCHAR(36) NOT NULL,
     `group_id` VARCHAR(36) NOT NULL,
@@ -191,6 +192,27 @@ CREATE TABLE IF NOT EXISTS `meeting` (
         ON UPDATE CASCADE,
     CONSTRAINT `fk_meeting_group` 
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
+        ON DELETE CASCADE 
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 9b. MEETING PARTICIPANT TABLE (members in a meeting)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `meeting_participant` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `meeting_id` VARCHAR(36) NOT NULL,
+    `member_id` VARCHAR(36) NOT NULL,
+    `joined_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_meeting_member` (`meeting_id`, `member_id`),
+    INDEX `idx_meeting_id` (`meeting_id`),
+    INDEX `idx_member_id` (`member_id`),
+    CONSTRAINT `fk_meeting_participant_meeting` 
+        FOREIGN KEY (`meeting_id`) REFERENCES `meeting`(`id`) 
+        ON DELETE CASCADE 
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_meeting_participant_member` 
+        FOREIGN KEY (`member_id`) REFERENCES `member`(`user_id`) 
         ON DELETE CASCADE 
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

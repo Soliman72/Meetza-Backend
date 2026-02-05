@@ -14,7 +14,6 @@ router.get(
   chatController.getGroupMessages
 );
 
-
 router.post(
   "/groups/:groupId/messages",
   verifyToken,
@@ -72,10 +71,11 @@ router.get(
   chatController.getUnreadCount
 );
 
-// router.get(
-//   "/groups/:groupId/meetings",
-//   verifyToken,
-//   chatController.getGroupMeetings
-// );
+// Group meetings for calendar (visible to all members/admins of the group)
+router.get(
+  "/groups/:groupId/meetings",
+  verifyToken,
+  chatController.getGroupMeetings
+);
 
 module.exports = router;
