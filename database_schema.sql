@@ -170,13 +170,12 @@ CREATE TABLE IF NOT EXISTS `group_membership` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 9. MEETING TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `meeting` (
     `id` VARCHAR(36) PRIMARY KEY,
     `title` VARCHAR(255) NOT NULL,
-    `datetime` DATETIME NOT NULL,
-    `duration_minutes` INT NULL DEFAULT 60 COMMENT 'Meeting duration in minutes; used to prevent overlapping meetings',
+    `start_time` DATETIME NOT NULL,
+    `end_time` DATETIME NOT NULL,
     `status` ENUM('Scheduled', 'Completed', 'Cancelled') NOT NULL,
     `administrator_id` VARCHAR(36) NOT NULL,
     `group_id` VARCHAR(36) NOT NULL,
@@ -184,7 +183,8 @@ CREATE TABLE IF NOT EXISTS `meeting` (
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
-    INDEX `idx_datetime` (`datetime`),
+    INDEX `idx_start_time` (`start_time`),
+    INDEX `idx_end_time` (`end_time`),
     INDEX `idx_status` (`status`),
     CONSTRAINT `fk_meeting_administrator` 
         FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 

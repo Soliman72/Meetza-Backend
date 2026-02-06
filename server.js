@@ -55,6 +55,8 @@ registerNotificationSocket(io);
 
 // Serve static files (videos, posters) from the uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Simple static test front-end (e.g. /meeting-test.html)
+app.use(express.static(path.join(__dirname, "public")));
 
 const port = process.env.PORT;
 app.use(cors());

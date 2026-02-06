@@ -8,13 +8,14 @@ const { createNotification } = require("../services/notificationService");
 // Create a meeting (admin of the group only; no overlapping Scheduled meetings for same group)
 exports.createMeeting = async (req, res) => {
   try {
-    const { title, datetime, group_id, status, duration_minutes } = req.body;
+    const { title, start_time, end_time, group_id, status } = req.body;
     const id = uuidv4();
 
-    if (!title || !datetime || !group_id || !status) {
+    if (!title || !start_time || !end_time || !group_id || !status) {
       return res.status(400).json({
         success: false,
-        message: "Title, datetime, group_id, and status are required",
+        message:
+          "Title, start_time, end_time, group_id, and status are required",
       });
     }
 
@@ -26,6 +27,21 @@ exports.createMeeting = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Status must be one of: Scheduled, Completed, Cancelled",
+      });
+    }
+
+    const start = new Date(start_time);
+    const end = new Date(end_time);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "start_time and end_time must be valid dates",
+      });
+    }
+    if (start >= end) {
+      return res.status(400).json({
+        success: false,
+        message: "end_time must be after start_time",
       });
     }
 
@@ -48,8 +64,10 @@ exports.createMeeting = async (req, res) => {
       });
     }
 
-    // Only the group's admin can create a meeting for this group
-    if (group.administrator_id !== administrator_id && !req.isSuperAdmin) {
+    // Only the group's admin can create a meeting for this group (super admin cannot)
+
+    if (group.administrator_id !== administrator_id) {
+      // && !req.isSuperAdmin
       return res.status(403).json({
         success: false,
         message:
@@ -57,22 +75,12 @@ exports.createMeeting = async (req, res) => {
       });
     }
 
-    const duration =
-      duration_minutes != null ? parseInt(duration_minutes, 10) : 60;
-    if (isNaN(duration) || duration < 1) {
-      return res.status(400).json({
-        success: false,
-        message: "duration_minutes must be a positive number",
-      });
-    }
-
     // No overlapping Scheduled meetings for the same group at the same time
     const [overlap] = await db.promise().query(
       `SELECT id FROM meeting
        WHERE group_id = ? AND status = 'Scheduled'
-       AND datetime < DATE_ADD(?, INTERVAL ? MINUTE)
-       AND DATE_ADD(datetime, INTERVAL COALESCE(duration_minutes, 60) MINUTE) > ?`,
-      [group_id, datetime, duration, datetime]
+       AND start_time < ? AND end_time > ?`,
+      [group_id, end_time, start_time]
     );
     if (overlap.length > 0) {
       return res.status(409).json({
@@ -82,15 +90,15 @@ exports.createMeeting = async (req, res) => {
       });
     }
 
-    const query = `INSERT INTO meeting (id, title, datetime, duration_minutes, status, administrator_id, group_id)
+    const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?)`;
     await db
       .promise()
       .query(query, [
         id,
         title,
-        datetime,
-        duration,
+        start_time,
+        end_time,
         status,
         administrator_id,
         group_id,
@@ -105,7 +113,7 @@ exports.createMeeting = async (req, res) => {
         ]);
 
       const notificationTitle = "New meeting scheduled";
-      const notificationMessage = `A new meeting \"${title}\" is scheduled for ${datetime}.`;
+      const notificationMessage = `A new meeting \"${title}\" is scheduled from ${start_time} to ${end_time}.`;
 
       await Promise.all(
         members.map((m) =>
@@ -128,8 +136,8 @@ exports.createMeeting = async (req, res) => {
       data: {
         id,
         title,
-        datetime,
-        duration_minutes: duration,
+        start_time,
+        end_time,
         group_id,
         status,
       },
@@ -235,7 +243,7 @@ exports.getMeetingById = async (req, res) => {
 exports.updateMeetingById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, datetime, group_id, status, duration_minutes } = req.body;
+    const { title, start_time, end_time, group_id, status } = req.body;
 
     if (!id) {
       return res.status(400).json({
@@ -268,9 +276,30 @@ exports.updateMeetingById = async (req, res) => {
       updates.push("title = ?");
       params.push(title);
     }
-    if (datetime != null) {
-      updates.push("datetime = ?");
-      params.push(datetime);
+    // Compute prospective start/end for validation
+    const newStart =
+      start_time != null ? new Date(start_time) : new Date(meeting.start_time);
+    const newEnd =
+      end_time != null ? new Date(end_time) : new Date(meeting.end_time);
+    if (Number.isNaN(newStart.getTime()) || Number.isNaN(newEnd.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "start_time and end_time must be valid dates",
+      });
+    }
+    if (newStart >= newEnd) {
+      return res.status(400).json({
+        success: false,
+        message: "end_time must be after start_time",
+      });
+    }
+    if (start_time != null) {
+      updates.push("start_time = ?");
+      params.push(start_time);
+    }
+    if (end_time != null) {
+      updates.push("end_time = ?");
+      params.push(end_time);
     }
     if (status != null) {
       if (!["Scheduled", "Completed", "Cancelled"].includes(status)) {
@@ -286,17 +315,31 @@ exports.updateMeetingById = async (req, res) => {
       updates.push("group_id = ?");
       params.push(group_id);
     }
-    if (duration_minutes != null) {
-      updates.push("duration_minutes = ?");
-      params.push(parseInt(duration_minutes, 10));
-    }
 
     if (updates.length === 0) {
       return res.status(400).json({
         success: false,
         message:
-          "At least one field to update is required (title, datetime, status, group_id, duration_minutes)",
+          "At least one field to update is required (title, start_time, end_time, status, group_id)",
       });
+    }
+
+    // Enforce no overlap when start/end changed or status is Scheduled
+    const effectiveStatus = status != null ? status : meeting.status;
+    if (effectiveStatus === "Scheduled") {
+      const [overlap] = await db.promise().query(
+        `SELECT id FROM meeting
+         WHERE group_id = ? AND status = 'Scheduled' AND id <> ?
+         AND start_time < ? AND end_time > ?`,
+        [group_id || meeting.group_id, id, newEnd, newStart]
+      );
+      if (overlap.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This group already has a Scheduled meeting at that time. Choose a different time range.",
+        });
+      }
     }
 
     params.push(id);
@@ -594,7 +637,7 @@ exports.getMeetingsByGroup = async (req, res) => {
        FROM meeting m
        JOIN user u ON u.id = m.administrator_id
        WHERE m.group_id = ?
-       ORDER BY m.datetime DESC`,
+       ORDER BY m.start_time DESC`,
       [group_id]
     );
 

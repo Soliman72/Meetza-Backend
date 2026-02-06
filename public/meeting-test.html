@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Meetza – Meeting WebRTC Test</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #0f172a;
+        color: #e5e7eb;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      .row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      video {
+        width: 320px;
+        height: 240px;
+        background: #111827;
+        border-radius: 8px;
+        border: 1px solid #374151;
+        object-fit: cover;
+      }
+      #logs {
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 8px;
+        background: #020617;
+        border-radius: 8px;
+        border: 1px solid #1f2937;
+        font-size: 12px;
+        margin-top: 12px;
+      }
+      button {
+        background: #2563eb;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 16px;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      input {
+        width: 100%;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #e5e7eb;
+        font-size: 13px;
+      }
+      label {
+        font-size: 12px;
+        color: #9ca3af;
+      }
+      .field {
+        margin-bottom: 8px;
+      }
+      #remote-videos {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .remote-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .remote-label {
+        font-size: 11px;
+        color: #9ca3af;
+      }
+    </style>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  </head>
+  <body>
+    <h1>Meetza – Meeting WebRTC Test</h1>
+    <p style="font-size: 13px; color: #9ca3af">
+      Open this page in 2+ browsers. Use the same
+      <code>SERVER_URL</code> and <code>MEETING_ID</code>, but different JWTs.
+      You should see your local camera and remote videos from other browsers.
+    </p>
+
+    <div style="max-width: 640px; margin-bottom: 12px">
+      <div class="field">
+        <label>SERVER_URL (e.g. http://localhost:3000)</label>
+        <input id="serverUrl" />
+      </div>
+      <div class="field">
+        <label>JWT (paste your token)</label>
+        <input id="jwt" />
+      </div>
+      <div class="field">
+        <label>MEETING_ID</label>
+        <input id="meetingId" />
+      </div>
+      <button id="startBtn">Start & Join Meeting</button>
+      <button id="leaveBtn" disabled>Leave Meeting</button>
+      <button id="muteBtn" disabled>Toggle Mute</button>
+      <button id="handBtn" disabled>Toggle Hand</button>
+      <button id="likeBtn" disabled>Send Like</button>
+    </div>
+
+    <div class="row">
+      <div>
+        <h3>Local video</h3>
+        <video id="localVideo" autoplay playsinline muted></video>
+      </div>
+      <div>
+        <h3>Remote videos</h3>
+        <div id="remote-videos"></div>
+      </div>
+    </div>
+
+    <div id="logs"></div>
+
+    <script>
+      const logEl = document.getElementById("logs");
+      const localVideo = document.getElementById("localVideo");
+      const remoteVideos = document.getElementById("remote-videos");
+      const startBtn = document.getElementById("startBtn");
+      const leaveBtn = document.getElementById("leaveBtn");
+      const muteBtn = document.getElementById("muteBtn");
+      const handBtn = document.getElementById("handBtn");
+      const likeBtn = document.getElementById("likeBtn");
+
+      function log(msg, data) {
+        const line = document.createElement("div");
+        line.textContent =
+          new Date().toISOString().slice(11, 19) +
+          " | " +
+          msg +
+          (data ? " " + JSON.stringify(data) : "");
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      let socket;
+      let localStream;
+      let muted = false;
+      let handRaised = false;
+
+      const peers = new Map(); // socketId -> RTCPeerConnection
+
+      function createPeerConnection(peerSocketId) {
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        });
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit(
+              "webrtcIceCandidate",
+              {
+                toSocketId: peerSocketId,
+                meetingId: currentMeetingId,
+                candidate: event.candidate,
+              },
+              (ack) => ack?.ok || log("ice ack error", ack)
+            );
+          }
+        };
+
+        pc.ontrack = (event) => {
+          log("Received track from", peerSocketId, { tracks: event.track.kind });
+          let wrapper = document.getElementById("remote-" + peerSocketId);
+          if (!wrapper) {
+            wrapper = document.createElement("div");
+            wrapper.id = "remote-" + peerSocketId;
+            wrapper.className = "remote-wrapper";
+            const video = document.createElement("video");
+            video.autoplay = true;
+            video.playsInline = true;
+            video.id = "remote-video-" + peerSocketId;
+            const label = document.createElement("div");
+            label.className = "remote-label";
+            label.textContent = peerSocketId;
+            wrapper.appendChild(video);
+            wrapper.appendChild(label);
+            remoteVideos.appendChild(wrapper);
+            log("Created remote video element for", peerSocketId);
+          }
+          const video = document.getElementById("remote-video-" + peerSocketId);
+          if (video && event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+            log("Set video srcObject for", peerSocketId);
+          }
+        };
+
+        pc.onconnectionstatechange = () => {
+          log("Connection state changed for", peerSocketId, { state: pc.connectionState });
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          log("ICE connection state changed for", peerSocketId, { state: pc.iceConnectionState });
+        };
+
+        if (localStream) {
+          localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+        }
+
+        return pc;
+      }
+
+      function removePeer(peerSocketId) {
+        const pc = peers.get(peerSocketId);
+        if (pc) {
+          pc.close();
+          peers.delete(peerSocketId);
+        }
+        const wrapper = document.getElementById("remote-" + peerSocketId);
+        if (wrapper && wrapper.parentNode) {
+          wrapper.parentNode.removeChild(wrapper);
+        }
+      }
+
+      let currentMeetingId = null;
+
+      startBtn.onclick = async () => {
+        const serverUrl = document.getElementById("serverUrl").value.trim();
+        const jwt = document.getElementById("jwt").value.trim();
+        const meetingId = document.getElementById("meetingId").value.trim();
+        if (!serverUrl || !jwt || !meetingId) {
+          alert("Fill SERVER_URL, JWT, and MEETING_ID first.");
+          return;
+        }
+        currentMeetingId = meetingId;
+
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+          localVideo.srcObject = localStream;
+        } catch (e) {
+          console.error(e);
+          alert("Could not access camera/microphone.");
+          return;
+        }
+
+        socket = io(serverUrl, {
+          auth: { token: jwt },
+          transports: ["websocket"],
+        });
+
+        socket.on("connect", () => {
+          log("socket connected", { id: socket.id });
+          socket.emit("joinMeetingRoom", { meetingId }, async (ack) => {
+            log("joinMeetingRoom ack", ack);
+            if (!ack?.ok) {
+              log("joinMeetingRoom failed", ack);
+              return;
+            }
+
+            log("Existing participants:", ack.participants?.length || 0);
+            // For each existing participant, create a connection and send offer
+            // But add a small delay to avoid race conditions if they're also joining
+            for (const p of ack.participants || []) {
+              if (p.socketId === socket.id) continue; // Skip self
+              log("Found existing participant", p.socketId);
+              if (peers.has(p.socketId)) {
+                log("Peer connection already exists for", p.socketId);
+                continue;
+              }
+              
+              // Small delay to let the other side finish their join process
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              log("Creating peer connection for", p.socketId);
+              const pc = createPeerConnection(p.socketId);
+              peers.set(p.socketId, pc);
+              
+              try {
+                // Wait a bit more to ensure connection is ready
+                await new Promise(resolve => setTimeout(resolve, 50));
+                
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                log("Sending offer to", p.socketId);
+                socket.emit(
+                  "webrtcOffer",
+                  {
+                    toSocketId: p.socketId,
+                    meetingId,
+                    sdp: offer,
+                  },
+                  (offerAck) => {
+                    if (offerAck?.ok) {
+                      log("webrtcOffer sent successfully to", p.socketId);
+                    } else {
+                      log("webrtcOffer failed", offerAck);
+                    }
+                  }
+                );
+              } catch (err) {
+                log("Error creating offer", { error: err.message });
+              }
+            }
+          });
+        });
+
+        socket.on("participantJoined", async (data) => {
+          log("participantJoined", data);
+          const { socketId, meetingId: mid } = data;
+          if (mid !== currentMeetingId) {
+            log("Ignoring participantJoined - wrong meeting", mid);
+            return;
+          }
+          if (socketId === socket.id) {
+            log("Ignoring participantJoined - self");
+            return;
+          }
+          if (peers.has(socketId)) {
+            log("Peer connection already exists for new participant", socketId);
+            return;
+          }
+          
+          // Small delay to avoid race conditions
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          log("Creating peer connection for new participant", socketId);
+          const pc = createPeerConnection(socketId);
+          peers.set(socketId, pc);
+          
+          try {
+            // Wait a bit to ensure connection is ready
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            log("Sending offer to new participant", socketId);
+            socket.emit(
+              "webrtcOffer",
+              {
+                toSocketId: socketId,
+                meetingId: currentMeetingId,
+                sdp: offer,
+              },
+              (ack) => {
+                if (ack?.ok) {
+                  log("webrtcOffer sent successfully to new participant", socketId);
+                } else {
+                  log("webrtcOffer failed for new participant", ack);
+                }
+              }
+            );
+          } catch (err) {
+            log("Error creating offer for new participant", { error: err.message });
+          }
+        });
+
+        socket.on("participantLeft", (data) => {
+          log("participantLeft", data);
+          removePeer(data.socketId);
+        });
+
+        socket.on("webrtcOffer", async (data) => {
+          log("webrtcOffer received", { from: data.fromSocketId });
+          const { fromSocketId, meetingId: mid, sdp } = data;
+          if (mid !== currentMeetingId) {
+            log("Ignoring webrtcOffer - wrong meeting", mid);
+            return;
+          }
+          let pc = peers.get(fromSocketId);
+          const isNewConnection = !pc;
+          
+          if (!pc) {
+            log("Creating peer connection for incoming offer from", fromSocketId);
+            pc = createPeerConnection(fromSocketId);
+            peers.set(fromSocketId, pc);
+          }
+          
+          try {
+            // Check signaling state
+            const currentState = pc.signalingState;
+            log("Current signaling state", { state: currentState });
+            
+            // If we already have a remote description (offer), ignore duplicate
+            if (pc.remoteDescription && pc.remoteDescription.type === "offer") {
+              log("Already have remote offer, ignoring duplicate");
+              return;
+            }
+            
+            // If we're in stable state and this is a new connection, we might have sent an offer already
+            // In that case, we should wait for their answer instead of processing this offer
+            if (currentState === "stable" && !isNewConnection) {
+              log("Connection stable - we may have already sent offer, waiting for their answer instead");
+              // Don't process this offer, wait for their answer to our offer
+              return;
+            }
+            
+            // Only process offer if we're in a state that can accept it
+            if (currentState === "stable" || currentState === "have-local-offer") {
+              // If we're in have-local-offer, it means we sent an offer and are waiting for answer
+              // We shouldn't process an incoming offer in this state - it's a race condition
+              if (currentState === "have-local-offer") {
+                log("Already waiting for answer, ignoring incoming offer (race condition)");
+                return;
+              }
+            }
+            
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            log("Set remote description (offer), creating answer");
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            log("Sending answer to", fromSocketId);
+            socket.emit(
+              "webrtcAnswer",
+              {
+                toSocketId: fromSocketId,
+                meetingId: currentMeetingId,
+                sdp: answer,
+              },
+              (ack) => {
+                if (ack?.ok) {
+                  log("webrtcAnswer sent successfully");
+                } else {
+                  log("webrtcAnswer failed", ack);
+                }
+              }
+            );
+          } catch (err) {
+            // If error is about wrong state, it's likely a race condition
+            if (err.message.includes("wrong state") || err.message.includes("stable")) {
+              log("Offer received but connection in wrong state (race condition)", { 
+                error: err.message,
+                state: pc.signalingState 
+              });
+            } else {
+              log("Error handling webrtcOffer", { error: err.message });
+            }
+          }
+        });
+
+        socket.on("webrtcAnswer", async (data) => {
+          log("webrtcAnswer received", { from: data.fromSocketId });
+          const { fromSocketId, meetingId: mid, sdp } = data;
+          if (mid !== currentMeetingId) {
+            log("Ignoring webrtcAnswer - wrong meeting", mid);
+            return;
+          }
+          const pc = peers.get(fromSocketId);
+          if (!pc) {
+            log("No peer connection found for answer from", fromSocketId);
+            return;
+          }
+          try {
+            // Check connection state - if already stable, we might have processed this already
+            if (pc.signalingState === "stable") {
+              log("Connection already stable, checking if we need to update");
+              // If we have a remote description already, check if it's different
+              if (pc.remoteDescription && pc.remoteDescription.type === "answer") {
+                log("Already have answer, ignoring duplicate");
+                return;
+              }
+              // If we're stable but don't have remote description, something is wrong
+              // But try to set it anyway
+            }
+            
+            // Only set if we're in have-local-offer state (waiting for answer)
+            if (pc.signalingState === "have-local-offer") {
+              await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+              log("Set remote description (answer) successfully");
+            } else {
+              log("Cannot set answer - wrong signaling state", { state: pc.signalingState });
+            }
+          } catch (err) {
+            // If error is about wrong state, it's likely a race condition - log but don't fail
+            if (err.message.includes("wrong state") || err.message.includes("stable")) {
+              log("Answer received but connection already stable (race condition - OK)", { error: err.message });
+            } else {
+              log("Error handling webrtcAnswer", { error: err.message });
+            }
+          }
+        });
+
+        socket.on("webrtcIceCandidate", async (data) => {
+          const { fromSocketId, meetingId: mid, candidate } = data;
+          if (mid !== currentMeetingId) return;
+          const pc = peers.get(fromSocketId);
+          if (!pc || !candidate) return;
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            log("addIceCandidate error", { error: e.message });
+          }
+        });
+
+        socket.on("mediaStateUpdated", (data) =>
+          log("mediaStateUpdated", data)
+        );
+        socket.on("handRaised", (data) => log("handRaised", data));
+        socket.on("reaction", (data) => log("reaction", data));
+
+        socket.on("connect_error", (err) =>
+          log("connect_error", { message: err.message })
+        );
+        socket.on("disconnect", (reason) => log("disconnect", { reason }));
+
+        startBtn.disabled = true;
+        leaveBtn.disabled = false;
+        muteBtn.disabled = false;
+        handBtn.disabled = false;
+        likeBtn.disabled = false;
+      };
+
+      leaveBtn.onclick = () => {
+        if (socket && currentMeetingId) {
+          socket.emit("leaveMeetingRoom", { meetingId: currentMeetingId });
+          socket.disconnect();
+        }
+        peers.forEach((_, id) => removePeer(id));
+        peers.clear();
+        if (localStream) {
+          localStream.getTracks().forEach((t) => t.stop());
+          localStream = null;
+        }
+        localVideo.srcObject = null;
+        startBtn.disabled = false;
+        leaveBtn.disabled = true;
+        muteBtn.disabled = true;
+        handBtn.disabled = true;
+        likeBtn.disabled = true;
+      };
+
+      muteBtn.onclick = () => {
+        if (!localStream || !socket || !currentMeetingId) return;
+        muted = !muted;
+        localStream.getAudioTracks().forEach((t) => (t.enabled = !muted));
+        socket.emit(
+          "updateMediaState",
+          {
+            meetingId: currentMeetingId,
+            audioMuted: muted,
+            videoMuted: false,
+          },
+          (ack) => log("updateMediaState ack", ack)
+        );
+      };
+
+      handBtn.onclick = () => {
+        if (!socket || !currentMeetingId) return;
+        handRaised = !handRaised;
+        socket.emit(
+          "raiseHand",
+          { meetingId: currentMeetingId, raised: handRaised },
+          (ack) => log("raiseHand ack", ack)
+        );
+      };
+
+      likeBtn.onclick = () => {
+        if (!socket || !currentMeetingId) return;
+        socket.emit(
+          "reaction",
+          { meetingId: currentMeetingId, type: "like" },
+          (ack) => log("reaction ack", ack)
+        );
+      };
+    </script>
+  </body>
+</html>
+

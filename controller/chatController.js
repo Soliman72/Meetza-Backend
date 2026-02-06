@@ -644,7 +644,7 @@ exports.getGroupMeetings = async (req, res) => {
           message: "Invalid 'from' date",
         });
       }
-      whereClause += " AND datetime >= ?";
+      whereClause += " AND start_time >= ?";
       params.push(fromDate);
     }
 
@@ -656,7 +656,7 @@ exports.getGroupMeetings = async (req, res) => {
           message: "Invalid 'to' date",
         });
       }
-      whereClause += " AND datetime <= ?";
+      whereClause += " AND start_time <= ?";
       params.push(toDate);
     }
 
@@ -665,11 +665,12 @@ exports.getGroupMeetings = async (req, res) => {
           SELECT
             id,
             title,
-            datetime,
+            start_time,
+            end_time,
             status
           FROM meeting
           ${whereClause}
-          ORDER BY datetime ASC
+          ORDER BY start_time ASC
         `,
       params
     );
