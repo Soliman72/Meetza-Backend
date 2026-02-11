@@ -221,12 +221,24 @@ exports.addFilesToGroupContent = (req, res) => {
 
     try {
       const { id } = req.params;
+      const { meeting_id } = req.body;
 
       if (!id) {
         return res.status(400).json({
           success: false,
           message: "Content id is required",
         });
+      }
+
+      if (meeting_id) {
+        const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
+        const [meetingRows] = await db.promise().query(meetingCheckQuery, [meeting_id]);
+        if (meetingRows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Meeting not found",
+          });
+        }
       }
 
       // Verify group content exists
@@ -299,7 +311,7 @@ exports.addFilesToGroupContent = (req, res) => {
 
             // Insert resource into database
             const resourceQuery =
-              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
+              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size, meeting_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
             await db
               .promise()
               .query(resourceQuery, [
@@ -309,6 +321,7 @@ exports.addFilesToGroupContent = (req, res) => {
                 file.originalname,
                 file.mimetype,
                 file.size,
+                meeting_id,
               ]);
 
             uploadedResources.push({
@@ -360,7 +373,7 @@ exports.addFilesToGroupContent = (req, res) => {
             const resourceId = uuidv4();
             // Insert link as resource into database
             const resourceQuery =
-              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)";
+              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size, meeting_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
             await db
               .promise()
               .query(resourceQuery, [
@@ -370,6 +383,7 @@ exports.addFilesToGroupContent = (req, res) => {
                 link,
                 "link",
                 0,
+                meeting_id,
               ]);
             uploadedResources.push({
               id: resourceId,
@@ -500,6 +514,31 @@ exports.deleteFileFromGroupContent = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "File deleted successfully",
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
+  }
+};
+
+// Get group content resources by meeting id
+exports.getGroupContentResourcesByMeetingId = async (req, res) => {
+  try {
+    const { meeting_id } = req.params;
+    if (!meeting_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting id is required",
+      });
+    }
+    const query = "SELECT * FROM group_content_resource WHERE meeting_id = ?";
+    const [resources] = await db.promise().query(query, [meeting_id]);
+    return res.status(200).json({
+      success: true,
+      data: resources,
     });
   } catch (err) {
     return res.status(500).json({
