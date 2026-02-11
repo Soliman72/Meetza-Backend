@@ -229,7 +229,7 @@ const res = await fetch(`/api/meeting/${meetingId}/save-recording`, {
   body: formData,
 });
 const data = await res.json();
-// data.data: id, title (auto or provided), meeting_id, video_url, poster_url, date_recorded, group_id, etc.
+// data.data: id, title (auto or provided), meeting_id, video_url, poster_url, duration, group_id, etc.
 ```
 
 Example – with optional title and description:

@@ -116,7 +116,7 @@ So the thinking: **rooms = membership**, **socket id = identity for signaling**,
 ### “Save as video” = one REST endpoint
 
 - You already have:
-  - **video** table: `id`, `title`, `meeting_id`, `video_url`, `poster_url`, `administrator_id`, `date_recorded`, `description`, `group_id`.
+  - **video** table: `id`, `title`, `meeting_id`, `video_url`, `poster_url`, `administrator_id`, `duration`, `description`, `group_id`.
   - **createVideo** that uploads a file and inserts a row.
 - So “save meeting recording” is: **same schema**, but:
   - The file comes from the **client** (the recorded blob).
