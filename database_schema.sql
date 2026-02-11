@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS `video` (
     `video_url` TEXT NOT NULL,
     `poster_url` TEXT NULL,
     `administrator_id` VARCHAR(36) NOT NULL,
-    `date_recorded` DATE NOT NULL,
+    `duration` TIME NOT NULL,
     `description` TEXT NULL,
     `group_id` VARCHAR(36) NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS `video` (
     INDEX `idx_meeting_id` (`meeting_id`),
     INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
-    INDEX `idx_date_recorded` (`date_recorded`),
+    INDEX `idx_duration` (`duration`),
     CONSTRAINT `fk_video_meeting` 
         FOREIGN KEY (`meeting_id`) REFERENCES `meeting`(`id`) 
         ON DELETE SET NULL 

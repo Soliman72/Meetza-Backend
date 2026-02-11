@@ -19,7 +19,7 @@ exports.createVideo = (req, res) => {
     }
 
     try {
-      const { title, meeting_id, group_id , date_recorded, description } = req.body;
+      const { title, meeting_id, group_id , duration, description } = req.body;
       const id = uuidv4();
 
       // Ensure both files are uploaded
@@ -102,13 +102,13 @@ exports.createVideo = (req, res) => {
         });
       }
 
-      // Set default date_recorded to current date if not provided (date_recorded is NOT NULL in DB)
-      const finalDateRecorded = date_recorded || new Date().toISOString().split('T')[0];
+      // Set default duration to current date if not provided (duration is NOT NULL in DB)
+      const finalDuration = duration || 0;
       // description can be NULL, so we keep it as is
 
       // Insert the video into the database
       const query =
-        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, date_recorded, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, ? ,? , ?)";
+        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, duration, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, ? ,? , ?)";
       await db.promise().query(query, [
         id,
         title,
@@ -116,7 +116,7 @@ exports.createVideo = (req, res) => {
         videoUrl, // Store the video file path
         posterUrl, // Store the poster file path
         req.body.administrator_id,
-        finalDateRecorded,
+        finalDuration,
         description || null,
         group_id
       ]);
@@ -130,7 +130,7 @@ exports.createVideo = (req, res) => {
           meeting_id: meeting_id || null,
           video_url: videoUrl,
           poster_url: posterUrl,
-          date_recorded: finalDateRecorded,
+          duration: finalDuration,
           description: description || null,
           administrator_id: req.body.administrator_id,
           group_id
@@ -301,7 +301,7 @@ exports.updateVideo = (req, res) => {
       const updateParams = [];
 
       // Handle basic fields from body
-      const { title, meeting_id, group_id ,  date_recorded, description } = req.body;
+      const { title, meeting_id, group_id ,  duration, description } = req.body;
       if ( title) {
         updateFields.push("title = ?");
         updateParams.push(title);
@@ -321,9 +321,9 @@ exports.updateVideo = (req, res) => {
         updateFields.push("meeting_id = ?");
         updateParams.push(meeting_id);
       }
-      if (date_recorded) {
-        updateFields.push("date_recorded = ?");
-        updateParams.push(date_recorded);
+      if (duration) {
+        updateFields.push("duration = ?");
+        updateParams.push(duration);
       }
       if (description) {
         updateFields.push("description = ?");
