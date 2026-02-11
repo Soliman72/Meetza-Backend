@@ -80,7 +80,7 @@ exports.createMeeting = async (req, res) => {
       `SELECT id FROM meeting
        WHERE group_id = ? AND status = 'Scheduled'
        AND start_time < ? AND end_time > ?`,
-      [group_id, end_time, start_time]
+      [group_id, end_time, start_time],
     );
     if (overlap.length > 0) {
       return res.status(409).json({
@@ -122,8 +122,8 @@ exports.createMeeting = async (req, res) => {
             memberId: m.member_id,
             title: notificationTitle,
             message: notificationMessage,
-          })
-        )
+          }),
+        ),
       );
     } catch (notifyErr) {
       // Do not block meeting creation if notifications fail
@@ -220,7 +220,7 @@ exports.getMeetingById = async (req, res) => {
       .promise()
       .query(
         "SELECT id FROM group_membership WHERE group_id = ? AND member_id = ?",
-        [meeting.group_id, userId]
+        [meeting.group_id, userId],
       );
     if (membership.length > 0) {
       return res.status(200).json({ success: true, data: meeting });
@@ -331,7 +331,7 @@ exports.updateMeetingById = async (req, res) => {
         `SELECT id FROM meeting
          WHERE group_id = ? AND status = 'Scheduled' AND id <> ?
          AND start_time < ? AND end_time > ?`,
-        [group_id || meeting.group_id, id, newEnd, newStart]
+        [group_id || meeting.group_id, id, newEnd, newStart],
       );
       if (overlap.length > 0) {
         return res.status(409).json({
@@ -421,7 +421,7 @@ exports.joinMeeting = async (req, res) => {
       .promise()
       .query(
         "SELECT m.*, g.administrator_id AS group_admin_id FROM meeting m JOIN `group` g ON g.id = m.group_id WHERE m.id = ?",
-        [meetingId]
+        [meetingId],
       );
     if (meetingRows.length === 0) {
       return res
@@ -430,42 +430,37 @@ exports.joinMeeting = async (req, res) => {
     }
     const meeting = meetingRows[0];
 
-    const [memberRows] = await db
-      .promise()
-      .query("SELECT user_id FROM member WHERE user_id = ?", [userId]);
-    if (memberRows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "Only members can join meetings. You are not registered as a member.",
-      });
-    }
-    const member_id = memberRows[0].user_id;
-
     const [membership] = await db
       .promise()
       .query(
         "SELECT id FROM group_membership WHERE group_id = ? AND member_id = ?",
-        [meeting.group_id, member_id]
+        [meeting.group_id, userId],
       );
-    if (membership.length === 0) {
+    if (membership.length === 0 && req.user.role == "Member") {
       return res.status(403).json({
         success: false,
         message: "Only members of this meeting's group can join the meeting",
       });
+    } else if (req.user.role == "Administrator") {
+      if (userId != meeting.administrator_id) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not the Administrator of this meeting!",
+        });
+      }
     }
 
     const [existing] = await db
       .promise()
       .query(
-        "SELECT id FROM meeting_participant WHERE meeting_id = ? AND member_id = ?",
-        [meetingId, member_id]
+        "SELECT id FROM meeting_participant WHERE meeting_id = ? AND user_id = ?",
+        [meetingId, userId],
       );
     if (existing.length > 0) {
       return res.status(200).json({
         success: true,
         message: "You are already in this meeting",
-        data: { meeting_id: meetingId, member_id },
+        data: { meeting_id: meetingId, userId },
       });
     }
 
@@ -473,14 +468,14 @@ exports.joinMeeting = async (req, res) => {
     await db
       .promise()
       .query(
-        "INSERT INTO meeting_participant (id, meeting_id, member_id) VALUES (?, ?, ?)",
-        [participantId, meetingId, member_id]
+        "INSERT INTO meeting_participant (id, meeting_id, user_id) VALUES (?, ?, ?)",
+        [participantId, meetingId, userId],
       );
 
     return res.status(201).json({
       success: true,
       message: "Joined the meeting successfully",
-      data: { id: participantId, meeting_id: meetingId, member_id },
+      data: { id: participantId, meeting_id: meetingId, userId },
     });
   } catch (err) {
     return res.status(500).json({
@@ -503,22 +498,11 @@ exports.leaveMeeting = async (req, res) => {
       });
     }
 
-    const [memberRows] = await db
-      .promise()
-      .query("SELECT user_id FROM member WHERE user_id = ?", [userId]);
-    if (memberRows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: "Only members can leave meetings",
-      });
-    }
-    const member_id = memberRows[0].user_id;
-
     const [result] = await db
       .promise()
       .query(
-        "DELETE FROM meeting_participant WHERE meeting_id = ? AND member_id = ?",
-        [meetingId, member_id]
+        "DELETE FROM meeting_participant WHERE meeting_id = ? AND user_id = ?",
+        [meetingId, userId],
       );
 
     if (result.affectedRows === 0) {
@@ -570,8 +554,8 @@ exports.getMeetingParticipants = async (req, res) => {
       const [membership] = await db
         .promise()
         .query(
-          "SELECT id FROM group_membership WHERE group_id = ? AND member_id = ?",
-          [meeting.group_id, userId]
+          "SELECT id FROM group_membership WHERE group_id = ? AND user_id = ?",
+          [meeting.group_id, userId],
         );
       if (membership.length === 0) {
         return res.status(403).json({
@@ -583,13 +567,13 @@ exports.getMeetingParticipants = async (req, res) => {
     }
 
     const [rows] = await db.promise().query(
-      `SELECT mp.id, mp.meeting_id, mp.member_id, mp.joined_at,
+      `SELECT mp.id, mp.meeting_id, mp.user_id, mp.joined_at,
               u.name AS member_name, u.email AS member_email, u.user_photo AS member_photo
        FROM meeting_participant mp
-       JOIN user u ON u.id = mp.member_id
+       JOIN user u ON u.id = mp.user_id
        WHERE mp.meeting_id = ?
        ORDER BY mp.joined_at ASC`,
-      [meetingId]
+      [meetingId],
     );
 
     return res.status(200).json({
@@ -638,7 +622,7 @@ exports.getMeetingsByGroup = async (req, res) => {
        JOIN user u ON u.id = m.administrator_id
        WHERE m.group_id = ?
        ORDER BY m.start_time DESC`,
-      [group_id]
+      [group_id],
     );
 
     return res.status(200).json({
@@ -652,122 +636,4 @@ exports.getMeetingsByGroup = async (req, res) => {
       error: err.message,
     });
   }
-};
-
-// Save meeting recording as a video (admin only; upload recorded file from client)
-exports.saveMeetingRecording = (req, res) => {
-  upload.fields([
-    { name: "video_file", maxCount: 1 },
-    { name: "poster_file", maxCount: 1 },
-  ])(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ success: false, message: err.message });
-    }
-    try {
-      const { id: meetingId } = req.params;
-      const { title, description } = req.body;
-      if (!meetingId) {
-        return res.status(400).json({
-          success: false,
-          message: "Meeting id is required",
-        });
-      }
-      const videoFile = req.files?.video_file?.[0];
-      if (!videoFile) {
-        return res.status(400).json({
-          success: false,
-          message: "video_file is required (recorded meeting video)",
-        });
-      }
-
-      const [meetingRows] = await db
-        .promise()
-        .query("SELECT * FROM meeting WHERE id = ?", [meetingId]);
-      if (meetingRows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Meeting not found",
-        });
-      }
-      const meeting = meetingRows[0];
-      const userId = req.user?.id ?? req.administratorId;
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized",
-        });
-      }
-      if (
-        meeting.administrator_id !== userId &&
-        req.user?.role !== "Super_Admin"
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "Only the meeting administrator can save the recording",
-        });
-      }
-
-      // Auto-generate title if not provided (automatic save/upload to the meeting's group)
-      const dateRecorded = new Date().toISOString().split("T")[0];
-      const timePart = new Date().toTimeString().slice(0, 5);
-      const finalTitle =
-        title && typeof title === "string" && title.trim()
-          ? title.trim()
-          : `Recording: ${
-              meeting.title || "Meeting"
-            } - ${dateRecorded} ${timePart}`;
-
-      validateFileType(videoFile, "video");
-      let videoUrl = await uploadToCloudinary(videoFile, "videos");
-      let posterUrl = null;
-      const posterFile = req.files?.poster_file?.[0];
-      if (posterFile) {
-        validateFileType(posterFile, "image");
-        posterUrl = await uploadToCloudinary(posterFile, "posters");
-      }
-
-      const videoId = uuidv4();
-      await db.promise().query(
-        `INSERT INTO video (id, title, meeting_id, video_url, poster_url, administrator_id, date_recorded, description, group_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          videoId,
-          finalTitle,
-          meetingId,
-          videoUrl,
-          posterUrl,
-          userId,
-          dateRecorded,
-          description && typeof description === "string"
-            ? description.trim()
-            : null,
-          meeting.group_id,
-        ]
-      );
-
-      return res.status(201).json({
-        success: true,
-        message: "Meeting recording saved and uploaded to the meeting's group",
-        data: {
-          id: videoId,
-          title: finalTitle,
-          meeting_id: meetingId,
-          video_url: videoUrl,
-          poster_url: posterUrl,
-          date_recorded: dateRecorded,
-          description:
-            description && typeof description === "string"
-              ? description.trim()
-              : null,
-          group_id: meeting.group_id,
-        },
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-        error: err.message,
-      });
-    }
-  });
 };

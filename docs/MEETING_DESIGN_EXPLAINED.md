@@ -148,7 +148,6 @@ So the “thinking” is: **reuse as much as possible** (Socket.IO, auth, video 
 | **participantJoined / participantLeft** | Broadcast “who joined/left” to the room. | So every client can create or destroy the right RTCPeerConnection and update the UI. |
 | **canAccessMeeting()** | DB check: meeting exists, user is admin or group member. | Same rules as REST; keeps socket behavior consistent with your data model. |
 | **meetingRooms Set** | Remembers which meetings this socket joined. | So we can validate `meetingId` on every signaling event and emit **participantLeft** on disconnect. |
-| **saveMeetingRecording** | Accepts uploaded video file + title (optional poster/description), checks meeting admin, creates `video` row. | Reuses your video storage and permissions; “recording” is just “upload a file and link it to this meeting.” |
 | **Client recording** | MediaRecorder in the browser, then upload blob. | Avoids a media server; uses what the browser already has. |
 
 ---

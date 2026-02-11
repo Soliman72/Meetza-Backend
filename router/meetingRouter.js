@@ -9,21 +9,21 @@ router.get(
   "/",
   verifyToken,
   checkAdminPermission,
-  meetingController.getAllMeetings
+  meetingController.getAllMeetings,
 );
 // Admin: create meeting (group admin only; no overlapping times)
 router.post(
   "/",
   verifyToken,
   checkAdminPermission,
-  meetingController.createMeeting
+  meetingController.createMeeting,
 );
 
 // Group meetings: any authenticated user with group access (admin or member)
 router.get(
   "/group/:group_id",
   verifyToken,
-  meetingController.getMeetingsByGroup
+  meetingController.getMeetingsByGroup,
 );
 
 // Get single meeting: admin (ownership filtered) or group member can view
@@ -32,21 +32,13 @@ router.put(
   "/:id",
   verifyToken,
   checkAdminPermission,
-  meetingController.updateMeetingById
+  meetingController.updateMeetingById,
 );
 router.delete(
   "/:id",
   verifyToken,
   checkAdminPermission,
-  meetingController.deleteMeetingById
-);
-
-// Admin: save meeting recording as video (multipart: video_file, optional poster_file, title, description)
-router.post(
-  "/:id/save-recording",
-  verifyToken,
-  checkAdminPermission,
-  meetingController.saveMeetingRecording
+  meetingController.deleteMeetingById,
 );
 
 // Members: join or leave a meeting (must be member of the meeting’s group)
@@ -57,7 +49,7 @@ router.post("/:id/leave", verifyToken, meetingController.leaveMeeting);
 router.get(
   "/:id/participants",
   verifyToken,
-  meetingController.getMeetingParticipants
+  meetingController.getMeetingParticipants,
 );
 
 module.exports = router;

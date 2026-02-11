@@ -47,6 +47,7 @@ const io = new Server(server, {
 chatController.registerChatIo(io);
 registerChatSocket(io);
 const registerMeetingSocket = require("./sockets/meetingSocket");
+
 registerMeetingSocket(io);
 
 // Register notification socket
@@ -110,7 +111,7 @@ const getLocalIP = () => {
   // Second pass: Look for any non-virtual interface
   for (const name of Object.keys(interfaces)) {
     const isVirtual = virtualNames.some((virtualName) =>
-      name.includes(virtualName)
+      name.includes(virtualName),
     );
     if (isVirtual) continue;
 
@@ -160,10 +161,10 @@ server.listen(port, "0.0.0.0", () => {
     console.log("=".repeat(60));
     console.log(`\n💡 Access options:`);
     console.log(
-      `   1. Same network: Use your host IP address (run 'npm run get-ip' on host)`
+      `   1. Same network: Use your host IP address (run 'npm run get-ip' on host)`,
     );
     console.log(
-      `   2. Different network: Use ngrok service (if enabled in docker-compose)`
+      `   2. Different network: Use ngrok service (if enabled in docker-compose)`,
     );
     console.log(`   3. Check docker-compose.yml for ngrok public URL\n`);
   } else {
