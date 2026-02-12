@@ -713,7 +713,7 @@ exports.getMeetingParticipants = async (req, res) => {
       const [membership] = await db
         .promise()
         .query(
-          "SELECT id FROM group_membership WHERE group_id = ? AND user_id = ?",
+          "SELECT id FROM group_membership WHERE group_id = ? AND member_id = ?",
           [meeting.group_id, userId],
         );
       if (membership.length === 0) {
