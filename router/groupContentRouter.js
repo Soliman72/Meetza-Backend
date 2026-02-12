@@ -25,5 +25,9 @@ router.delete(
   checkAdminPermission,
   groupContentController.deleteFileFromGroupContent
 );
-
+router.get(
+  "/meeting/:meeting_id",
+  verifyToken,
+  groupContentController.getGroupContentResourcesByMeetingId
+);
 module.exports = router;

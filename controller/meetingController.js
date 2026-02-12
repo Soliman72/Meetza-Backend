@@ -1,154 +1,261 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
-const { upload, uploadToCloudinary } = require("../utils/uploadFile");
+const { upload, uploadToCloudinary, uploadToCloudinaryResources } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
 const { createNotification } = require("../services/notificationService");
 
 // Create a meeting (admin of the group only; no overlapping Scheduled meetings for same group)
 exports.createMeeting = async (req, res) => {
-  try {
-    const { title, start_time, end_time, group_id, status } = req.body;
-    const id = uuidv4();
-
-    if (!title || !start_time || !end_time || !group_id || !status) {
+  // Apply multer upload middleware to handle file uploads
+  upload.fields([
+    { name: "poster_file", maxCount: 1 },
+    { name: "files", maxCount: 20 },
+  ])(req, res, async (err) => {
+    if (err) {
       return res.status(400).json({
         success: false,
-        message:
-          "Title, start_time, end_time, group_id, and status are required",
+        message: err.message,
       });
     }
-
-    if (
-      status !== "Scheduled" &&
-      status !== "Completed" &&
-      status !== "Cancelled"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be one of: Scheduled, Completed, Cancelled",
-      });
-    }
-
-    const start = new Date(start_time);
-    const end = new Date(end_time);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "start_time and end_time must be valid dates",
-      });
-    }
-    if (start >= end) {
-      return res.status(400).json({
-        success: false,
-        message: "end_time must be after start_time",
-      });
-    }
-
-    const [groupResults] = await db
-      .promise()
-      .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
-    if (groupResults.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid group_id: not found",
-      });
-    }
-
-    const group = groupResults[0];
-    const administrator_id = req.user?.id ?? req.administratorId;
-    if (!administrator_id) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: administrator_id is required",
-      });
-    }
-
-    // Only the group's admin can create a meeting for this group (super admin cannot)
-
-    if (group.administrator_id !== administrator_id) {
-      // && !req.isSuperAdmin
-      return res.status(403).json({
-        success: false,
-        message:
-          "Only the administrator of this group can create meetings for it",
-      });
-    }
-
-    // No overlapping Scheduled meetings for the same group at the same time
-    const [overlap] = await db.promise().query(
-      `SELECT id FROM meeting
-       WHERE group_id = ? AND status = 'Scheduled'
-       AND start_time < ? AND end_time > ?`,
-      [group_id, end_time, start_time],
-    );
-    if (overlap.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "This group already has a Scheduled meeting at that time. Create meetings at a different time.",
-      });
-    }
-
-    const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    await db
-      .promise()
-      .query(query, [
-        id,
-        title,
-        start_time,
-        end_time,
-        status,
-        administrator_id,
-        group_id,
-      ]);
-
-    // Notify all group members that a meeting has been scheduled (for their calendars)
     try {
-      const [members] = await db
+      const { title, start_time, end_time, group_id, status, description } = req.body;
+      const id = uuidv4();
+
+      // Ensure poster file is uploaded
+      if (!req.files && !req.body.poster_file) {
+        return res.status(400).json({
+          success: false,
+          message: "Poster file is required",
+        });
+      }
+
+      let posterUrl = "";
+      if (req.files.poster_file) {
+        const posterFile = req.files.poster_file[0];
+        validateFileType(posterFile, "image");
+        posterUrl = await uploadToCloudinary(posterFile, "posters");
+      } else if (req.body.poster_file) {
+        validateFileType(req.body.poster_file, "image");
+        posterUrl = req.body.poster_file;
+      }
+
+      let files = [];
+      if (req.files?.files?.length > 0) {
+        // upload files to cloudinary
+        for (const file of req.files.files) {
+          try {
+            // Determine resource type based on file MIME type
+            // Use "raw" for documents (PDF, DOC, etc.), "auto" for images/videos
+            const isDocument =
+              file.mimetype &&
+              (file.mimetype.includes("pdf") ||
+                file.mimetype.includes("document") ||
+                file.mimetype.includes("msword") ||
+                file.mimetype.includes("spreadsheet") ||
+                file.mimetype.includes("presentation") ||
+                file.mimetype.includes("text"));
+            const resourceType = isDocument ? "raw" : "auto";
+
+            // Upload file to separate Cloudinary for group content resources (large files)
+            const fileUrl = await uploadToCloudinaryResources(
+              file,
+              "group_content_resources",
+              resourceType
+            );
+
+            // Generate resource ID
+            const resourceId = uuidv4();
+
+            // Get group content id from group id
+            const [groupContent] = await db.promise().query("SELECT * FROM group_content WHERE group_id = ?", [group_id]);
+            if (groupContent.length === 0) {
+              return res.status(404).json({
+                success: false,
+                message: "Group content not found",
+              });
+            }
+            // Insert resource into database
+            const resourceQuery =
+              "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size, meeting_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            await db
+              .promise()
+              .query(resourceQuery, [
+                resourceId,
+                groupContent[0].id,
+                fileUrl,
+                file.originalname,
+                file.mimetype,
+                file.size,
+                id,
+              ]);
+
+            files.push({
+              id: resourceId,
+              file_url: fileUrl,
+              file_name: file.originalname,
+              file_type: file.mimetype,
+              file_size: file.size,
+            });
+          } catch (fileError) {
+            console.error(
+              `Error uploading file ${file.originalname}:`,
+              fileError
+            );
+            // Continue with other files even if one fails
+          }
+        }
+
+        if (files.length === 0) {
+          return res.status(500).json({
+            success: false,
+            message: "Failed to upload any files",
+          });
+        }
+      }
+
+      if (!title || !start_time || !end_time || !group_id || !status || !posterUrl) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Title, start_time, end_time, group_id, status, and posterUrl are required",
+        });
+      }
+
+      if (
+        status !== "Scheduled" &&
+        status !== "Completed" &&
+        status !== "Cancelled"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Status must be one of: Scheduled, Completed, Cancelled",
+        });
+      }
+
+      const start = new Date(start_time);
+      const end = new Date(end_time);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "start_time and end_time must be valid dates",
+        });
+      }
+      if (start >= end) {
+        return res.status(400).json({
+          success: false,
+          message: "end_time must be after start_time",
+        });
+      }
+
+      const [groupResults] = await db
         .promise()
-        .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
+        .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
+      if (groupResults.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid group_id: not found",
+        });
+      }
+
+      const group = groupResults[0];
+      const administrator_id = req.user?.id ?? req.administratorId;
+      if (!administrator_id) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized: administrator_id is required",
+        });
+      }
+
+      // Only the group's admin can create a meeting for this group (super admin cannot)
+      if (group.administrator_id !== administrator_id) {
+        // && !req.isSuperAdmin
+        return res.status(403).json({
+          success: false,
+          message:
+            "Only the administrator of this group can create meetings for it",
+        });
+      }
+
+      // No overlapping Scheduled meetings for the same group at the same time
+      const [overlap] = await db.promise().query(
+        `SELECT id FROM meeting
+        WHERE group_id = ? AND status = 'Scheduled'
+        AND start_time < ? AND end_time > ?`,
+        [group_id, end_time, start_time],
+      );
+      if (overlap.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This group already has a Scheduled meeting at that time. Create meetings at a different time.",
+        });
+      }
+
+      const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id, poster_url, description)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      await db
+        .promise()
+        .query(query, [
+          id,
+          title,
+          start_time,
+          end_time,
+          status,
+          administrator_id,
           group_id,
+          posterUrl,
+          description,
         ]);
 
-      const notificationTitle = "New meeting scheduled";
-      const notificationMessage = `A new meeting \"${title}\" is scheduled from ${start_time} to ${end_time}.`;
+      // Notify all group members that a meeting has been scheduled (for their calendars)
+      try {
+        const [members] = await db
+          .promise()
+          .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
+            group_id,
+          ]);
 
-      await Promise.all(
-        members.map((m) =>
-          createNotification({
-            senderId: administrator_id,
-            memberId: m.member_id,
-            title: notificationTitle,
-            message: notificationMessage,
-          }),
-        ),
-      );
-    } catch (notifyErr) {
-      // Do not block meeting creation if notifications fail
-      console.error("Failed to send meeting notifications:", notifyErr);
+        const notificationTitle = "New meeting scheduled";
+        const notificationMessage = `A new meeting \"${title}\" is scheduled from ${start_time} to ${end_time}.`;
+
+        await Promise.all(
+          members.map((m) =>
+            createNotification({
+              senderId: administrator_id,
+              memberId: m.member_id,
+              title: notificationTitle,
+              message: notificationMessage,
+            }),
+          ),
+        );
+      } catch (notifyErr) {
+        // Do not block meeting creation if notifications fail
+        console.error("Failed to send meeting notifications:", notifyErr);
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: "Meeting created successfully",
+        data: {
+          id,
+          title,
+          start_time,
+          end_time,
+          group_id,
+          status,
+          poster_url: posterUrl,
+          description: description,
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
     }
-
-    return res.status(201).json({
-      success: true,
-      message: "Meeting created successfully",
-      data: {
-        id,
-        title,
-        start_time,
-        end_time,
-        group_id,
-        status,
-      },
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
-  }
+  });
 };
 
 // Get all meetings
@@ -241,122 +348,148 @@ exports.getMeetingById = async (req, res) => {
 
 // Update a meeting by id (only the meeting's admin can update)
 exports.updateMeetingById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { title, start_time, end_time, group_id, status } = req.body;
-
-    if (!id) {
+  upload.fields([
+    { name: "poster_file", maxCount: 1 },
+  ])(req, res, async (err) => {
+    if (err) {
       return res.status(400).json({
         success: false,
-        message: "Meeting id is required",
+        message: err.message,
       });
     }
+      try {
+        const { id } = req.params;
+        const { title, start_time, end_time, group_id, status, description } = req.body;
 
-    const [existing] = await db
-      .promise()
-      .query("SELECT * FROM meeting WHERE id = ?", [id]);
-    if (existing.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Meeting not found",
-      });
-    }
+        if (!id) {
+          return res.status(400).json({
+            success: false,
+            message: "Meeting id is required",
+          });
+        }
 
-    const meeting = existing[0];
-    if (!req.isSuperAdmin && meeting.administrator_id !== req.administratorId) {
-      return res.status(403).json({
-        success: false,
-        message: "Only the meeting administrator can update this meeting",
-      });
-    }
+        const [existing] = await db
+          .promise()
+          .query("SELECT * FROM meeting WHERE id = ?", [id]);
+        if (existing.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Meeting not found",
+          });
+        }
 
-    const updates = [];
-    const params = [];
-    if (title != null) {
-      updates.push("title = ?");
-      params.push(title);
-    }
-    // Compute prospective start/end for validation
-    const newStart =
-      start_time != null ? new Date(start_time) : new Date(meeting.start_time);
-    const newEnd =
-      end_time != null ? new Date(end_time) : new Date(meeting.end_time);
-    if (Number.isNaN(newStart.getTime()) || Number.isNaN(newEnd.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "start_time and end_time must be valid dates",
-      });
-    }
-    if (newStart >= newEnd) {
-      return res.status(400).json({
-        success: false,
-        message: "end_time must be after start_time",
-      });
-    }
-    if (start_time != null) {
-      updates.push("start_time = ?");
-      params.push(start_time);
-    }
-    if (end_time != null) {
-      updates.push("end_time = ?");
-      params.push(end_time);
-    }
-    if (status != null) {
-      if (!["Scheduled", "Completed", "Cancelled"].includes(status)) {
-        return res.status(400).json({
+        const meeting = existing[0];
+        if (!req.isSuperAdmin && meeting.administrator_id !== req.administratorId) {
+          return res.status(403).json({
+            success: false,
+            message: "Only the meeting administrator can update this meeting",
+          });
+        }
+
+        const updates = [];
+        const params = [];
+        if (title != null) {
+          updates.push("title = ?");
+          params.push(title);
+        }
+        // Compute prospective start/end for validation
+        const newStart =
+          start_time != null ? new Date(start_time) : new Date(meeting.start_time);
+        const newEnd =
+          end_time != null ? new Date(end_time) : new Date(meeting.end_time);
+        if (Number.isNaN(newStart.getTime()) || Number.isNaN(newEnd.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: "start_time and end_time must be valid dates",
+          });
+        }
+        if (newStart >= newEnd) {
+          return res.status(400).json({
+            success: false,
+            message: "end_time must be after start_time",
+          });
+        }
+        if (start_time != null) {
+          updates.push("start_time = ?");
+          params.push(start_time);
+        }
+        if (end_time != null) {
+          updates.push("end_time = ?");
+          params.push(end_time);
+        }
+        if (status != null) {
+          if (!["Scheduled", "Completed", "Cancelled"].includes(status)) {
+            return res.status(400).json({
+              success: false,
+              message: "Status must be one of: Scheduled, Completed, Cancelled",
+            });
+          }
+          updates.push("status = ?");
+          params.push(status);
+        }
+        if (group_id != null) {
+          updates.push("group_id = ?");
+          params.push(group_id);
+        }
+        if (description != null) {
+          updates.push("description = ?");
+          params.push(description);
+        }
+        let posterUrl = "";
+        if (req.files?.poster_file) {
+          const posterFile = req.files.poster_file[0];
+          validateFileType(posterFile, "image");
+          posterUrl = await uploadToCloudinary(posterFile, "posters");
+        } else if (req.body.poster_file) {
+          validateFileType(req.body.poster_file, "image");
+          posterUrl = req.body.poster_file;
+        }
+        if (posterUrl != null) {
+          updates.push("poster_url = ?");
+          params.push(posterUrl);
+        }
+        if (updates.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "At least one field to update is required (title, start_time, end_time, status, group_id, description, poster_url)",
+          });
+        }
+
+        // Enforce no overlap when start/end changed or status is Scheduled
+        const effectiveStatus = status != null ? status : meeting.status;
+        if (effectiveStatus === "Scheduled") {
+          const [overlap] = await db.promise().query(
+            `SELECT id FROM meeting
+            WHERE group_id = ? AND status = 'Scheduled' AND id <> ?
+            AND start_time < ? AND end_time > ?`,
+            [group_id || meeting.group_id, id, newEnd, newStart],
+          );
+          if (overlap.length > 0) {
+            return res.status(409).json({
+              success: false,
+              message:
+                "This group already has a Scheduled meeting at that time. Choose a different time range.",
+            });
+          }
+        }
+
+        params.push(id);
+        const query = `UPDATE meeting SET ${updates.join(", ")} WHERE id = ?`;
+        await db.promise().query(query, [...params, id]);
+
+        return res.status(200).json({
+          success: true,
+          message: "Meeting updated successfully",
+        });
+      } catch (err) {
+        return res.status(500).json({
           success: false,
-          message: "Status must be one of: Scheduled, Completed, Cancelled",
+          message: "Database error",
+          error: err.message,
         });
       }
-      updates.push("status = ?");
-      params.push(status);
-    }
-    if (group_id != null) {
-      updates.push("group_id = ?");
-      params.push(group_id);
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "At least one field to update is required (title, start_time, end_time, status, group_id)",
-      });
-    }
-
-    // Enforce no overlap when start/end changed or status is Scheduled
-    const effectiveStatus = status != null ? status : meeting.status;
-    if (effectiveStatus === "Scheduled") {
-      const [overlap] = await db.promise().query(
-        `SELECT id FROM meeting
-         WHERE group_id = ? AND status = 'Scheduled' AND id <> ?
-         AND start_time < ? AND end_time > ?`,
-        [group_id || meeting.group_id, id, newEnd, newStart],
-      );
-      if (overlap.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "This group already has a Scheduled meeting at that time. Choose a different time range.",
-        });
-      }
-    }
-
-    params.push(id);
-    const query = `UPDATE meeting SET ${updates.join(", ")} WHERE id = ?`;
-    await db.promise().query(query, params);
-
-    return res.status(200).json({
-      success: true,
-      message: "Meeting updated successfully",
     });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
-  }
 };
 
 // Delete a meeting by id (only the meeting's admin can delete)
