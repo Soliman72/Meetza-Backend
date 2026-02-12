@@ -68,8 +68,13 @@ exports.createMeeting = async (req, res) => {
             const resourceId = uuidv4();
 
             // Get group content id from group id
-            const groupContentId = await db.promise().query("SELECT id FROM group_content WHERE group_id = ?", [group_id]);
-
+            const [groupContent] = await db.promise().query("SELECT * FROM group_content WHERE group_id = ?", [group_id]);
+            if (groupContent.length === 0) {
+              return res.status(404).json({
+                success: false,
+                message: "Group content not found",
+              });
+            }
             // Insert resource into database
             const resourceQuery =
               "INSERT INTO group_content_resource (id, group_content_id, file_url, file_name, file_type, file_size, meeting_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
@@ -77,7 +82,7 @@ exports.createMeeting = async (req, res) => {
               .promise()
               .query(resourceQuery, [
                 resourceId,
-                groupContentId,
+                groupContent[0].id,
                 fileUrl,
                 file.originalname,
                 file.mimetype,
@@ -109,11 +114,11 @@ exports.createMeeting = async (req, res) => {
         }
       }
 
-      if (!title || !start_time || !end_time || !group_id || !status) {
+      if (!title || !start_time || !end_time || !group_id || !status || !posterUrl) {
         return res.status(400).json({
           success: false,
           message:
-            "Title, start_time, end_time, group_id, and status are required",
+            "Title, start_time, end_time, group_id, status, and posterUrl are required",
         });
       }
 
