@@ -1,7 +1,11 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
-const { upload, uploadToCloudinary, uploadToCloudinaryResources } = require("../utils/uploadFile");
+const {
+  upload,
+  uploadToCloudinary,
+  uploadToCloudinaryResources,
+} = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
 const { createNotification } = require("../services/notificationService");
 
@@ -19,7 +23,8 @@ exports.createMeeting = async (req, res) => {
       });
     }
     try {
-      const { title, start_time, end_time, group_id, status, description } = req.body;
+      const { title, start_time, end_time, group_id, status, description } =
+        req.body;
       const id = uuidv4();
 
       // Ensure poster file is uploaded
@@ -30,7 +35,93 @@ exports.createMeeting = async (req, res) => {
         });
       }
 
+      if (!title || !start_time || !end_time || !group_id || !status) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Title, start_time, end_time, group_id, and status are required",
+        });
+      }
+
+      if (
+        status !== "Scheduled" &&
+        status !== "Completed" &&
+        status !== "Cancelled"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Status must be one of: Scheduled, Completed, Cancelled",
+        });
+      }
+
+      const start = new Date(start_time);
+      const end = new Date(end_time);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "start_time and end_time must be valid dates",
+        });
+      }
+      const now = new Date();
+      if (start < now || end < now) {
+        return res.status(400).json({
+          success: false,
+          message: "start_time and end_time must not be in the past",
+        });
+      }
+      if (start >= end) {
+        return res.status(400).json({
+          success: false,
+          message: "end_time must be after start_time",
+        });
+      }
+
+      const [groupResults] = await db
+        .promise()
+        .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
+      if (groupResults.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid group_id: not found",
+        });
+      }
+
+      const group = groupResults[0];
+      const administrator_id = req.user?.id ?? req.administratorId;
+      if (!administrator_id) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized: administrator_id is required",
+        });
+      }
+
+      // Only the group's admin can create a meeting for this group (super admin can)
+      if (group.administrator_id !== administrator_id && !req.isSuperAdmin) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Only the administrator of this group and super admin can create meetings for it",
+        });
+      }
+
+      // No overlapping Scheduled meetings for the same group at the same time
+      const [overlap] = await db.promise().query(
+        `SELECT id FROM meeting
+        WHERE group_id = ? AND status = 'Scheduled'
+        AND start_time < ? AND end_time > ?`,
+        [group_id, end_time, start_time],
+      );
+      if (overlap.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This group already has a Scheduled meeting at that time. Create meetings at a different time.",
+        });
+      }
+
       let posterUrl = "";
+      let files = [];
+
       if (req.files.poster_file) {
         const posterFile = req.files.poster_file[0];
         validateFileType(posterFile, "image");
@@ -40,7 +131,6 @@ exports.createMeeting = async (req, res) => {
         posterUrl = req.body.poster_file;
       }
 
-      let files = [];
       if (req.files?.files?.length > 0) {
         // upload files to cloudinary
         for (const file of req.files.files) {
@@ -61,14 +151,18 @@ exports.createMeeting = async (req, res) => {
             const fileUrl = await uploadToCloudinaryResources(
               file,
               "group_content_resources",
-              resourceType
+              resourceType,
             );
 
             // Generate resource ID
             const resourceId = uuidv4();
 
             // Get group content id from group id
-            const [groupContent] = await db.promise().query("SELECT * FROM group_content WHERE group_id = ?", [group_id]);
+            const [groupContent] = await db
+              .promise()
+              .query("SELECT * FROM group_content WHERE group_id = ?", [
+                group_id,
+              ]);
             if (groupContent.length === 0) {
               return res.status(404).json({
                 success: false,
@@ -100,7 +194,7 @@ exports.createMeeting = async (req, res) => {
           } catch (fileError) {
             console.error(
               `Error uploading file ${file.originalname}:`,
-              fileError
+              fileError,
             );
             // Continue with other files even if one fails
           }
@@ -113,85 +207,6 @@ exports.createMeeting = async (req, res) => {
           });
         }
       }
-
-      if (!title || !start_time || !end_time || !group_id || !status || !posterUrl) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Title, start_time, end_time, group_id, status, and posterUrl are required",
-        });
-      }
-
-      if (
-        status !== "Scheduled" &&
-        status !== "Completed" &&
-        status !== "Cancelled"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Status must be one of: Scheduled, Completed, Cancelled",
-        });
-      }
-
-      const start = new Date(start_time);
-      const end = new Date(end_time);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return res.status(400).json({
-          success: false,
-          message: "start_time and end_time must be valid dates",
-        });
-      }
-      if (start >= end) {
-        return res.status(400).json({
-          success: false,
-          message: "end_time must be after start_time",
-        });
-      }
-
-      const [groupResults] = await db
-        .promise()
-        .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
-      if (groupResults.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid group_id: not found",
-        });
-      }
-
-      const group = groupResults[0];
-      const administrator_id = req.user?.id ?? req.administratorId;
-      if (!administrator_id) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized: administrator_id is required",
-        });
-      }
-
-      // Only the group's admin can create a meeting for this group (super admin cannot)
-      if (group.administrator_id !== administrator_id) {
-        // && !req.isSuperAdmin
-        return res.status(403).json({
-          success: false,
-          message:
-            "Only the administrator of this group can create meetings for it",
-        });
-      }
-
-      // No overlapping Scheduled meetings for the same group at the same time
-      const [overlap] = await db.promise().query(
-        `SELECT id FROM meeting
-        WHERE group_id = ? AND status = 'Scheduled'
-        AND start_time < ? AND end_time > ?`,
-        [group_id, end_time, start_time],
-      );
-      if (overlap.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "This group already has a Scheduled meeting at that time. Create meetings at a different time.",
-        });
-      }
-
       const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id, poster_url, description)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
       await db
@@ -202,7 +217,7 @@ exports.createMeeting = async (req, res) => {
           start_time,
           end_time,
           status,
-          administrator_id,
+          group.administrator_id,
           group_id,
           posterUrl,
           description,
@@ -348,18 +363,20 @@ exports.getMeetingById = async (req, res) => {
 
 // Update a meeting by id (only the meeting's admin can update)
 exports.updateMeetingById = async (req, res) => {
-  upload.fields([
-    { name: "poster_file", maxCount: 1 },
-  ])(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message,
-      });
-    }
+  upload.fields([{ name: "poster_file", maxCount: 1 }])(
+    req,
+    res,
+    async (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message,
+        });
+      }
       try {
         const { id } = req.params;
-        const { title, start_time, end_time, group_id, status, description } = req.body;
+        const { title, start_time, end_time, group_id, status, description } =
+          req.body;
 
         if (!id) {
           return res.status(400).json({
@@ -379,7 +396,10 @@ exports.updateMeetingById = async (req, res) => {
         }
 
         const meeting = existing[0];
-        if (!req.isSuperAdmin && meeting.administrator_id !== req.administratorId) {
+        if (
+          !req.isSuperAdmin &&
+          meeting.administrator_id !== req.administratorId
+        ) {
           return res.status(403).json({
             success: false,
             message: "Only the meeting administrator can update this meeting",
@@ -394,10 +414,15 @@ exports.updateMeetingById = async (req, res) => {
         }
         // Compute prospective start/end for validation
         const newStart =
-          start_time != null ? new Date(start_time) : new Date(meeting.start_time);
+          start_time != null
+            ? new Date(start_time)
+            : new Date(meeting.start_time);
         const newEnd =
           end_time != null ? new Date(end_time) : new Date(meeting.end_time);
-        if (Number.isNaN(newStart.getTime()) || Number.isNaN(newEnd.getTime())) {
+        if (
+          Number.isNaN(newStart.getTime()) ||
+          Number.isNaN(newEnd.getTime())
+        ) {
           return res.status(400).json({
             success: false,
             message: "start_time and end_time must be valid dates",
@@ -489,7 +514,8 @@ exports.updateMeetingById = async (req, res) => {
           error: err.message,
         });
       }
-    });
+    },
+  );
 };
 
 // Delete a meeting by id (only the meeting's admin can delete)
