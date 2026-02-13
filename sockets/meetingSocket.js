@@ -56,6 +56,15 @@ const canAccessMeeting = async (userId, meetingId) => {
   return { ok: true, meeting };
 };
 
+/** Check if user is registered as participant in DB (must join via REST first) */
+const isParticipantInMeeting = async (userId, meetingId) => {
+  const [rows] = await db.promise().query(
+    "SELECT id FROM meeting_participant WHERE meeting_id = ? AND user_id = ? LIMIT 1",
+    [meetingId, userId]
+  );
+  return rows.length > 0;
+};
+
 const MEETING_ROOM_PREFIX = "meeting:";
 
 const registerMeetingSocket = (io) => {
@@ -87,15 +96,30 @@ const registerMeetingSocket = (io) => {
         if (!access.ok) {
           throw new Error(access.message || "Access denied");
         }
+        const inDb = await isParticipantInMeeting(socket.user.id, meetingId);
+        if (!inDb) {
+          throw new Error(
+            "You must join the meeting first (via API) before joining the room"
+          );
+        }
         const room = MEETING_ROOM_PREFIX + meetingId;
         await socket.join(room);
         meetingRooms.add(meetingId);
 
         const participants = await getParticipantsInRoom(meetingId);
+        const others = participants
+          .filter((p) => p.socketId !== socket.id)
+          .map((p) => ({
+            socketId: p.socketId,
+            user_id: p.userId,
+            member_name: p.name,
+            member_email: p.email,
+            member_photo: p.user_photo,
+          }));
         if (typeof ack === "function") {
           ack({
             ok: true,
-            participants: participants.filter((p) => p.socketId !== socket.id),
+            participants: others,
             meetingId,
           });
         }

@@ -64,6 +64,15 @@ socket.on("participantLeft", (data) => {
 });
 ```
 
+**Listen:** `participantLeftByUserId` (sent when user leaves via REST e.g. tab closed)
+
+```javascript
+socket.on("participantLeftByUserId", (data) => {
+  // data: { userId, meetingId }
+  // Remove the participant with this user_id from your list and close their peer connection.
+});
+```
+
 ### Leave the room
 
 **Emit:** `leaveMeetingRoom`

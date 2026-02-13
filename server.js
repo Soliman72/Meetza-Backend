@@ -46,6 +46,7 @@ const io = new Server(server, {
   },
   allowEIO3: true,
 });
+app.set("io", io);
 chatController.registerChatIo(io);
 registerChatSocket(io);
 const registerMeetingSocket = require("./sockets/meetingSocket");
