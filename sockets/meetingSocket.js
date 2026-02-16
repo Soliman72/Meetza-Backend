@@ -152,6 +152,47 @@ const registerMeetingSocket = (io) => {
       socket.leave(room);
     });
 
+    // Real-time temporary meeting chat (no DB storage; messages exist only while in room)
+    const MEETING_CHAT_MAX_LENGTH = 2000;
+    socket.on("meetingChatMessage", (payload, ack) => {
+      const { meetingId, text } = payload || {};
+      if (!meetingId || typeof text !== "string") {
+        if (typeof ack === "function")
+          ack({ ok: false, message: "meetingId and text are required" });
+        return;
+      }
+      const trimmed = text.trim();
+      if (!trimmed) {
+        if (typeof ack === "function")
+          ack({ ok: false, message: "Message cannot be empty" });
+        return;
+      }
+      if (trimmed.length > MEETING_CHAT_MAX_LENGTH) {
+        if (typeof ack === "function")
+          ack({
+            ok: false,
+            message: `Message must be at most ${MEETING_CHAT_MAX_LENGTH} characters`,
+          });
+        return;
+      }
+      if (!meetingRooms.has(meetingId)) {
+        if (typeof ack === "function")
+          ack({ ok: false, message: "You must be in the meeting room to send messages" });
+        return;
+      }
+      const room = MEETING_ROOM_PREFIX + meetingId;
+      io.to(room).emit("meetingChatMessage", {
+        meetingId,
+        userId: socket.user?.id,
+        userName: socket.user?.name ?? "",
+        userPhoto: socket.user?.user_photo ?? null,
+        socketId: socket.id,
+        text: trimmed,
+        timestamp: new Date().toISOString(),
+      });
+      if (typeof ack === "function") ack({ ok: true });
+    });
+
     socket.on("webrtcOffer", (payload, ack) => {
       const { toSocketId, meetingId, sdp } = payload || {};
       if (!toSocketId || !meetingId || !sdp) {

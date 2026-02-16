@@ -83,6 +83,36 @@ socket.emit("leaveMeetingRoom", { meetingId: "meeting-uuid" });
 
 ---
 
+## 2.1 Meeting chat (temporary, real-time)
+
+Messages are **not stored** in the database. They are broadcast only to the current meeting room and disappear when the meeting ends or participants leave.
+
+**Emit:** `meetingChatMessage`
+
+```javascript
+socket.emit(
+  "meetingChatMessage",
+  { meetingId: "meeting-uuid", text: "Hello everyone!" },
+  (ack) => {
+    if (!ack?.ok) console.error(ack?.message);
+  }
+);
+```
+
+- You must be in the meeting room (after `joinMeetingRoom`) to send.
+- `text`: required, non-empty, max 2000 characters (trimmed).
+
+**Listen:** `meetingChatMessage`
+
+```javascript
+socket.on("meetingChatMessage", (data) => {
+  // data: { meetingId, userId, userName, userPhoto, socketId, text, timestamp }
+  // Display in your in-meeting chat UI. No persistence.
+});
+```
+
+---
+
 ## 3. WebRTC signaling events
 
 Use these to exchange SDP (offer/answer) and ICE candidates. Always include `meetingId` and the target `toSocketId`.

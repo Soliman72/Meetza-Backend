@@ -1,10 +1,11 @@
 // scripts/test-meeting-socket.js
 // Simple Node test client for the meeting WebSocket.
-// Use this to verify joinMeetingRoom, participants, reactions, etc.
+// Use this to verify joinMeetingRoom, participants, reactions, meeting chat, etc.
 //
 // 1. Set SERVER_URL, JWT, and MEETING_ID below.
 // 2. Run `node scripts/test-meeting-socket.js` from the project root.
 // 3. Run it in two terminals (with two different JWTs) to simulate two users.
+//    Each client will receive the other's meetingChatMessage (and their own).
 
 const { io } = require("socket.io-client");
 
@@ -48,7 +49,24 @@ socket.on("connect", () => {
       { meetingId: MEETING_ID, audioMuted: true, videoMuted: false },
       (res) => console.log("updateMediaState ack:", res)
     );
+
+    // --- Meeting chat (temporary, no DB) ---
+    socket.emit(
+      "meetingChatMessage",
+      { meetingId: MEETING_ID, text: "Hello from test script!" },
+      (res) => console.log("meetingChatMessage ack:", res)
+    );
+    // Optional: test empty text (should fail)
+    socket.emit(
+      "meetingChatMessage",
+      { meetingId: MEETING_ID, text: "   " },
+      (res) => console.log("meetingChatMessage empty ack (expect ok: false):", res)
+    );
   });
+});
+
+socket.on("meetingChatMessage", (data) => {
+  console.log("meetingChatMessage received:", data);
 });
 
 socket.on("participantJoined", (data) => {
