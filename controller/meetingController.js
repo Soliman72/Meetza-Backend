@@ -23,7 +23,7 @@ exports.createMeeting = async (req, res) => {
       });
     }
     try {
-      const { title, start_time, end_time, group_id, status, description } =
+      const { title, start_time, end_time, group_id, status, description, recording } =
         req.body;
       const id = uuidv4();
 
@@ -35,14 +35,19 @@ exports.createMeeting = async (req, res) => {
         });
       }
 
-      if (!title || !start_time || !end_time || !group_id || !status) {
+      if (!title || !start_time || !end_time || !group_id || !status || !recording) {
         return res.status(400).json({
           success: false,
           message:
-            "Title, start_time, end_time, group_id, and status are required",
+            "Title, start_time, end_time, group_id, status, and recording are required",
         });
       }
-
+      if (recording !== "1" && recording !== "0") {
+        return res.status(400).json({
+          success: false,
+          message: "Recording must be 1 or 0",
+        });
+      }
       if (
         status !== "Scheduled" &&
         status !== "Completed" &&
@@ -207,8 +212,8 @@ exports.createMeeting = async (req, res) => {
           });
         }
       }
-      const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id, poster_url, description)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id, poster_url, description, recording)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
       await db
         .promise()
         .query(query, [
@@ -221,6 +226,7 @@ exports.createMeeting = async (req, res) => {
           group_id,
           posterUrl,
           description,
+          recording,
         ]);
 
       // Notify all group members that a meeting has been scheduled (for their calendars)
@@ -261,6 +267,7 @@ exports.createMeeting = async (req, res) => {
           status,
           poster_url: posterUrl,
           description: description,
+          recording: recording,
         },
       });
     } catch (err) {
