@@ -30,11 +30,7 @@ const { checkAdminPermission } = require("../utils/checkAdminPermission");
  *       401:
  *         description: Unauthorized.
  */
-router.get(
-  "/",
-  verifyToken,
-  meetingController.getAllMeetings,
-);
+router.get("/", verifyToken, meetingController.getAllMeetings);
 
 /**
  * @swagger
@@ -122,11 +118,6 @@ router.post(
  *       403:
  *         description: Forbidden.
  */
-router.get(
-  "/group/:group_id",
-  verifyToken,
-  meetingController.getMeetingsByGroup,
-);
 
 /**
  * @swagger
@@ -309,4 +300,3 @@ router.get(
 );
 
 module.exports = router;
-

@@ -23,8 +23,15 @@ exports.createMeeting = async (req, res) => {
       });
     }
     try {
-      const { title, start_time, end_time, group_id, status, description, recording } =
-        req.body;
+      const {
+        title,
+        start_time,
+        end_time,
+        group_id,
+        status,
+        description,
+        recording,
+      } = req.body;
       const id = uuidv4();
 
       // Ensure poster file is uploaded
@@ -35,7 +42,14 @@ exports.createMeeting = async (req, res) => {
         });
       }
 
-      if (!title || !start_time || !end_time || !group_id || !status || !recording) {
+      if (
+        !title ||
+        !start_time ||
+        !end_time ||
+        !group_id ||
+        !status ||
+        !recording
+      ) {
         return res.status(400).json({
           success: false,
           message:
@@ -280,53 +294,85 @@ exports.createMeeting = async (req, res) => {
   });
 };
 
-// Get all meetings if user is member of the group or super admin can view all meetings or admin of the meeting
+// Get all meetings if user is member of the group or super admin can view all meetings or admin of the meeting.
+// Optional query: title (search), group_id (filter by group; user must be admin or member of the group).
 exports.getAllMeetings = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const { title } = req.query;
+    const { title, group_id } = req.query;
 
+    // When group_id filter is used, ensure user has access to that group (admin or member)
+    if (group_id) {
+      const {
+        ensureGroupAccess,
+        GroupAccessError,
+      } = require("../utils/groupAccess");
+      try {
+        await ensureGroupAccess(userId, group_id);
+      } catch (e) {
+        if (e.name === "GroupAccessError") {
+          return res.status(e.statusCode).json({
+            success: false,
+            message: e.message,
+          });
+        }
+        throw e;
+      }
+    }
+
+    const ownershipFilter = getOwnershipFilter(req, "administrator_id");
     let query = "SELECT * FROM meeting";
     let params = [];
-    
-    if (title) {
-      query += ownershipFilter.whereClause ? " AND" : " WHERE";
-      query += " title LIKE ?";
-      params.push(`%${title}%`);
-    }
-    
-    const ownershipFilter = getOwnershipFilter(req, "administrator_id");
+    const conditions = [];
     if (ownershipFilter.whereClause) {
-      query += " " + ownershipFilter.whereClause;
+      conditions.push(ownershipFilter.whereClause.replace(/^WHERE\s+/i, ""));
       params.push(...ownershipFilter.params);
     }
+    if (title) {
+      conditions.push("title LIKE ?");
+      params.push(`%${title}%`);
+    }
+    if (group_id) {
+      conditions.push("group_id = ?");
+      params.push(group_id);
+    }
+    if (conditions.length) {
+      query += " WHERE " + conditions.join(" AND ");
+    }
+    query += " ORDER BY start_time DESC";
 
-    console.log(ownershipFilter);
     if (req.user.role === "Member") {
-      // Get all meetings for the user's groups
-      const [membership] = await db
-        .promise()
-        .query(
-          "SELECT group_id FROM group_membership WHERE member_id = ?",
-          [userId],
-        );
-      const groupIds = membership.map((m) => m.group_id);
-      const [meetings] = await db.promise().query(
-        "SELECT * FROM meeting WHERE group_id IN (?)",
-        [groupIds],
-      );
+      // Get all meetings for the user's groups (optionally filtered by group_id and title)
+      let memberQuery =
+        "SELECT * FROM meeting WHERE group_id IN (SELECT group_id FROM group_membership WHERE member_id = ?)";
+      const memberParams = [userId];
+      if (group_id) {
+        memberQuery += " AND group_id = ?";
+        memberParams.push(group_id);
+      }
+      if (title) {
+        memberQuery += " AND title LIKE ?";
+        memberParams.push(`%${title}%`);
+      }
+      memberQuery += " ORDER BY start_time DESC";
+      const [meetings] = await db.promise().query(memberQuery, memberParams);
       return res.status(200).json({
         success: true,
         data: meetings,
       });
-    } else if (req.user.role === "Super_Admin" || req.user.role === "Administrator") {
-      
+    }
+    if (req.user.role === "Super_Admin" || req.user.role === "Administrator") {
       const [meetings] = await db.promise().query(query, params);
       return res.status(200).json({
         success: true,
         data: meetings,
       });
     }
+
+    return res.status(403).json({
+      success: false,
+      message: "Access denied",
+    });
   } catch (err) {
     return res.status(500).json({
       success: false,
@@ -775,53 +821,3 @@ exports.getMeetingParticipants = async (req, res) => {
     });
   }
 };
-
-// Get meetings for a group (admin of group or member of group can list)
-exports.getMeetingsByGroup = async (req, res) => {
-  try {
-    const { group_id } = req.params;
-    if (!group_id) {
-      return res.status(400).json({
-        success: false,
-        message: "group_id is required",
-      });
-    }
-
-    const {
-      ensureGroupAccess,
-      GroupAccessError,
-    } = require("../utils/groupAccess");
-    try {
-      await ensureGroupAccess(req.user.id, group_id);
-    } catch (e) {
-      if (e.name === "GroupAccessError") {
-        return res.status(e.statusCode).json({
-          success: false,
-          message: e.message,
-        });
-      }
-      throw e;
-    }
-
-    const [rows] = await db.promise().query(
-      `SELECT m.*, u.name AS admin_name, u.email AS admin_email
-       FROM meeting m
-       JOIN user u ON u.id = m.administrator_id
-       WHERE m.group_id = ?
-       ORDER BY m.start_time DESC`,
-      [group_id],
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: rows,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
-  }
-};
-
