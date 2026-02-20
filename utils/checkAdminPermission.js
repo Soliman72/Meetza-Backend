@@ -134,17 +134,17 @@ exports.checkAdminPermission = async (req, res, next) => {
 exports.getOwnershipFilter = (req, ownerField = "administrator_id") => {
   // If isSuperAdmin is true, return empty filter (can see all)
 
-  if (req.isSuperAdmin === true) {
+  if (req.isSuperAdmin === true || req.user.role === "Super_Admin") {
     return { whereClause: "", params: [] };
   }
 
   // For regular admins, filter by administrator_id
   // Note: checkAdminPermission middleware was called first
 
-  if (req.administratorId) {
+  if (req.administratorId || req.user.role === "Administrator") {
     return {
       whereClause: `WHERE ${ownerField} = ?`,
-      params: [req.administratorId],
+      params: [req.user.id],
     };
   }
 

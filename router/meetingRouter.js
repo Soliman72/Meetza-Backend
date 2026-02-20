@@ -33,7 +33,6 @@ const { checkAdminPermission } = require("../utils/checkAdminPermission");
 router.get(
   "/",
   verifyToken,
-  checkAdminPermission,
   meetingController.getAllMeetings,
 );
 

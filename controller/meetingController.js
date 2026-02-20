@@ -273,32 +273,53 @@ exports.createMeeting = async (req, res) => {
   });
 };
 
-// Get all meetings
+// Get all meetings if user is member of the group or super admin can view all meetings or admin of the meeting
 exports.getAllMeetings = async (req, res) => {
   try {
+    const userId = req.user?.id;
     const { title } = req.query;
+
     let query = "SELECT * FROM meeting";
     let params = [];
-
-    // Apply ownership filter for regular admins
+    
+    if (title) {
+      query += ownershipFilter.whereClause ? " AND" : " WHERE";
+      query += " title LIKE ?";
+      params.push(`%${title}%`);
+    }
+    
     const ownershipFilter = getOwnershipFilter(req, "administrator_id");
     if (ownershipFilter.whereClause) {
       query += " " + ownershipFilter.whereClause;
       params.push(...ownershipFilter.params);
     }
 
-    if (title) {
-      query += ownershipFilter.whereClause ? " AND" : " WHERE";
-      query += " title LIKE ?";
-      params.push(`%${title}%`);
+    console.log(ownershipFilter);
+    if (req.user.role === "Member") {
+      // Get all meetings for the user's groups
+      const [membership] = await db
+        .promise()
+        .query(
+          "SELECT group_id FROM group_membership WHERE member_id = ?",
+          [userId],
+        );
+      const groupIds = membership.map((m) => m.group_id);
+      const [meetings] = await db.promise().query(
+        "SELECT * FROM meeting WHERE group_id IN (?)",
+        [groupIds],
+      );
+      return res.status(200).json({
+        success: true,
+        data: meetings,
+      });
+    } else if (req.user.role === "Super_Admin" || req.user.role === "Administrator") {
+      
+      const [meetings] = await db.promise().query(query, params);
+      return res.status(200).json({
+        success: true,
+        data: meetings,
+      });
     }
-
-    const [results] = await db.promise().query(query, params);
-
-    return res.status(200).json({
-      success: true,
-      data: results,
-    });
   } catch (err) {
     return res.status(500).json({
       success: false,
@@ -796,3 +817,4 @@ exports.getMeetingsByGroup = async (req, res) => {
     });
   }
 };
+
