@@ -449,8 +449,14 @@ exports.updateMeetingById = async (req, res) => {
       }
       try {
         const { id } = req.params;
-        const { title, start_time, end_time, group_id, status, description } =
+        const { title, start_time, end_time, group_id, status, description, recording } =
           req.body;
+        if (recording !== "1" && recording !== "0") {
+          return res.status(400).json({
+            success: false,
+            message: "Recording must be 1 or 0",
+          });
+        }
 
         if (!id) {
           return res.status(400).json({
@@ -471,8 +477,9 @@ exports.updateMeetingById = async (req, res) => {
 
         const meeting = existing[0];
         if (
-          !req.isSuperAdmin &&
-          meeting.administrator_id !== req.administratorId
+          req.user.role !== "Super_Admin" &&
+          req.user.role !== "Administrator" &&
+          meeting.administrator_id !== req.user.id
         ) {
           return res.status(403).json({
             success: false,
@@ -547,11 +554,15 @@ exports.updateMeetingById = async (req, res) => {
           updates.push("poster_url = ?");
           params.push(posterUrl);
         }
+        if (recording != null) {
+          updates.push("recording = ?");
+          params.push(recording);
+        }
         if (updates.length === 0) {
           return res.status(400).json({
             success: false,
             message:
-              "At least one field to update is required (title, start_time, end_time, status, group_id, description, poster_url)",
+              "At least one field to update is required (title, start_time, end_time, status, group_id, description, poster_url, recording)",
           });
         }
 
