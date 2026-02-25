@@ -8,13 +8,13 @@ exports.createGroupMembership = async (req, res) => {
     const { group_id, member_id } = req.body;
 
     let memberId;
-    if (!group_id ) {
-      return res.status(400).json({ message: "group_id is required" });
+    if (!group_id) {
+      return res.status(400).json({ success: false, message: "group_id is required" });
     }
 
     if (req.user.role === "Super_Admin" || req.user.role === "Administrator") {
       if (!member_id) {
-        return res.status(400).json({ message: "member_id is required" });
+        return res.status(400).json({ success: false, message: "member_id is required" });
       }
       memberId = member_id;
     } else {
@@ -26,7 +26,7 @@ exports.createGroupMembership = async (req, res) => {
       .promise()
       .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
     if (group.length === 0) {
-      return res.status(400).json({ message: "Invalid group_id: not found" });
+      return res.status(400).json({ success: false, message: "Invalid group_id: not found" });
     }
 
     // check if the member already exists
@@ -34,7 +34,7 @@ exports.createGroupMembership = async (req, res) => {
       .promise()
       .query("SELECT * FROM member WHERE user_id = ?", [memberId]);
     if (member.length === 0) {
-      return res.status(400).json({ message: "Invalid member_id: not found" });
+      return res.status(400).json({ success: false, message: "Invalid member_id: not found" });
     }
 
     // check if the membership already exists
@@ -45,16 +45,16 @@ exports.createGroupMembership = async (req, res) => {
         [group_id, memberId]
       );
     if (existingMembership.length > 0) {
-      return res.status(409).json({ message: "Membership already exists" });
+      return res.status(409).json({ success: false, message: "Membership already exists" });
     }
 
     const id = uuidv4();
     const sql =
       "INSERT INTO group_membership (id, group_id, member_id) VALUES (?, ?, ?)";
     const [result] = await db.promise().query(sql, [id, group_id, memberId]);
-    res.status(201).json({ id: id, group_id, memberId });
+    res.status(201).json({ success: true, data: { id, group_id, memberId: memberId } });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -106,9 +106,9 @@ exports.getAllGroupMemberships = async (req, res) => {
       });
     });
 
-    res.json(Object.values(groups));
+    res.status(200).json({ success: true, data: Object.values(groups) });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -117,16 +117,16 @@ exports.getGroupMembershipById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: "id is required" });
+      return res.status(400).json({ success: false, message: "id is required" });
     }
     const [rows] = await db
       .promise()
       .query("SELECT * FROM group_membership WHERE id = ?", [id]);
     if (rows.length === 0)
-      return res.status(404).json({ message: "Record not found" });
-    res.json(rows[0]);
+      return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -136,16 +136,16 @@ exports.updateGroupMembership = async (req, res) => {
     const { id } = req.params;
     const { group_id } = req.body;
     if (!id || !group_id) {
-      return res.status(400).json({ message: "id and group_id are required" });
+      return res.status(400).json({ success: false, message: "id and group_id are required" });
     }
     const sql = "UPDATE group_membership SET group_id = ? WHERE id = ?";
     const [result] = await db.promise().query(sql, [group_id, id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Record not found" });
+      return res.status(404).json({ success: false, message: "Record not found" });
     }
-    res.json({ message: "Group membership updated successfully" });
+    res.status(200).json({ success: true, message: "Group membership updated successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -158,8 +158,8 @@ exports.deleteGroupMembership = async (req, res) => {
     }
     const sql = "DELETE FROM group_membership WHERE id = ?";
     const [result] = await db.promise().query(sql, [id]);
-    res.json({ message: "Group membership deleted successfully" });
+    res.status(200).json({ success: true, message: "Group membership deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };

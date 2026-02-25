@@ -4,6 +4,7 @@ const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
 const { createGroupContent } = require("./groupContentController");
+
 // Create
 exports.createGroup = async (req, res) => {
   upload.fields([{ name: "group_photo", maxCount: 1 }])(
@@ -11,10 +12,7 @@ exports.createGroup = async (req, res) => {
     res,
     async (err) => {
       if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message,
-        });
+        return res.status(400).json({ success: false, message: err.message });
       }
       try {
         const {
@@ -27,36 +25,19 @@ exports.createGroup = async (req, res) => {
           group_content_description,
         } = req.body;
         if (!group_name || !position_id || !year || !semester || !group_content_name) {
-          return res
-            .status(400)
-            .json({
-              message:
-                "group_name, position_id, year, semester, and group_content_name are required fields",
-            });
+          return res.status(400).json({ success: false, message: "group_name, position_id, year, semester, and group_content_name are required fields" });
         }
-
-        // check year is 1,2,3,4
         if (!["1", "2", "3", "4"].includes(year.toString())) {
-          return res
-            .status(400)
-            .json({ message: "year must be 1, 2, 3, or 4" });
+          return res.status(400).json({ success: false, message: "year must be 1, 2, 3, or 4" });
         }
-
         if (!["Fall", "Spring", "Summer"].includes(semester)) {
-          return res
-            .status(400)
-            .json({ message: "semester must be Fall, Spring, or Summer" });
+          return res.status(400).json({ success: false, message: "semester must be Fall, Spring, or Summer" });
         }
-
-        // Chieck if position_id exists
         const [positionRows] = await db
           .promise()
           .query("SELECT * FROM `position` WHERE id = ?", [position_id]);
-          
         if (positionRows.length === 0) {
-          return res
-            .status(400)
-            .json({ message: "Invalid position_id: not found" });
+          return res.status(400).json({ success: false, message: "Invalid position_id: not found" });
         }
 
         // get administrator_id from position_id
@@ -104,23 +85,25 @@ exports.createGroup = async (req, res) => {
         };
         const group_content = await createGroupContent (content_body, req);
 
-        if(!group_content.success){
-          return res.status(500).json({ message: `Failed to create group content ${group_content.message}` });
+        if (!group_content.success) {
+          return res.status(500).json({ success: false, message: `Failed to create group content ${group_content.message}` });
         }
-
         res.status(201).json({
-          id,
-          group_name,
-          position_id,
-          administrator_id,
-          description,
-          group_photo: group_photo_url,
-          group_content_id: group_content.data.id,
-          year,
-          semester,
+          success: true,
+          data: {
+            id,
+            group_name,
+            position_id,
+            administrator_id,
+            description,
+            group_photo: group_photo_url,
+            group_content_id: group_content.data.id,
+            year,
+            semester,
+          },
         });
       } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({ success: false, message: "Database error", error: err.message });
       }
     }
   );
@@ -180,9 +163,9 @@ exports.getAllGroups = async (req, res) => {
     }
 
     const [rows] = await db.promise().query(sql, params);
-    res.json(rows);
+    res.status(200).json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -191,23 +174,19 @@ exports.getGroupById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: "id is required" });
+      return res.status(400).json({ success: false, message: "id is required" });
     }
     let query = "SELECT * FROM `group` WHERE id = ?";
     let params = [id];
-
-    // Apply ownership filter for regular admins
     if (!req.isSuperAdmin) {
       query += " AND administrator_id = ?";
       params.push(req.administratorId);
     }
-
     const [rows] = await db.promise().query(query, params);
-    if (rows.length === 0)
-      return res.status(404).json({ message: "Record not found" });
-    res.json(rows[0]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -218,10 +197,7 @@ exports.updateGroup = async (req, res) => {
     res,
     async (err) => {
       if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message,
-        });
+        return res.status(400).json({ success: false, message: err.message });
       }
       try {
         const { id } = req.params;
@@ -233,53 +209,26 @@ exports.updateGroup = async (req, res) => {
           semester,
         } = req.body;
         if (!id) {
-          return res.status(400).json({ message: "id is required" });
+          return res.status(400).json({ success: false, message: "id is required" });
         }
-
-        if (
-          !position_id &&
-          !group_name &&
-          !description &&
-          !req.files?.group_photo &&
-          !req.body.group_photo &&
-          !year &&
-          !semester
-        ) {
-          return res
-            .status(400)
-            .json({ message: "At least one field to update is required" });
+        if (!position_id && !group_name && !description && !req.files?.group_photo && !req.body?.group_photo && !year && !semester) {
+          return res.status(400).json({ success: false, message: "At least one field to update is required" });
         }
-
-        // Check if group exists
         const checkGroupQuery = "SELECT * FROM `group` WHERE id = ?";
         const [groupRows] = await db.promise().query(checkGroupQuery, [id]);
         if (groupRows.length === 0) {
-          return res
-            .status(404)
-            .json({ message: "Group not found with the provided id" });
+          return res.status(404).json({ success: false, message: "Group not found with the provided id" });
         }
-
-        // Check year is 1,2,3,4
         if (year && !["1", "2", "3", "4"].includes(year.toString())) {
-          return res
-            .status(400)
-            .json({ message: "year must be 1, 2, 3, or 4" });
+          return res.status(400).json({ success: false, message: "year must be 1, 2, 3, or 4" });
         }
         if (semester && !["Fall", "Spring", "Summer"].includes(semester)) {
-          return res
-            .status(400)
-            .json({ message: "semester must be Fall, Spring, or Summer" });
+          return res.status(400).json({ success: false, message: "semester must be Fall, Spring, or Summer" });
         }
-        
-        // If position_id is being updated, check if it exists
         if (position_id) {
-          const [positionRows] = await db
-            .promise()
-            .query("SELECT * FROM position WHERE id = ?", [position_id]);
+          const [positionRows] = await db.promise().query("SELECT * FROM position WHERE id = ?", [position_id]);
           if (positionRows.length === 0) {
-            return res
-              .status(400)
-              .json({ message: "Invalid position_id: not found" });
+            return res.status(400).json({ success: false, message: "Invalid position_id: not found" });
           }
         }
 
@@ -317,11 +266,11 @@ exports.updateGroup = async (req, res) => {
             id,
           ]);
           if (result.affectedRows === 0) {
-            return res.status(404).json({ message: "Group not found" });
+            return res.status(404).json({ success: false, message: "Group not found" });
           }
-        res.json({ message: "Group updated successfully" });
+        res.status(200).json({ success: true, message: "Group updated successfully" });
       } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({ success: false, message: "Database error", error: err.message });
       }
     }
   );
@@ -332,12 +281,12 @@ exports.deleteGroup = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: "id is required" });
+      return res.status(400).json({ success: false, message: "id is required" });
     }
     const sql = "DELETE FROM `group` WHERE id = ?";
-    const [result] = await db.promise().query(sql, [id]);
-    res.json({ message: "Group deleted successfully" });
+    await db.promise().query(sql, [id]);
+    res.status(200).json({ success: true, message: "Group deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };

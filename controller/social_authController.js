@@ -25,9 +25,9 @@ exports.createSocialAuth = async (data) => {
 exports.getAllSocialAuths = async (req, res) => {
   try {
     const [rows] = await db.promise().query('SELECT * FROM social_auth');
-    res.json(rows);
+    res.status(200).json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -37,14 +37,14 @@ exports.getSocialAuthById = async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ message: 'id is required' });
+      return res.status(400).json({ success: false, message: "id is required" });
     }
 
     const [rows] = await db.promise().query('SELECT * FROM social_auth WHERE id = ?', [id]);
-    if (rows.length === 0) return res.status(404).json({ message: 'Record not found' });
-    res.json(rows[0]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -54,17 +54,17 @@ exports.updateSocialAuth = async (req, res) => {
     const { user_id } = req.params;
     const { provider, provider_id } = req.body;
     if (!user_id || !provider || !provider_id) {
-      return res.status(400).json({ message: 'user_id, provider, and provider_id are required' });
+      return res.status(400).json({ success: false, message: "user_id, provider, and provider_id are required" });
     }
 
     const sql = 'UPDATE social_auth SET provider = COALESCE(?, provider), provider_id = COALESCE(?, provider_id) WHERE user_id = ?';
     const [result] = await db.promise().query(sql, [provider, provider_id, user_id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Record not found' });
+      return res.status(404).json({ success: false, message: "Record not found" });
     }
-    res.json({ message: 'Social account updated successfully' });
+    res.status(200).json({ success: true, message: "Social account updated successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -74,17 +74,17 @@ exports.deleteSocialAuth = async (req, res) => {
     const { user_id } = req.params;
 
     if (!user_id) {
-      return res.status(400).json({ message: 'id is required' });
+      return res.status(400).json({ success: false, message: "id is required" });
     }
 
     const sql = 'DELETE FROM social_auth WHERE user_id = ?';
     const [result] = await db.promise().query(sql, [user_id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Record not found' });
+      return res.status(404).json({ success: false, message: "Record not found" });
     }
 
-    res.json({ message: 'Social account deleted successfully' });
+    res.status(200).json({ success: true, message: "Social account deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };

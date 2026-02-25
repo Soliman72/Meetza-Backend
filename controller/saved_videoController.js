@@ -8,32 +8,23 @@ exports.createSavedVideo = async (req, res) => {
     
     // Validate required fields
     if (!member_id) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: member not found",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized: member not found" });
     }
     if (!video_id) {
-      return res.status(400).json({
-        success: false,
-        message: "video_id is required",
-      });
+      return res.status(400).json({ success: false, message: "video_id is required" });
     }
     // Check if video exists
     const [videoExists] = await db
       .promise()
         .query("SELECT id FROM video WHERE id = ?", [video_id]);
     if (videoExists.length === 0) {
-        return res.status(400).json({
-        success: false,
-        message: "Invalid video_id: not found",
-      });
+        return res.status(400).json({ success: false, message: "Invalid video_id: not found" });
     }
     const sql = "INSERT INTO saved_video (member_id, video_id, timestamp) VALUES (?, ?, NOW())";
     await db.promise().query(sql, [member_id, video_id]);
-    res.status(201).json({ member_id, video_id, timestamp: new Date() });
+    res.status(201).json({ success: true, data: { member_id, video_id, timestamp: new Date() } });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -42,17 +33,14 @@ exports.getSavedVideosByMemberId = async (req, res) => {
   try {
     const member_id = req.user?.id;
     if (!member_id) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: member not found",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized: member not found" });
     }
     const [rows] = await db.promise().query('SELECT * FROM saved_video WHERE member_id = ?', [member_id]);
-    if (rows.length === 0) return res.status(404).json({ message: 'Record not found' });
-    res.json(rows);
-    } catch (err) {
-    res.status(500).json({ message: err.message });
-    }
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
+  }
 };
 
 // Read by id
@@ -60,17 +48,17 @@ exports.getSavedVideoById = async (req, res) => {
   try {
     const { video_id } = req.params;
     if (!video_id) {
-      return res.status(400).json({ message: 'id is required' });
+      return res.status(400).json({ success: false, message: "id is required" });
     }
     // Count saved videos
     const sqlCount = 'SELECT COUNT(*) as count FROM saved_video WHERE video_id = ?';
     const [countRows] = await db.promise().query(sqlCount, [video_id]);
     const savedVideoCount = countRows[0].count;
     const [rows] = await db.promise().query('SELECT * FROM saved_video WHERE video_id = ?', [video_id]);
-    if (rows.length === 0) return res.status(404).json({ message: 'Record not found' });
-    res.json({ savedVideoCount, saved_videos: rows });
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: { savedVideoCount, saved_videos: rows } });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -78,10 +66,10 @@ exports.getSavedVideoById = async (req, res) => {
 exports.getAllSavedVideos = async (req, res) => {
   try {
     const [rows] = await db.promise().query('SELECT * FROM saved_video');
-    if (rows.length === 0) return res.status(404).json({ message: 'Record not found' });
-    res.json(rows);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -91,15 +79,15 @@ exports.deleteSavedVideo = async (req, res) => {
     const member_id = req.user?.id;
     const { video_id } = req.params;
     if (!member_id || !video_id) {
-      return res.status(400).json({ message: 'member_id and video_id are required' });
+      return res.status(400).json({ success: false, message: "member_id and video_id are required" });
     }
     const sql = 'DELETE FROM saved_video WHERE member_id = ? AND video_id = ?';
     const [result] = await db.promise().query(sql, [member_id, video_id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Record not found' });
+      return res.status(404).json({ success: false, message: "Record not found" });
     }
-    res.json({ message: 'Saved video deleted successfully', member_id, video_id });
+    res.status(200).json({ success: true, message: "Saved video deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };

@@ -7,6 +7,7 @@ const passport = require("passport");
 const userController = require("./userController");
 const social_authController = require("./social_authController");
 const axios = require("axios");
+const { success: resSuccess, error: resError, authDto } = require("../dto");
 
 // Register new user with email verification
 exports.register = async (req, res) => {
@@ -15,10 +16,7 @@ exports.register = async (req, res) => {
 
     // Validate required fields
     if (!name || !password || !role || !email) {
-      return res.status(400).json({
-        success: false,
-        message: "One or more fields are required",
-      });
+      return res.status(400).json(resError("One or more fields are required"));
     }
 
     // Check if email already exists
@@ -26,10 +24,7 @@ exports.register = async (req, res) => {
       .promise()
       .query("SELECT email FROM user WHERE email = ?", [email]);
     if (rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists",
-      });
+      return res.status(400).json(resError("Email already exists"));
     }
 
     // Generate a 4-digit verification code
@@ -55,43 +50,27 @@ exports.register = async (req, res) => {
       "<p>Thank you for registering! Please use the following code to verify your email:</p>"
     )
       .then(() => {
-        return res.status(201).json({
-          success: true,
-          message:
-            "User registered successfully. Please check your email to verify your account.",
-          data: { name, email, role },
-        });
+        return res.status(201).json(
+          resSuccess(authDto.registerResponse({ name, email, role }), "User registered successfully. Please check your email to verify your account.")
+        );
       })
       .catch(async (emailError) => {
-        // If email fails to send, delete the user from the database
         await db.promise().query("DELETE FROM user WHERE email = ?", [email]);
-        return res.status(500).json({
-          success: false,
-          message:
-            "Failed to send verification email. User registration has been cancelled.",
-          error: emailError.message,
-        });
+        return res.status(500).json(resError("Failed to send verification email. User registration has been cancelled.", { error: emailError.message }));
       });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error registering user",
-      error: error.message,
-    });
+    res.status(500).json(resError("Error registering user", { error: error.message }));
   }
 };
 
 // Login user
 exports.login = async (req, res) => {
   try {
-    const { email, password, remember_me, role, from, captchaToken } = req.body;
+    const { email, password, remember_me, from, captchaToken } = req.body;
 
     // Validate required fields
-    if (!email || !password || !role) {
-      return res.status(400).json({
-        success: false,
-        message: "Email, password, and role are required",
-      });
+    if (!email || !password) {
+      return res.status(400).json(resError("Email and password are required"));
     }
 
     // Validate and verify reCAPTCHA token
@@ -108,26 +87,14 @@ exports.login = async (req, res) => {
         const { success, score } = response.data;
 
         if (!success) {
-          return res.status(400).json({
-            success: false,
-            message: "CAPTCHA verification failed. Please try again.",
-          });
+          return res.status(400).json(resError("CAPTCHA verification failed. Please try again."));
         }
-
-        // Optional: Check score for reCAPTCHA v3 (score should be > 0.5)
         if (score !== undefined && score < 0.5) {
-          return res.status(400).json({
-            success: false,
-            message: "CAPTCHA verification failed. Low score detected.",
-          });
+          return res.status(400).json(resError("CAPTCHA verification failed. Low score detected."));
         }
       } catch (captchaError) {
         console.error("reCAPTCHA verification error:", captchaError);
-        return res.status(500).json({
-          success: false,
-          message: "Error verifying CAPTCHA. Please try again.",
-          error: captchaError.message,
-        });
+        return res.status(500).json(resError("Error verifying CAPTCHA. Please try again.", { error: captchaError.message }));
       }
     }
     // Check if user exists
@@ -136,49 +103,22 @@ exports.login = async (req, res) => {
       .query("SELECT * FROM user WHERE email = ?", [email]);
 
     if (rows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
+      return res.status(401).json(resError("Invalid email or password"));
     }
 
     const user = rows[0];
 
-    if (user.role !== role) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid role for this user",
-      });
-    }
 
     // check email verification
     if (!user.email_verification) {
-      return res.status(403).json({
-        success: false,
-        message: "Please verify your email before logging in",
-      });
+      return res.status(403).json(resError("Please verify your email before logging in"));
     }
-
-    // check from dashboard or other platform
-    if (
-      from &&
-      from === "dashboard" &&
-      user.role !== "Administrator" &&
-      user.role !== "Super_Admin"
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied. Administrators only.",
-      });
+    if (from && from === "dashboard" && user.role !== "Administrator" && user.role !== "Super_Admin") {
+      return res.status(403).json(resError("Access denied. Administrators only."));
     }
-
-    // Compare password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
+      return res.status(401).json(resError("Invalid email or password"));
     }
 
     // Generate JWT token
@@ -186,25 +126,15 @@ exports.login = async (req, res) => {
       {
         id: user.id,
         email: user.email,
+        role: user.role,
       },
       process.env.JWT_SECRET,
       { expiresIn: remember_me === "true" ? "4d" : "24h" }
     );
 
-    res.status(200).json({
-      success: true,
-      message: "Login successful",
-      data: {
-        token,
-        user
-      },
-    });
+    res.status(200).json(resSuccess(authDto.loginResponse(token, user), "Login successful"));
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error logging in",
-      error: error.message,
-    });
+    res.status(500).json(resError("Error logging in", { error: error.message }));
   }
 };
 
@@ -214,13 +144,9 @@ exports.verifyEmail = async (req, res) => {
     const { code, email } = req.body;
 
     if (!code || !email) {
-      return res.status(400).json({
-        success: false,
-        message: "Verification code & Email is required",
-      });
+      return res.status(400).json(resError("Verification code & Email is required"));
     }
 
-    // Verify code in the database
     const [rows] = await db
       .promise()
       .query(
@@ -229,15 +155,10 @@ exports.verifyEmail = async (req, res) => {
       );
 
     if (rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired verification code",
-      });
+      return res.status(400).json(resError("Invalid or expired verification code"));
     }
 
     const user = rows[0];
-
-    // Mark as verified
     await db
       .promise()
       .query(
@@ -245,17 +166,10 @@ exports.verifyEmail = async (req, res) => {
         [user.email]
       );
 
-    return res.status(200).json({
-      success: true,
-      message: "Email verified successfully. You can now log in.",
-    });
+    return res.status(200).json(resSuccess(null, "Email verified successfully. You can now log in."));
   } catch (error) {
     console.error("verifyEmail error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error verifying email",
-      error: error.message,
-    });
+    return res.status(500).json(resError("Error verifying email", { error: error.message }));
   }
 };
 
@@ -265,21 +179,14 @@ exports.forgotPassword = async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required",
-      });
+      return res.status(400).json(resError("Email is required"));
     }
 
-    // Check if the email exists in the database
     const [rows] = await db
       .promise()
       .query("SELECT * FROM user WHERE email = ?", [email]);
     if (rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Email not found",
-      });
+      return res.status(404).json(resError("Email not found"));
     }
 
     // const user = rows[0];
@@ -298,16 +205,9 @@ exports.forgotPassword = async (req, res) => {
       resetCode,
       "<p>Thank you for registering! Please use the following code to reset your password:</p>"
     );
-    return res.status(201).json({
-      success: true,
-      message: "Please check your email to reset password",
-    });
+    return res.status(201).json(resSuccess(null, "Please check your email to reset password"));
   } catch (emailError) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to send verification email",
-      error: emailError.message,
-    });
+    return res.status(500).json(resError("Failed to send verification email", { error: emailError.message }));
   }
 };
 
@@ -316,45 +216,24 @@ exports.verifyCode = async (req, res) => {
   try {
     const { code, email } = req.body;
     if (!code || !email) {
-      return res.status(400).json({
-        success: false,
-        message: "Verification code & Email is required",
-      });
+      return res.status(400).json(resError("Verification code & Email is required"));
     }
 
-    // Verify code in the database
     const [rows] = await db
       .promise()
-      .query("SELECT * FROM user WHERE verification_code = ? AND email = ?", [
-        code,
-        email,
-      ]);
+      .query("SELECT * FROM user WHERE verification_code = ? AND email = ?", [code, email]);
     if (rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired verification code",
-      });
+      return res.status(400).json(resError("Invalid or expired verification code"));
     }
 
     const user = rows[0];
-
-    // Mark user as verified
     await db
       .promise()
-      .query("UPDATE user SET verification_code = NULL WHERE email = ?", [
-        user.email,
-      ]);
+      .query("UPDATE user SET verification_code = NULL WHERE email = ?", [user.email]);
 
-    return res.status(200).json({
-      success: true,
-      message: "Email verified successfully. You can now reset password.",
-    });
+    return res.status(200).json(resSuccess(null, "Email verified successfully. You can now reset password."));
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Error verifying code",
-      error: error.message,
-    });
+    return res.status(500).json(resError("Error verifying code", { error: error.message }));
   }
 };
 
@@ -363,48 +242,22 @@ exports.resetPassword = async (req, res) => {
   try {
     const { is_verifyed, email, new_password } = req.body;
     if (!is_verifyed || !new_password || !email) {
-      return res.status(400).json({
-        success: false,
-        message: "New password & Email is required",
-      });
+      return res.status(400).json(resError("New password & Email is required"));
     }
     if (is_verifyed === "true") {
-      // Verify code in the database
-      const [rows] = await db
-        .promise()
-        .query("SELECT * FROM user WHERE email = ?", [email]);
+      const [rows] = await db.promise().query("SELECT * FROM user WHERE email = ?", [email]);
       if (rows.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid email!",
-        });
+        return res.status(400).json(resError("Invalid email!"));
       }
       const user = rows[0];
       const hashedPassword = await bcrypt.hash(new_password, 10);
-      // Mark user as verified
-      await db
-        .promise()
-        .query("UPDATE user SET password = ? WHERE email = ?", [
-          hashedPassword,
-          user.email,
-        ]);
-
-      res.status(200).json({
-        success: true,
-        message: "password change successfully. You can now login.",
-      });
+      await db.promise().query("UPDATE user SET password = ? WHERE email = ?", [hashedPassword, user.email]);
+      res.status(200).json(resSuccess(null, "password change successfully. You can now login."));
     } else {
-      return res.status(400).json({
-        success: false,
-        message: "is_verifyed is false",
-      });
+      return res.status(400).json(resError("is_verifyed is false"));
     }
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Error resetting password",
-      error: error.message,
-    });
+    return res.status(500).json(resError("Error resetting password", { error: error.message }));
   }
 };
 
@@ -414,30 +267,16 @@ exports.socialAuth = (req, res, next) => {
   const redirect = req.query.redirect || "http://localhost:3000/home";
   const type = req.query.type || "signin"; // signin or signup
 
-  // Validate role
   if (!["Member", "Administrator", "Super_Admin"].includes(role)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid role specified",
-    });
+    return res.status(400).json(resError("Invalid role specified"));
   }
-
-  // Validate type
   if (!["signin", "signup"].includes(type)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid type specified",
-    });
+    return res.status(400).json(resError("Invalid type specified"));
   }
-
-  // Validate redirect URL format
   try {
     new URL(redirect);
-  } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid redirect URL format",
-    });
+  } catch (err) {
+    return res.status(400).json(resError("Invalid redirect URL format"));
   }
 
   const state = JSON.stringify({ role, redirect, type });
@@ -551,14 +390,14 @@ exports.socialAuthCallback = (req, res, next) => {
           dbUser = existing[0];
           
           // Check role match
-          if (dbUser.role !== role) {
-            return redirectWithError(
-              "role_mismatch",
-              "Role mismatch. Please use the correct role for sign in.",
-              res,
-              type
-            );
-          }
+          // if (dbUser.role !== role) {
+          //   return redirectWithError(
+          //     "role_mismatch",
+          //     "Role mismatch. Please use the correct role for sign in.",
+          //     res,
+          //     type
+          //   );
+          // }
 
           // Create social_auth link
           await social_authController.createSocialAuth({
@@ -591,15 +430,15 @@ exports.socialAuthCallback = (req, res, next) => {
           dbUser = users[0];
 
           // Check role match
-          if (dbUser.role !== role) {
-            return redirectWithError(
-              "role_mismatch",
-              "Role mismatch. Please use the correct role for sign in.",
-              res,
-              type,
-              redirectUrl
-            );
-          }
+          // if (dbUser.role !== role) {
+          //   return redirectWithError(
+          //     "role_mismatch",
+          //     "Role mismatch. Please use the correct role for sign in.",
+          //     res,
+          //     type,
+          //     redirectUrl
+          //   );
+          // }
 
           return proceedWithUser(dbUser, redirectUrl, res);
         }
@@ -711,17 +550,14 @@ exports.socialAuthCallback = (req, res, next) => {
 // Helper function to proceed with user creation and token generation
 function proceedWithUser(user, redirectUrl, res) {
   const safeUser = {
-    id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
-    email_verification: user.email_verification,
     user_photo: user.user_photo,
     created_at: user.created_at,
     updated_at: user.updated_at
   };
 
-  const tokenPayload = { id: user.id, email: user.email, role: user.role };
+  const tokenPayload = { id: user.id, email: user.email, role: user.role};
   const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: "24h" });
 
   const allowedOrigins = [

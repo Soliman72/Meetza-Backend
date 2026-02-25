@@ -17,10 +17,7 @@ exports.createMeeting = async (req, res) => {
     { name: "files", maxCount: 20 },
   ])(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message,
-      });
+      return res.status(400).json({ success: false, message: err.message });
     }
     try {
       const {
@@ -36,94 +33,49 @@ exports.createMeeting = async (req, res) => {
 
       // Ensure poster file is uploaded
       if (!req.files && !req.body.poster_file) {
-        return res.status(400).json({
-          success: false,
-          message: "Poster file is required",
-        });
+        return res.status(400).json({ success: false, message: "Poster file is required" });
       }
 
-      if (
-        !title ||
-        !start_time ||
-        !end_time ||
-        !group_id ||
-        !status ||
-        !recording
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Title, start_time, end_time, group_id, status, and recording are required",
-        });
+      if (!title || !start_time || !end_time || !group_id || !status || !recording) {
+        return res.status(400).json({ success: false, message: "Title, start_time, end_time, group_id, status, and recording are required" });
       }
       if (recording !== "1" && recording !== "0") {
-        return res.status(400).json({
-          success: false,
-          message: "Recording must be 1 or 0",
-        });
+        return res.status(400).json({ success: false, message: "Recording must be 1 or 0" });
       }
-      if (
-        status !== "Scheduled" &&
-        status !== "Completed" &&
-        status !== "Cancelled"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Status must be one of: Scheduled, Completed, Cancelled",
-        });
+      if (status !== "Scheduled" && status !== "Completed" && status !== "Cancelled") {
+        return res.status(400).json({ success: false, message: "Status must be one of: Scheduled, Completed, Cancelled" });
       }
 
       const start = new Date(start_time);
       const end = new Date(end_time);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return res.status(400).json({
-          success: false,
-          message: "start_time and end_time must be valid dates",
-        });
+        return res.status(400).json({ success: false, message: "start_time and end_time must be valid dates" });
       }
       const now = new Date();
       if (start < now || end < now) {
-        return res.status(400).json({
-          success: false,
-          message: "start_time and end_time must not be in the past",
-        });
+        return res.status(400).json({ success: false, message: "start_time and end_time must not be in the past" });
       }
       if (start >= end) {
-        return res.status(400).json({
-          success: false,
-          message: "end_time must be after start_time",
-        });
+        return res.status(400).json({ success: false, message: "end_time must be after start_time" });
       }
 
       const [groupResults] = await db
         .promise()
         .query("SELECT * FROM `group` WHERE id = ?", [group_id]);
       if (groupResults.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid group_id: not found",
-        });
+        return res.status(400).json({ success: false, message: "Invalid group_id: not found" });
       }
 
       const group = groupResults[0];
       const administrator_id = req.user?.id ?? req.administratorId;
       if (!administrator_id) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized: administrator_id is required",
-        });
+        return res.status(401).json({ success: false, message: "Unauthorized: administrator_id is required" });
       }
 
-      // Only the group's admin can create a meeting for this group (super admin can)
       if (group.administrator_id !== administrator_id && !req.isSuperAdmin) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Only the administrator of this group and super admin can create meetings for it",
-        });
+        return res.status(403).json({ success: false, message: "Only the administrator of this group and super admin can create meetings for it" });
       }
 
-      // No overlapping Scheduled meetings for the same group at the same time
       const [overlap] = await db.promise().query(
         `SELECT id FROM meeting
         WHERE group_id = ? AND status = 'Scheduled'
@@ -131,11 +83,7 @@ exports.createMeeting = async (req, res) => {
         [group_id, end_time, start_time],
       );
       if (overlap.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "This group already has a Scheduled meeting at that time. Create meetings at a different time.",
-        });
+        return res.status(409).json({ success: false, message: "This group already has a Scheduled meeting at that time. Create meetings at a different time." });
       }
 
       let posterUrl = "";
@@ -183,10 +131,7 @@ exports.createMeeting = async (req, res) => {
                 group_id,
               ]);
             if (groupContent.length === 0) {
-              return res.status(404).json({
-                success: false,
-                message: "Group content not found",
-              });
+              return res.status(404).json({ success: false, message: "Group content not found" });
             }
             // Insert resource into database
             const resourceQuery =
@@ -220,10 +165,7 @@ exports.createMeeting = async (req, res) => {
         }
 
         if (files.length === 0) {
-          return res.status(500).json({
-            success: false,
-            message: "Failed to upload any files",
-          });
+          return res.status(500).json({ success: false, message: "Failed to upload any files" });
         }
       }
       const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id, poster_url, description, recording)
@@ -285,11 +227,7 @@ exports.createMeeting = async (req, res) => {
         },
       });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-        error: err.message,
-      });
+return res.status(500).json({ success: false, message: "Database error", error: err.message });
     }
   });
 };
@@ -311,10 +249,7 @@ exports.getAllMeetings = async (req, res) => {
         await ensureGroupAccess(userId, group_id);
       } catch (e) {
         if (e.name === "GroupAccessError") {
-          return res.status(e.statusCode).json({
-            success: false,
-            message: e.message,
-          });
+          return res.status(e.statusCode).json({ success: false, message: e.message });
         }
         throw e;
       }
@@ -356,29 +291,16 @@ exports.getAllMeetings = async (req, res) => {
       }
       memberQuery += " ORDER BY start_time DESC";
       const [meetings] = await db.promise().query(memberQuery, memberParams);
-      return res.status(200).json({
-        success: true,
-        data: meetings,
-      });
+      return res.status(200).json({ success: true, data: meetings });
     }
     if (req.user.role === "Super_Admin" || req.user.role === "Administrator") {
       const [meetings] = await db.promise().query(query, params);
-      return res.status(200).json({
-        success: true,
-        data: meetings,
-      });
+      return res.status(200).json({ success: true, data: meetings });
     }
 
-    return res.status(403).json({
-      success: false,
-      message: "Access denied",
-    });
+    return res.status(403).json({ success: false, message: "Access denied" });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -388,20 +310,14 @@ exports.getMeetingById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user?.id;
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting id is required",
-      });
+      return res.status(400).json({ success: false, message: "Meeting id is required" });
     }
 
     const [results] = await db
       .promise()
       .query("SELECT * FROM meeting WHERE id = ?", [id]);
     if (results.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Meeting not found",
-      });
+      return res.status(404).json({ success: false, message: "Meeting not found" });
     }
 
     const meeting = results[0];
@@ -422,16 +338,9 @@ exports.getMeetingById = async (req, res) => {
       return res.status(200).json({ success: true, data: meeting });
     }
 
-    return res.status(403).json({
-      success: false,
-      message: "You do not have access to this meeting",
-    });
+    return res.status(403).json({ success: false, message: "You do not have access to this meeting" });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -442,37 +351,25 @@ exports.updateMeetingById = async (req, res) => {
     res,
     async (err) => {
       if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message,
-        });
+        return res.status(400).json({ success: false, message: err.message });
       }
       try {
         const { id } = req.params;
         const { title, start_time, end_time, group_id, status, description, recording } =
           req.body;
         if (recording !== "1" && recording !== "0") {
-          return res.status(400).json({
-            success: false,
-            message: "Recording must be 1 or 0",
-          });
+          return res.status(400).json({ success: false, message: "Recording must be 1 or 0" });
         }
 
         if (!id) {
-          return res.status(400).json({
-            success: false,
-            message: "Meeting id is required",
-          });
+          return res.status(400).json({ success: false, message: "Meeting id is required" });
         }
 
         const [existing] = await db
           .promise()
           .query("SELECT * FROM meeting WHERE id = ?", [id]);
         if (existing.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Meeting not found",
-          });
+          return res.status(404).json({ success: false, message: "Meeting not found" });
         }
 
         const meeting = existing[0];
@@ -481,10 +378,7 @@ exports.updateMeetingById = async (req, res) => {
           req.user.role !== "Administrator" &&
           meeting.administrator_id !== req.user.id
         ) {
-          return res.status(403).json({
-            success: false,
-            message: "Only the meeting administrator can update this meeting",
-          });
+          return res.status(403).json({ success: false, message: "Only the meeting administrator can update this meeting" });
         }
 
         const updates = [];
@@ -504,16 +398,10 @@ exports.updateMeetingById = async (req, res) => {
           Number.isNaN(newStart.getTime()) ||
           Number.isNaN(newEnd.getTime())
         ) {
-          return res.status(400).json({
-            success: false,
-            message: "start_time and end_time must be valid dates",
-          });
+          return res.status(400).json({ success: false, message: "start_time and end_time must be valid dates" });
         }
         if (newStart >= newEnd) {
-          return res.status(400).json({
-            success: false,
-            message: "end_time must be after start_time",
-          });
+          return res.status(400).json({ success: false, message: "end_time must be after start_time" });
         }
         if (start_time != null) {
           updates.push("start_time = ?");
@@ -525,10 +413,7 @@ exports.updateMeetingById = async (req, res) => {
         }
         if (status != null) {
           if (!["Scheduled", "Completed", "Cancelled"].includes(status)) {
-            return res.status(400).json({
-              success: false,
-              message: "Status must be one of: Scheduled, Completed, Cancelled",
-            });
+            return res.status(400).json({ success: false, message: "Status must be one of: Scheduled, Completed, Cancelled" });
           }
           updates.push("status = ?");
           params.push(status);
@@ -559,11 +444,7 @@ exports.updateMeetingById = async (req, res) => {
           params.push(recording);
         }
         if (updates.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "At least one field to update is required (title, start_time, end_time, status, group_id, description, poster_url, recording)",
-          });
+          return res.status(400).json({ success: false, message: "At least one field to update is required (title, start_time, end_time, status, group_id, description, poster_url, recording)" });
         }
 
         // Enforce no overlap when start/end changed or status is Scheduled
@@ -576,11 +457,7 @@ exports.updateMeetingById = async (req, res) => {
             [group_id || meeting.group_id, id, newEnd, newStart],
           );
           if (overlap.length > 0) {
-            return res.status(409).json({
-              success: false,
-              message:
-                "This group already has a Scheduled meeting at that time. Choose a different time range.",
-            });
+            return res.status(409).json({ success: false, message: "This group already has a Scheduled meeting at that time. Choose a different time range." });
           }
         }
 
@@ -588,16 +465,9 @@ exports.updateMeetingById = async (req, res) => {
         const query = `UPDATE meeting SET ${updates.join(", ")} WHERE id = ?`;
         await db.promise().query(query, [...params, id]);
 
-        return res.status(200).json({
-          success: true,
-          message: "Meeting updated successfully",
-        });
+        return res.status(200).json({ success: true, message: "Meeting updated successfully" });
       } catch (err) {
-        return res.status(500).json({
-          success: false,
-          message: "Database error",
-          error: err.message,
-        });
+return res.status(500).json({ success: false, message: "Database error", error: err.message });
       }
     },
   );
@@ -608,42 +478,26 @@ exports.deleteMeetingById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting id is required",
-      });
+      return res.status(400).json({ success: false, message: "Meeting id is required" });
     }
 
     const [existing] = await db
       .promise()
       .query("SELECT * FROM meeting WHERE id = ?", [id]);
     if (existing.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Meeting not found",
-      });
+      return res.status(404).json({ success: false, message: "Meeting not found" });
     }
 
     const meeting = existing[0];
     if (!req.isSuperAdmin && meeting.administrator_id !== req.administratorId) {
-      return res.status(403).json({
-        success: false,
-        message: "Only the meeting administrator can delete this meeting",
-      });
+      return res.status(403).json({ success: false, message: "Only the meeting administrator can delete this meeting" });
     }
 
     await db.promise().query("DELETE FROM meeting WHERE id = ?", [id]);
 
-    return res.status(200).json({
-      success: true,
-      message: "Meeting deleted successfully",
-    });
+    return res.status(200).json({ success: true, message: "Meeting deleted successfully" });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -655,10 +509,7 @@ exports.joinMeeting = async (req, res) => {
     const { id: meetingId } = req.params;
     const userId = req.user?.id;
     if (!userId || !meetingId) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting id is required and user must be authenticated",
-      });
+      return res.status(400).json({ success: false, message: "Meeting id is required and user must be authenticated" });
     }
 
     const [meetingRows] = await db
@@ -681,16 +532,10 @@ exports.joinMeeting = async (req, res) => {
         [meeting.group_id, userId],
       );
     if (membership.length === 0 && req.user.role == "Member") {
-      return res.status(403).json({
-        success: false,
-        message: "Only members of this meeting's group can join the meeting",
-      });
+      return res.status(403).json({ success: false, message: "Only members of this meeting's group can join the meeting" });
     } else if (req.user.role == "Administrator") {
       if (userId != meeting.administrator_id) {
-        return res.status(403).json({
-          success: false,
-          message: "You are not the Administrator of this meeting!",
-        });
+        return res.status(403).json({ success: false, message: "You are not the Administrator of this meeting!" });
       }
     }
 
@@ -701,11 +546,7 @@ exports.joinMeeting = async (req, res) => {
         [meetingId, userId],
       );
     if (existing.length > 0) {
-      return res.status(200).json({
-        success: true,
-        message: "You are already in this meeting",
-        data: { meeting_id: meetingId, userId },
-      });
+      return res.status(200).json({ success: true, message: "You are already in this meeting", data: { meeting_id: meetingId, userId } });
     }
 
     const participantId = uuidv4();
@@ -716,17 +557,9 @@ exports.joinMeeting = async (req, res) => {
         [participantId, meetingId, userId],
       );
 
-    return res.status(201).json({
-      success: true,
-      message: "Joined the meeting successfully",
-      data: { id: participantId, meeting_id: meetingId, userId },
-    });
+    return res.status(201).json({ success: true, message: "Joined the meeting successfully", data: { id: participantId, meeting_id: meetingId, userId } });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -736,10 +569,7 @@ exports.leaveMeeting = async (req, res) => {
     const { id: meetingId } = req.params;
     const userId = req.user?.id;
     if (!userId || !meetingId) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting id is required and user must be authenticated",
-      });
+      return res.status(400).json({ success: false, message: "Meeting id is required and user must be authenticated" });
     }
 
     const [result] = await db
@@ -750,22 +580,12 @@ exports.leaveMeeting = async (req, res) => {
       );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "You were not in this meeting or the meeting does not exist",
-      });
+      return res.status(404).json({ success: false, message: "You were not in this meeting or the meeting does not exist" });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Left the meeting successfully",
-    });
+    return res.status(200).json({ success: true, message: "Left the meeting successfully" });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -774,19 +594,14 @@ exports.getMeetingParticipants = async (req, res) => {
   try {
     const { id: meetingId } = req.params;
     if (!meetingId) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting id is required",
-      });
+      return res.status(400).json({ success: false, message: "Meeting id is required" });
     }
 
     const [meetingRows] = await db
       .promise()
       .query("SELECT * FROM meeting WHERE id = ?", [meetingId]);
     if (meetingRows.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Meeting not found" });
+      return res.status(404).json({ success: false, message: "Meeting not found" });
     }
     const meeting = meetingRows[0];
 
@@ -802,11 +617,7 @@ exports.getMeetingParticipants = async (req, res) => {
           [meeting.group_id, userId],
         );
       if (membership.length === 0) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Only the meeting administrator or group members can view participants",
-        });
+        return res.status(403).json({ success: false, message: "Only the meeting administrator or group members can view participants" });
       }
     }
 
@@ -820,15 +631,8 @@ exports.getMeetingParticipants = async (req, res) => {
       [meetingId],
     );
 
-    return res.status(200).json({
-      success: true,
-      data: rows,
-    });
+    return res.status(200).json({ success: true, data: rows });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };

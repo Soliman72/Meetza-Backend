@@ -30,18 +30,11 @@ const broadcastMessage = (message) => {
   ioInstance.to(`group:${message.group_id}`).emit("message", message);
 };
 
-const handleError = (res, error) => {
-  if (error instanceof GroupAccessError) {
-    return res.status(error.statusCode).json({
-      success: false,
-      message: error.message,
-    });
+const handleError = (res, err) => {
+  if (err instanceof GroupAccessError) {
+    return res.status(err.statusCode).json({ success: false, message: err.message });
   }
-
-  return res.status(500).json({
-    success: false,
-    message: error.message || "Unexpected error",
-  });
+  return res.status(500).json({ success: false, message: err.message || "Unexpected error" });
 };
 
 exports.registerChatIo = registerChatIo;

@@ -41,9 +41,9 @@ exports.getAllAdministrators = async (req, res) => {
     }
 
     const [rows] = await db.promise().query(query, params);
-    res.json(rows);
+    res.status(200).json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -53,19 +53,19 @@ exports.getAdministratorById = async (req, res) => {
     const { user_id } = req.params;
 
     if (!user_id) {
-      return res.status(400).json({ message: "user_id is required" });
+      return res.status(400).json({ success: false, message: "user_id is required" });
     }
 
     const [rows] = await db
       .promise()
       .query("SELECT * FROM administrator WHERE user_id = ?", [user_id]);
     if (rows.length === 0) {
-      return res.status(404).json({ message: "Administrator not found" });
+      return res.status(404).json({ success: false, message: "Administrator not found" });
     }
 
-    res.json(rows[0]);
+    res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -76,9 +76,7 @@ exports.updateAdministrator = async (req, res) => {
     const { new_user_id, role } = req.body;
 
     if (!user_id || !new_user_id || !role) {
-      return res
-        .status(400)
-        .json({ message: "user_id, new_user_id, and role are required" });
+      return res.status(400).json({ success: false, message: "user_id, new_user_id, and role are required" });
     }
     const sql =
       "UPDATE administrator SET user_id = COALESCE(?, user_id), role = COALESCE(?, role) WHERE user_id = ?";
@@ -86,11 +84,11 @@ exports.updateAdministrator = async (req, res) => {
       .promise()
       .query(sql, [new_user_id, role, user_id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Administrator not found" });
+      return res.status(404).json({ success: false, message: "Administrator not found" });
     }
-    res.json({ message: "Administrator updated successfully" });
+    res.status(200).json({ success: true, message: "Administrator updated successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -100,21 +98,21 @@ exports.deleteAdministrator = async (req, res) => {
     const { user_id } = req.params;
 
     if (!user_id) {
-      return res.status(400).json({ message: "user_id is required" });
+      return res.status(400).json({ success: false, message: "user_id is required" });
     }
 
     const [rows] = await db
       .promise()
       .query("SELECT * FROM administrator WHERE user_id = ?", [user_id]);
     if (rows.length === 0) {
-      return res.status(404).json({ message: "Administrator not found" });
+      return res.status(404).json({ success: false, message: "Administrator not found" });
     }
 
     await db
       .promise()
       .query("DELETE FROM administrator WHERE user_id = ?", [user_id]);
-    res.json({ message: "Administrator deleted successfully" });
+    res.status(200).json({ success: true, message: "Administrator deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };

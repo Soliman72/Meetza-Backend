@@ -10,33 +10,25 @@ exports.createComment = async (req, res) => {
 
     // Validate required fields
     if (!member_id) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: member not found",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized: member not found" });
     }
     if (!video_id || !comment_text) {
-      return res.status(400).json({
-        success: false,
-        message: "video_id and comment_text are required",
-      });
+      return res.status(400).json({ success: false, message: "video_id and comment_text are required" });
     }
     // Check if video exists
     const [videoExists] = await db
       .promise()
       .query("SELECT id FROM video WHERE id = ?", [video_id]);
     if (videoExists.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid video_id: not found",
-      });
+      return res.status(400).json({ success: false, message: "Invalid video_id: not found" });
     }
     const sql =
       "INSERT INTO comment (id, member_id, video_id, comment_text) VALUES (?, ?, ?, ?)";
-    await db.promise().query(sql, [id, member_id, video_id, comment_text]);
-    res.status(201).json({ id, member_id, video_id, comment_text });
+    const rows = await db.promise().query(sql, [id, member_id, video_id, comment_text]);
+    const [newComment] = rows;
+    res.status(201).json({ success: true, data: newComment });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -58,10 +50,10 @@ exports.getCommentsByVideoId = async (req, res) => {
         [video_id]
       );
     if (rows.length === 0)
-      return res.status(404).json({ message: "Record not found" });
-    res.json({ commentCount, comments: rows });
+      return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: { commentCount, comments: rows } });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -76,10 +68,10 @@ exports.getCommentById = async (req, res) => {
       .promise()
       .query("SELECT * FROM comment WHERE id = ?", [id]);
     if (rows.length === 0)
-      return res.status(404).json({ message: "Record not found" });
-    res.json(rows[0]);
+      return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -88,16 +80,16 @@ exports.getCommentsByMemberId = async (req, res) => {
   try {
     const member_id = req.user?.id;
     if (!member_id) {
-      return res.status(400).json({ message: "member_id is required" });
+      return res.status(400).json({ success: false, message: "member_id is required" });
     }
     const [rows] = await db
       .promise()
       .query("SELECT * FROM comment WHERE member_id = ?", [member_id]);
     if (rows.length === 0)
-      return res.status(404).json({ message: "Record not found" });
-    res.json(rows);
+      return res.status(404).json({ success: false, message: "Record not found" });
+    res.status(200).json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -109,16 +101,16 @@ exports.updateComment = async (req, res) => {
     if (!id || !comment_text) {
       return res
         .status(400)
-        .json({ message: "id and comment_text are required" });
+        .json({ success: false, message: "id and comment_text are required" });
     }
     const sql = "UPDATE comment SET comment_text = ? WHERE id = ?";
     const [result] = await db.promise().query(sql, [comment_text, id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Record not found" });
+      return res.status(404).json({ success: false, message: "Record not found" });
     }
-    res.json({ id, comment_text });
+    res.status(200).json({ success: true, data: { id, comment_text } });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -127,15 +119,15 @@ exports.deleteComment = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: "id is required" });
+      return res.status(400).json({ success: false, message: "id is required" });
     }
     const sql = "DELETE FROM comment WHERE id = ?";
     const [result] = await db.promise().query(sql, [id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Record not found" });
+      return res.status(404).json({ success: false, message: "Record not found" });
     }
-    res.json({ message: "Comment deleted successfully" });
+    res.status(200).json({ success: true, message: "Comment deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };

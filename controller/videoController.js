@@ -12,10 +12,7 @@ exports.createVideo = (req, res) => {
     { name: "poster_file", maxCount: 1 },
   ])(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message,
-      });
+      return res.status(400).json({ success: false, message: err.message });
     }
 
     try {
@@ -23,11 +20,8 @@ exports.createVideo = (req, res) => {
       const id = uuidv4();
 
       // Ensure both files are uploaded
-      if (!req.files && (!req.body.video_file || !req.body.poster_file)) {
-        return res.status(400).json({
-          success: false,
-          message: "Both video and poster files are required",
-        });
+      if (!req.files && (!req.body.video_file || !req.body.poster_file)) { 
+          return res.status(400).json({ success: false, message: "Both video and poster files are required" });
       }
 
       let videoUrl = "";
@@ -57,11 +51,7 @@ exports.createVideo = (req, res) => {
 
       // Validate required fields
       if (! group_id || !title ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            " group_id , title are required",
-        });
+        return res.status(400).json({ success: false, message: "group_id and title are required" });
       }
 
       if ( meeting_id )
@@ -72,10 +62,7 @@ exports.createVideo = (req, res) => {
           .query(meetingCheckQuery, [meeting_id]);
   
         if (meetingRows.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Meeting not found",
-          });
+          return res.status(404).json({ success: false, message: "Meeting not found" });
         }
       }
 
@@ -85,10 +72,7 @@ exports.createVideo = (req, res) => {
         .promise()
         .query( groupCheckQuery, [ group_id ] );
       if ( groupRows.length === 0 ) {
-        return res.status( 404 ). json( {
-          success: false,
-          message: "Group not found",
-        } );
+        return res.status(404).json({ success: false, message: "Group not found" });
       }
 
 
@@ -96,10 +80,7 @@ exports.createVideo = (req, res) => {
       if (req.user && req.user.id !== undefined) {
         req.body.administrator_id = req.user.id;
       } else {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized: administrator_id is required",
-        });
+        return res.status(401).json({ success: false, message: "Unauthorized: administrator_id is required" });
       }
 
       // Set default duration to current date if not provided (duration is NOT NULL in DB)
@@ -133,15 +114,11 @@ exports.createVideo = (req, res) => {
           duration: finalDuration,
           description: description || null,
           administrator_id: req.body.administrator_id,
-          group_id
+          group_id,
         },
       });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-        error: err.message,
-      });
+      return res.status(500).json({ success: false, message: "Database error", error: err.message });
     }
   });
 };
@@ -182,16 +159,9 @@ exports.getAllVideos = async (req, res) => {
     }
     
     const [results] = await db.promise().query(query, params);
-    return res.status(200).json({
-      success: true,
-      data: results,
-    });
+    return res.status(200).json({ success: true, data: results });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -199,10 +169,7 @@ exports.getVideoById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Video id is required",
-      });
+      return res.status(400).json({ success: false, message: "Video id is required" });
     }
     let query = "SELECT * FROM video WHERE id = ?";
     let params = [id];
@@ -215,21 +182,11 @@ exports.getVideoById = async (req, res) => {
 
     const [results] = await db.promise().query(query, params);
     if (results.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Video not found",
-      });
+      return res.status(404).json({ success: false, message: "Video not found" });
     }
-    return res.status(200).json({
-      success: true,
-      data: results[0],
-    });
+    return res.status(200).json({ success: true, data: results[0] });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -237,29 +194,16 @@ exports.deleteVideo = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Video id is required",
-      });
+      return res.status(400).json({ success: false, message: "Video id is required" });
     }
     const query = "DELETE FROM video WHERE id = ?";
     const [result] = await db.promise().query(query, [id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Video not found",
-      });
+      return res.status(404).json({ success: false, message: "Video not found" });
     }
-    return res.status(200).json({
-      success: true,
-      message: "Video deleted successfully",
-    });
+    return res.status(200).json({ success: true, message: "Video deleted successfully" });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -270,20 +214,14 @@ exports.updateVideo = (req, res) => {
     { name: "poster_file", maxCount: 1 },
   ])(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message,
-      });
+      return res.status(400).json({ success: false, message: err.message });
     }
 
     try {
       const { id } = req.params;
 
       if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: "id is required",
-        });
+        return res.status(400).json({ success: false, message: "id is required" });
       }
 
       // Check if video exists
@@ -313,10 +251,7 @@ exports.updateVideo = (req, res) => {
           .promise()
           .query(meetingCheckQuery, [meeting_id]);
         if (meetingRows.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Meeting not found",
-          });
+          return res.status(404).json({ success: false, message: "Meeting not found" });
         }
         updateFields.push("meeting_id = ?");
         updateParams.push(meeting_id);
@@ -363,10 +298,7 @@ exports.updateVideo = (req, res) => {
       }
 
       if (updateFields.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "No new data provided for update",
-        });
+        return res.status(400).json({ success: false, message: "No new data provided for update" });
       }
 
       updateParams.push(id);
@@ -374,16 +306,9 @@ exports.updateVideo = (req, res) => {
       const sql = `UPDATE video SET ${updateFields.join(", ")} WHERE id = ?`;
       const [result] = await db.promise().query(sql, [...updateParams, id]);
 
-      return res.status(200).json({
-        success: true,
-        message: "Video updated successfully",
-      });
+      return res.status(200).json({ success: true, message: "Video updated successfully" });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-        error: err.message,
-      });
+      return res.status(500).json({ success: false, message: "Database error", error: err.message });
     }
   });
 };

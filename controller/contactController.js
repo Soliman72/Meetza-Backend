@@ -9,19 +9,13 @@ exports.createContact = async (req, res) => {
 
     // Validate required fields
     if (!name || !email || !message) {
-      return res.status(400).json({
-        success: false,
-        message: "Name, email, and message are required",
-      });
+      return res.status(400).json({ success: false, message: "Name, email, and message are required" });
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email format",
-      });
+      return res.status(400).json({ success: false, message: "Invalid email format" });
     }
 
     const id = uuidv4();
@@ -159,22 +153,9 @@ exports.createContact = async (req, res) => {
       // Don't fail the request if email fails
     }
 
-    res.status(201).json({
-      success: true,
-      message: "Contact message sent successfully",
-      data: {
-        id,
-        name,
-        email,
-        message,
-      },
-    });
+    res.status(201).json({ success: true, message: "Contact message sent successfully", data: { id, name, email, message } });
   } catch (error) {
     console.error("Contact creation error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to send contact message",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: "Failed to send contact message", error: error.message });
   }
 };

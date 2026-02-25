@@ -100,16 +100,9 @@ exports.getAllGroupContents = async (req, res) => {
       })
     );
 
-    return res.status(200).json({
-      success: true,
-      data: groupContentsWithResources,
-    });
+    return res.status(200).json({ success: true, data: groupContentsWithResources });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -119,10 +112,7 @@ exports.getGroupContentById = async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Content id is required",
-      });
+      return res.status(400).json({ success: false, message: "Content id is required" });
     }
 
     // Get group content
@@ -146,16 +136,9 @@ exports.getGroupContentById = async (req, res) => {
       resources: resources,
     };
 
-    return res.status(200).json({
-      success: true,
-      data: groupContent,
-    });
+    return res.status(200).json({ success: true, data: groupContent });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -166,10 +149,7 @@ exports.updateGroupContentById = async (req, res) => {
     const { content_name, content_description } = req.body;
 
     if (!id && !content_name && !content_description) {
-      return res.status(400).json({
-        success: false,
-        message: "Content id, name or description is required",
-      });
+      return res.status(400).json({ success: false, message: "Content id, name or description is required" });
     }
 
     // Check if group content exists
@@ -195,16 +175,9 @@ exports.updateGroupContentById = async (req, res) => {
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Group content updated successfully",
-    });
+    return res.status(200).json({ success: true, message: "Group content updated successfully" });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Database error",
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -234,10 +207,7 @@ exports.addFilesToGroupContent = (req, res) => {
         const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
         const [meetingRows] = await db.promise().query(meetingCheckQuery, [meeting_id]);
         if (meetingRows.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Meeting not found",
-          });
+          return res.status(404).json({ success: false, message: "Meeting not found" });
         }
       }
 
@@ -265,11 +235,7 @@ exports.addFilesToGroupContent = (req, res) => {
             [...ownershipFilter.params, id]
           );
         if (userContent.length === 0) {
-          return res.status(403).json({
-            success: false,
-            message:
-              "You don't have permission to add files to this group content",
-          });
+          return res.status(403).json({ success: false, message: "You don't have permission to add files to this group content" });
         }
       }
       
@@ -457,10 +423,7 @@ exports.deleteFileFromGroupContent = async (req, res) => {
     const { id, resourceId } = req.params;
 
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Content id is required",
-      });
+      return res.status(400).json({ success: false, message: "Content id is required" });
     }
 
     if (!resourceId) {

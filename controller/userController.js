@@ -6,6 +6,7 @@ const memberController = require("./memberController");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
+const { success: resSuccess, error: resError, userDto } = require("../dto");
 
 // Create
 exports.createUser = async (data) => {
@@ -106,9 +107,9 @@ exports.getAllUsers = async (req, res) => {
     console.log(query);
 
     const [rows] = await db.promise().query(query, params);
-    res.json(rows);
+    res.status(200).json(resSuccess(userDto.toPublicList(rows)));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json(resError("Database error", { error: err.message }));
   }
 };
 
@@ -117,17 +118,17 @@ exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: "id is required" });
+      return res.status(400).json(resError("id is required"));
     }
     const [rows] = await db
       .promise()
       .query("SELECT * FROM user WHERE id = ?", [id]);
     if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json(resError("User not found"));
     }
-    res.json(rows[0]);
+    res.status(200).json(resSuccess(userDto.toPublic(rows[0])));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json(resError("Database error", { error: err.message }));
   }
 };
 
@@ -137,17 +138,17 @@ exports.getUserByEmail = async (req, res) => {
   try {
     const { email } = req.params;
     if (!email) {
-      return res.status(400).json({ message: "email is required" });
+      return res.status(400).json(resError("email is required"));
     }
     const [rows] = await db
       .promise()
       .query("SELECT * FROM user WHERE email = ?", [email]);
     if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json(resError("User not found"));
     }
-    res.json(rows[0]);
+    res.status(200).json(resSuccess(userDto.toPublic(rows[0])));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json(resError("Database error", { error: err.message }));
   }
 };
 
@@ -159,10 +160,7 @@ exports.updateUser = async (req, res) => {
     res,
     async (err) => {
       if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message,
-        });
+        return res.status(400).json(resError(err.message));
       }
 
       try {
@@ -178,7 +176,7 @@ exports.updateUser = async (req, res) => {
         } = req.body;
 
         if (!id) {
-          return res.status(400).json({ message: "id is required" });
+          return res.status(400).json(resError("id is required"));
         }
         if (
           !name &&
@@ -188,11 +186,9 @@ exports.updateUser = async (req, res) => {
           !verification_code &&
           !email_verification &&
           !user_photo &&
-          !req.files.user_photo
+          !req.files?.user_photo
         ) {
-          return res
-            .status(400)
-            .json({ message: "At least one field is required to update" });
+          return res.status(400).json(resError("At least one field is required to update"));
         }
 
         // Handle file upload to Cloudinary
@@ -222,9 +218,9 @@ exports.updateUser = async (req, res) => {
               id,
             ]
           );
-        res.json({ message: "User updated successfully" });
+        res.status(200).json(resSuccess(null, "User updated successfully"));
       } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json(resError("Database error", { error: err.message }));
       }
     }
   );
@@ -235,15 +231,15 @@ exports.deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: "id is required" });
+      return res.status(400).json(resError("id is required"));
     }
     const sql = "DELETE FROM user WHERE id = ?";
     const [result] = await db.promise().query(sql, [id]);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json(resError("User not found"));
     }
-    res.json({ message: "User deleted successfully" });
+    res.status(200).json(resSuccess(null, "User deleted successfully"));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json(resError("Database error", { error: err.message }));
   }
 };
