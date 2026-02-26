@@ -12,6 +12,7 @@ const toPublic = (row) => {
   if (!row) return null;
   return {
     name: row.name,
+    email: row.email,
     user_photo: row.user_photo ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -26,6 +27,7 @@ const toMinimal = (row) => {
   return {
     id: row.id,
     name: row.name,
+    email: row.email,
     user_photo: row.user_photo ?? null,
   };
 };
