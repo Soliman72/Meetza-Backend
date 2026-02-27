@@ -107,7 +107,7 @@ exports.getAllUsers = async (req, res) => {
     console.log(query);
 
     const [rows] = await db.promise().query(query, params);
-    res.status(200).json(resSuccess(userDto.toPublicList(rows)));
+    res.status(200).json(resSuccess(userDto.toPublicListWithRole(rows)));
   } catch (err) {
     res.status(500).json(resError("Database error", { error: err.message }));
   }

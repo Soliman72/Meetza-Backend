@@ -27,7 +27,6 @@ const toMinimal = (row) => {
   return {
     id: row.id,
     name: row.name,
-    email: row.email,
     user_photo: row.user_photo ?? null,
   };
 };
@@ -37,8 +36,24 @@ const toMinimal = (row) => {
  */
 const toPublicList = (rows) => (rows || []).map(toPublic);
 
+// for get all users with role
+const toPublicListWithRole = (rows) => (rows || []).map(toPublicWithRole);
+const toPublicWithRole = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    user_photo: row.user_photo ?? null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+};
+
 module.exports = {
   toPublic,
   toMinimal,
   toPublicList,
+  toPublicListWithRole,
 };
