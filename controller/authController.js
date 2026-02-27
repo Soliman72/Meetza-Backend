@@ -8,6 +8,7 @@ const userController = require("./userController");
 const social_authController = require("./social_authController");
 const axios = require("axios");
 const { success: resSuccess, error: resError, authDto } = require("../dto");
+const { requiresCaptcha, recordFailedAttempt, clearAttempts, getAttemptsInfo } = require("../services/loginAttemptsService");
 
 // Register new user with email verification
 exports.register = async (req, res) => {
@@ -73,7 +74,19 @@ exports.login = async (req, res) => {
       return res.status(400).json(resError("Email and password are required"));
     }
 
-    // Validate and verify reCAPTCHA token
+    // After 3 failed attempts → reCAPTCHA required
+    if (requiresCaptcha(email) && !captchaToken) {
+      const attemptInfo = getAttemptsInfo(email);
+      return res.status(429).json({
+        success: false,
+        message: "Too many failed login attempts. Please complete the reCAPTCHA and try again.",
+        requiresCaptcha: true,
+        remaining: attemptInfo.remaining,           // attempts left (0 = must show reCAPTCHA)
+        requiresCaptchaAttempt: attemptInfo.requiresCaptcha,
+      });
+    }
+
+    // Validate and verify reCAPTCHA token (when sent)
     if (captchaToken) {
       try {
         const verifyUrl = "https://www.google.com/recaptcha/api/siteverify";
@@ -97,17 +110,23 @@ exports.login = async (req, res) => {
         return res.status(500).json(resError("Error verifying CAPTCHA. Please try again.", { error: captchaError.message }));
       }
     }
+
     // Check if user exists
     const [rows] = await db
       .promise()
       .query("SELECT * FROM user WHERE email = ?", [email]);
 
     if (rows.length === 0) {
-      return res.status(401).json(resError("Invalid email or password"));
+      recordFailedAttempt(email);
+      const attemptInfo = getAttemptsInfo(email);
+      return res.status(401).json(resError("Invalid email or password", {
+        requiresCaptcha: true,
+        remaining: attemptInfo.remaining,
+        requiresCaptchaAttempt: attemptInfo.requiresCaptcha,
+      }));
     }
 
     const user = rows[0];
-
 
     // check email verification
     if (!user.email_verification) {
@@ -116,10 +135,20 @@ exports.login = async (req, res) => {
     if (from && from === "dashboard" && user.role !== "Administrator" && user.role !== "Super_Admin") {
       return res.status(403).json(resError("Access denied. Administrators only."));
     }
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(401).json(resError("Invalid email or password"));
+      recordFailedAttempt(email);
+      const attemptInfo = getAttemptsInfo(email);
+      return res.status(401).json(resError("Invalid email or password", {
+        requiresCaptcha: true,
+        remaining: attemptInfo.remaining,
+        requiresCaptchaAttempt: attemptInfo.requiresCaptcha,
+      }));
     }
+
+    // Login success → clear failed attempt counter
+    clearAttempts(email);
 
     // Generate JWT token
     const token = jwt.sign(
