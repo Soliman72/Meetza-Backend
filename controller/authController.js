@@ -119,11 +119,7 @@ exports.login = async (req, res) => {
     if (rows.length === 0) {
       recordFailedAttempt(email);
       const attemptInfo = getAttemptsInfo(email);
-      return res.status(401).json(resError("Invalid email or password", {
-        requiresCaptcha: true,
-        remaining: attemptInfo.remaining,
-        requiresCaptchaAttempt: attemptInfo.requiresCaptcha,
-      }));
+      return res.status(401).json(resError( "Invalid email or password. You have " + attemptInfo.remaining + " attempts left before reCAPTCHA is required."));
     }
 
     const user = rows[0];
@@ -140,11 +136,7 @@ exports.login = async (req, res) => {
     if (!validPassword) {
       recordFailedAttempt(email);
       const attemptInfo = getAttemptsInfo(email);
-      return res.status(401).json(resError("Invalid email or password", {
-        requiresCaptcha: true,
-        remaining: attemptInfo.remaining,
-        requiresCaptchaAttempt: attemptInfo.requiresCaptcha,
-      }));
+      return res.status(401).json(resError("Invalid email or password. You have " + attemptInfo.remaining + " attempts left before reCAPTCHA is required."));
     }
 
     // Login success → clear failed attempt counter
