@@ -25,8 +25,7 @@ exports.createComment = async (req, res) => {
     const sql =
       "INSERT INTO comment (id, member_id, video_id, comment_text) VALUES (?, ?, ?, ?)";
     const rows = await db.promise().query(sql, [id, member_id, video_id, comment_text]);
-    const [newComment] = rows;
-    res.status(201).json({ success: true, data: newComment });
+    res.status(201).json({ success: true, data: { id, member_id, video_id, comment_text } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
@@ -46,11 +45,9 @@ exports.getCommentsByVideoId = async (req, res) => {
     const [rows] = await db
       .promise()
       .query(
-        'SELECT comment.*, user.name as "member_name", user.user_photo as "Member_photo" FROM comment JOIN user ON comment.member_id=user.id WHERE video_id = ?',
+        'SELECT comment.*, user.name as "member_name", user.user_photo as "Member_photo" FROM comment JOIN user ON comment.member_id = user.id WHERE comment.video_id = ?',
         [video_id]
       );
-    if (rows.length === 0)
-      return res.status(404).json({ success: false, message: "Record not found" });
     res.status(200).json({ success: true, data: { commentCount, comments: rows } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
