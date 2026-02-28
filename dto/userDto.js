@@ -55,5 +55,6 @@ module.exports = {
   toPublic,
   toMinimal,
   toPublicList,
+  toPublicWithRole,
   toPublicListWithRole,
 };

@@ -6,7 +6,8 @@ const memberController = require("./memberController");
 const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
-const { success: resSuccess, error: resError, userDto } = require("../dto");
+const { success: resSuccess, error: resError } = require("../dto");
+const userDto = require("../dto/userDto");
 
 // Create
 exports.createUser = async (data) => {
@@ -146,7 +147,7 @@ exports.getUserByEmail = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json(resError("User not found"));
     }
-    res.status(200).json(resSuccess(userDto.toPublic(rows[0])));
+    res.status(200).json(resSuccess(userDto.toPublicWithRole(rows[0])));
   } catch (err) {
     res.status(500).json(resError("Database error", { error: err.message }));
   }
