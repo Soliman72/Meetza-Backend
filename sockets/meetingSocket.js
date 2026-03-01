@@ -20,7 +20,7 @@ const authenticateSocket = async (socket, next) => {
       .promise()
       .query(
         "SELECT id, name, email, user_photo FROM user WHERE id = ? LIMIT 1",
-        [decoded.id]
+        [decoded.id],
       );
     if (!users.length) return next(new Error("User not found"));
     socket.user = users[0];
@@ -36,7 +36,7 @@ const canAccessMeeting = async (userId, meetingId) => {
     `SELECT m.id, m.group_id, m.administrator_id
      FROM meeting m
      WHERE m.id = ?`,
-    [meetingId]
+    [meetingId],
   );
   if (!rows.length) return { ok: false, message: "Meeting not found" };
   const meeting = rows[0];
@@ -49,7 +49,7 @@ const canAccessMeeting = async (userId, meetingId) => {
     .promise()
     .query(
       "SELECT id FROM group_membership WHERE group_id = ? AND member_id = ?",
-      [meeting.group_id, userId]
+      [meeting.group_id, userId],
     );
   if (membership.length === 0)
     return { ok: false, message: "You do not have access to this meeting" };
@@ -58,10 +58,12 @@ const canAccessMeeting = async (userId, meetingId) => {
 
 /** Check if user is registered as participant in DB (must join via REST first) */
 const isParticipantInMeeting = async (userId, meetingId) => {
-  const [rows] = await db.promise().query(
-    "SELECT id FROM meeting_participant WHERE meeting_id = ? AND user_id = ? LIMIT 1",
-    [meetingId, userId]
-  );
+  const [rows] = await db
+    .promise()
+    .query(
+      "SELECT id FROM meeting_participant WHERE meeting_id = ? AND user_id = ? LIMIT 1",
+      [meetingId, userId],
+    );
   return rows.length > 0;
 };
 
@@ -99,7 +101,7 @@ const registerMeetingSocket = (io) => {
         const inDb = await isParticipantInMeeting(socket.user.id, meetingId);
         if (!inDb) {
           throw new Error(
-            "You must join the meeting first (via API) before joining the room"
+            "You must join the meeting first (via API) before joining the room",
           );
         }
         const room = MEETING_ROOM_PREFIX + meetingId;
@@ -177,7 +179,10 @@ const registerMeetingSocket = (io) => {
       }
       if (!meetingRooms.has(meetingId)) {
         if (typeof ack === "function")
-          ack({ ok: false, message: "You must be in the meeting room to send messages" });
+          ack({
+            ok: false,
+            message: "You must be in the meeting room to send messages",
+          });
         return;
       }
       const room = MEETING_ROOM_PREFIX + meetingId;
@@ -344,6 +349,45 @@ const registerMeetingSocket = (io) => {
       if (typeof ack === "function") {
         ack({ ok: true });
       }
+    });
+
+    // Screen share: listen and re-broadcast to the rest of the room (same meetingId, socketId)
+    socket.on("screenShareStarted", (payload = {}, ack) => {
+      const { meetingId } = payload;
+      if (!meetingId) {
+        if (typeof ack === "function")
+          ack({ ok: false, message: "meetingId is required" });
+        return;
+      }
+      if (!meetingRooms.has(meetingId)) {
+        if (typeof ack === "function")
+          ack({ ok: false, message: "Not in this meeting" });
+        return;
+      }
+      const room = MEETING_ROOM_PREFIX + meetingId;
+      socket
+        .to(room)
+        .emit("screenShareStarted", { meetingId, socketId: socket.id });
+      if (typeof ack === "function") ack({ ok: true });
+    });
+
+    socket.on("screenShareStopped", (payload = {}, ack) => {
+      const { meetingId } = payload;
+      if (!meetingId) {
+        if (typeof ack === "function")
+          ack({ ok: false, message: "meetingId is required" });
+        return;
+      }
+      if (!meetingRooms.has(meetingId)) {
+        if (typeof ack === "function")
+          ack({ ok: false, message: "Not in this meeting" });
+        return;
+      }
+      const room = MEETING_ROOM_PREFIX + meetingId;
+      socket
+        .to(room)
+        .emit("screenShareStopped", { meetingId, socketId: socket.id });
+      if (typeof ack === "function") ack({ ok: true });
     });
 
     socket.on("getMeetingParticipants", async (payload, ack) => {
