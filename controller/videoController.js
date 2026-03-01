@@ -83,14 +83,13 @@ exports.createVideo = (req, res) => {
         return res.status(401).json({ success: false, message: "Unauthorized: administrator_id is required" });
       }
 
-      // Set default duration to current date if not provided (duration is NOT NULL in DB)
-      const finalDuration = duration || 0;
-      // description can be NULL, so we keep it as is
+      // Duration from frontend is in seconds; DB column is TIME. Convert so MySQL stores correctly (e.g. 130 -> 00:02:10).
+      const finalDuration = Math.max(0, parseInt(duration, 10) || 0);
 
-      // Insert the video into the database
+      // Insert the video into the database (SEC_TO_TIME converts seconds to TIME)
       const query =
-        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, duration, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, ? ,? , ?)";
-      await db.promise().query(query, [
+        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, duration, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, SEC_TO_TIME(?) ,? , ?)";
+        await db.promise().query(query, [
         id,
         title,
         meeting_id || null,
@@ -256,9 +255,11 @@ exports.updateVideo = (req, res) => {
         updateFields.push("meeting_id = ?");
         updateParams.push(meeting_id);
       }
-      if (duration) {
-        updateFields.push("duration = ?");
-        updateParams.push(duration);
+      if (duration!==undefined && duration!==null && duration!=='') {
+        // Duration from frontend is in seconds; DB column is TIME. Convert so MySQL stores correctly (e.g. 130 -> 00:02:10).
+        const finalDuration = Math.max(0, parseInt(duration, 102) || 0);
+        updateFields.push("duration = SEC_TO_TIME(?)");
+        updateParams.push(finalDuration);
       }
       if (description) {
         updateFields.push("description = ?");
