@@ -234,10 +234,69 @@ return res.status(500).json({ success: false, message: "Database error", error: 
 
 // Get all meetings if user is member of the group or super admin can view all meetings or admin of the meeting.
 // Optional query: title (search), group_id (filter by group; user must be admin or member of the group).
+// Build date filter clause and params for getAllMeetings. Returns { clause, params } or null.
+// Priority: start_date+end_date > day > week > month.
+function getDateFilterForMeetings(query) {
+  const { start_date, end_date, day, week, month } = query;
+  const hasRange = start_date != null && start_date !== "" && end_date != null && end_date !== "";
+  if (hasRange) {
+    const start = new Date(start_date);
+    const end = new Date(end_date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return { error: "start_date and end_date must be valid dates (YYYY-MM-DD)" };
+    }
+    if (start > end) {
+      return { error: "start_date must be before or equal to end_date" };
+    }
+    return {
+      clause: "DATE(start_time) >= ? AND DATE(start_time) <= ?",
+      params: [start_date, end_date],
+    };
+  }
+  if (day != null && day !== "") {
+    const d = new Date(day);
+    if (Number.isNaN(d.getTime())) {
+      return { error: "day must be a valid date (YYYY-MM-DD)" };
+    }
+    const dayStr = d.toISOString().slice(0, 10);
+    return { clause: "DATE(start_time) = ?", params: [dayStr] };
+  }
+  if (week != null && week !== "") {
+    const w = new Date(week);
+    if (Number.isNaN(w.getTime())) {
+      return { error: "week must be a valid date (YYYY-MM-DD)" };
+    }
+    const weekStr = w.toISOString().slice(0, 10);
+    return { clause: "YEARWEEK(start_time, 1) = YEARWEEK(?, 1)", params: [weekStr] };
+  }
+  if (month != null && month !== "") {
+    const match = String(month).match(/^(\d{4})-(\d{1,2})$/);
+    if (!match) {
+      return { error: "month must be YYYY-MM (e.g. 2025-03)" };
+    }
+    const [, y, m] = match;
+    const monthNum = parseInt(m, 10);
+    if (monthNum < 1 || monthNum > 12) {
+      return { error: "month must be between 01 and 12" };
+    }
+    return {
+      clause: "YEAR(start_time) = ? AND MONTH(start_time) = ?",
+      params: [y, monthNum],
+    };
+  }
+  return null;
+}
+
 exports.getAllMeetings = async (req, res) => {
   try {
     const userId = req.user?.id;
     const { title, group_id } = req.query;
+
+    // Date filter: day | week | month | start_date + end_date
+    const dateFilter = getDateFilterForMeetings(req.query);
+    if (dateFilter?.error) {
+      return res.status(400).json({ success: false, message: dateFilter.error });
+    }
 
     // When group_id filter is used, ensure user has access to that group (admin or member)
     if (group_id) {
@@ -271,13 +330,17 @@ exports.getAllMeetings = async (req, res) => {
       conditions.push("group_id = ?");
       params.push(group_id);
     }
+    if (dateFilter) {
+      conditions.push(dateFilter.clause);
+      params.push(...dateFilter.params);
+    }
     if (conditions.length) {
       query += " WHERE " + conditions.join(" AND ");
     }
     query += " ORDER BY start_time DESC";
 
     if (req.user.role === "Member") {
-      // Get all meetings for the user's groups (optionally filtered by group_id and title)
+      // Get all meetings for the user's groups (optionally filtered by group_id, title, and date)
       let memberQuery =
         "SELECT * FROM meeting WHERE group_id IN (SELECT group_id FROM group_membership WHERE member_id = ?)";
       const memberParams = [userId];
@@ -288,6 +351,10 @@ exports.getAllMeetings = async (req, res) => {
       if (title) {
         memberQuery += " AND title LIKE ?";
         memberParams.push(`%${title}%`);
+      }
+      if (dateFilter) {
+        memberQuery += " AND " + dateFilter.clause;
+        memberParams.push(...dateFilter.params);
       }
       memberQuery += " ORDER BY start_time DESC";
       const [meetings] = await db.promise().query(memberQuery, memberParams);
