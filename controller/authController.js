@@ -148,6 +148,8 @@ exports.login = async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
+        name: user.name,
+        user_photo: user.user_photo,
       },
       process.env.JWT_SECRET,
       { expiresIn: remember_me === "true" ? "4d" : "24h" }
@@ -578,7 +580,7 @@ function proceedWithUser(user, redirectUrl, res) {
     updated_at: user.updated_at
   };
 
-  const tokenPayload = { id: user.id, email: user.email, role: user.role};
+  const tokenPayload = { id: user.id, email: user.email, role: user.role, name: user.name, user_photo: user.user_photo };
   const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: "24h" });
 
   const allowedOrigins = [
