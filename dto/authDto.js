@@ -9,9 +9,8 @@ const userDto = require("./userDto");
  * @param {string} token - JWT
  * @param {object} user - user row from DB
  */
-const loginResponse = (token, user) => ({
+const loginResponse = (token) => ({
   token,
-  user: userDto.toPublic(user),
 });
 
 /**

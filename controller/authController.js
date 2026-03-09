@@ -155,7 +155,7 @@ exports.login = async (req, res) => {
       { expiresIn: remember_me === "true" ? "4d" : "24h" }
     );
 
-    res.status(200).json(resSuccess(authDto.loginResponse(token, user), "Login successful"));
+    res.status(200).json(resSuccess(authDto.loginResponse(token), "Login successful"));
   } catch (error) {
     res.status(500).json(resError("Error logging in", { error: error.message }));
   }
