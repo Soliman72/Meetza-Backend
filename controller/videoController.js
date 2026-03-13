@@ -267,11 +267,45 @@ exports.getVideoById = async (req, res) => {
       member_photo: c.member_photo,
     }));
 
-    // Related: 1) same group, 2) same admin from other groups, 3) rest from groups user is in
-    const groupId = row.group_id;
-    const adminId = row.administrator_id;
-    const vis = getVideoVisibility(req, "v");
+    return res.status(200).json({
+      success: true,
+      data: {
+        video,
+        admin,
+        likes_count,
+        dislikes_count,
+        saved_count,
+        description: video.description,
+        comments,
+        commentCount: comments.length,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Database error", error: err.message });
+  }
+};
 
+exports.getRelatedVideos = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { group_id: queryGroupId } = req.query;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Video id is required" });
+    }
+    const visibilityForCheck = getVideoVisibility(req, "video");
+    let videoQuery = "SELECT id, group_id, administrator_id FROM video WHERE id = ?";
+    const videoParams = [id];
+    if (visibilityForCheck.whereClause) {
+      videoQuery += " AND " + visibilityForCheck.whereClause;
+      videoParams.push(...visibilityForCheck.params);
+    }
+    const [videoRows] = await db.promise().query(videoQuery, videoParams);
+    if (!videoRows.length) {
+      return res.status(404).json({ success: false, message: "Video not found" });
+    }
+    const { group_id: groupId, administrator_id: adminId } = videoRows[0];
+
+    const visibility = getVideoVisibility(req, "v");
     const relatedBaseSelect = `
       SELECT v.id, v.title, v.poster_url, v.duration, v.description, v.group_id, v.administrator_id, v.created_at,
              g.group_name, u.name AS admin_name, u.user_photo AS admin_photo,
@@ -282,21 +316,8 @@ exports.getVideoById = async (req, res) => {
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
     `;
-    const relatedTail = vis.whereClause ? " AND " + vis.whereClause : "";
+    const relatedTail = visibility.whereClause ? " AND " + visibility.whereClause : "";
     const relatedOrder = " ORDER BY v.created_at DESC LIMIT 8";
-
-    const [relatedSameGroup] = await db.promise().query(
-      `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
-      [groupId, id, ...vis.params]
-    );
-    const [relatedSameAdmin] = await db.promise().query(
-      `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
-      [adminId, id, groupId, ...vis.params]
-    );
-    const [relatedOtherFromMyGroups] = await db.promise().query(
-      `${relatedBaseSelect} WHERE v.id != ? AND v.group_id != ? AND v.administrator_id != ?${relatedTail}${relatedOrder}`,
-      [id, groupId, adminId, ...vis.params]
-    );
 
     const formatRelated = (rows) =>
       (rows || []).map((r) => {
@@ -310,24 +331,44 @@ exports.getVideoById = async (req, res) => {
         };
       });
 
-    const relatedVideos = {
-      sameGroup: formatRelated(relatedSameGroup),
-      sameAdmin: formatRelated(relatedSameAdmin),
-      otherFromMyGroups: formatRelated(relatedOtherFromMyGroups),
-    };
+    // If group_id sent in query: return only videos in that group (excluding current video)
+    const filterGroupId = queryGroupId || groupId;
+    if (queryGroupId !== undefined && queryGroupId !== "") {
+      const [sameGroupOnly] = await db.promise().query(
+        `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
+        [filterGroupId, id, ...visibility.params]
+      );
+      return res.status(200).json({
+        success: true,
+        data: {
+          group_id: filterGroupId,
+          videos: formatRelated(sameGroupOnly),
+        },
+      });
+    }
+
+    // 1) Videos in the same group as the current video
+    const [relatedSameGroup] = await db.promise().query(
+      `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
+      [groupId, id, ...visibility.params]
+    );
+    // 2) Videos by same admin from other groups
+    const [relatedSameAdmin] = await db.promise().query(
+      `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
+      [adminId, id, groupId, ...visibility.params]
+    );
+    // 3) Other videos from groups the user is in (excluding same group and same admin)
+    const [relatedOtherFromMyGroups] = await db.promise().query(
+      `${relatedBaseSelect} WHERE v.id != ? AND v.group_id != ? AND v.administrator_id != ?${relatedTail}${relatedOrder}`,
+      [id, groupId, adminId, ...visibility.params]
+    );
 
     return res.status(200).json({
       success: true,
       data: {
-        video,
-        admin,
-        likes_count,
-        dislikes_count,
-        saved_count,
-        description: video.description,
-        comments,
-        commentCount: comments.length,
-        relatedVideos,
+        sameGroup: formatRelated(relatedSameGroup),
+        sameAdmin: formatRelated(relatedSameAdmin),
+        otherFromMyGroups: formatRelated(relatedOtherFromMyGroups),
       },
     });
   } catch (err) {

@@ -12,6 +12,11 @@ router.post(
   videoController.createVideo
 );
 router.get(
+  "/:id/related",
+  verifyToken,
+  videoController.getRelatedVideos
+);
+router.get(
   "/:id",
   verifyToken,
   videoController.getVideoById
