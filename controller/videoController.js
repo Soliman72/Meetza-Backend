@@ -1,8 +1,33 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
-const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
+
+/**
+ * Single visibility rule for all video operations.
+ * Super_Admin: all videos. Administrator: own videos. Member: videos from groups they're in.
+ * @param {object} req - request with req.user (id, role), req.isSuperAdmin, req.administratorId
+ * @param {string} [tableAlias='v'] - table alias used in the query
+ * @returns {{ whereClause: string, params: any[] }} - append with " AND " + whereClause when non-empty
+ */
+function getVideoVisibility(req, tableAlias = "v") {
+  const v = tableAlias;
+  const userId = req.user?.id;
+  if (!userId) return { whereClause: "", params: [] };
+  if (req.isSuperAdmin === true || req.user?.role === "Super_Admin") {
+    return { whereClause: "", params: [] };
+  }
+  if (req.user?.role === "Administrator" || req.administratorId) {
+    return { whereClause: `${v}.administrator_id = ?`, params: [userId] };
+  }
+  if (req.user?.role === "Member") {
+    return {
+      whereClause: `${v}.group_id IN (SELECT group_id FROM group_membership WHERE member_id = ?)`,
+      params: [userId],
+    };
+  }
+  return { whereClause: "", params: [] };
+}
 
 // Create a video with file upload
 exports.createVideo = (req, res) => {
@@ -125,40 +150,50 @@ exports.createVideo = (req, res) => {
 exports.getAllVideos = async (req, res) => {
   try {
     const { title, group_id } = req.query;
-    let query = "SELECT * FROM video";
-    let params = [];
+    const visibility = getVideoVisibility(req, "v");
+    const conditions = [];
+    const params = [];
 
-    // Apply ownership filter for regular admins
-    const ownershipFilter = getOwnershipFilter(req, "administrator_id");
-    if (ownershipFilter.whereClause) {
-      query += " " + ownershipFilter.whereClause;
-      if ( !group_id && !title ) 
-        params.push(...ownershipFilter.params);
+    // Base: video + group_name + admin (name, photo) + like/dislike/saved counts
+    let query = `
+      SELECT v.*, g.group_name,
+        u.name AS admin_name, u.user_photo AS admin_photo,
+        (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
+        (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
+        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count
+      FROM video v
+      LEFT JOIN \`group\` g ON g.id = v.group_id
+      LEFT JOIN user u ON u.id = v.administrator_id
+    `;
+
+    if (visibility.whereClause) {
+      conditions.push(visibility.whereClause);
+      params.push(...visibility.params);
     }
-
     if (group_id) {
-      query = "SELECT video.*  , `group`.group_name FROM video";
-      query +=
-        " JOIN `group` ON video.group_id= `group`.id WHERE video.group_id = ?";
-      params.push( group_id );
-      if ( ownershipFilter.whereClause )
-      {
-        query += " AND video." + ownershipFilter.whereClause.slice(6); // Remove initial WHERE
-        params.push( ...ownershipFilter.params );
-      }
+      conditions.push("v.group_id = ?");
+      params.push(group_id);
     }
-
     if (title) {
-      query +=( ownershipFilter.whereClause || group_id )  ? " AND" : " WHERE";
-      query += " title LIKE ?";
-      if ( ownershipFilter.whereClause && !group_id )
-        params.push(...ownershipFilter.params);
-        
+      conditions.push("v.title LIKE ?");
       params.push(`%${title}%`);
     }
-    
-    const [results] = await db.promise().query(query, params);
-    return res.status(200).json({ success: true, data: results });
+    if (conditions.length) {
+      query += " WHERE " + conditions.join(" AND ");
+    }
+
+    const [rows] = await db.promise().query(query, params);
+    const data = (rows || []).map((row) => {
+      const { admin_name, admin_photo, likes_count: lc, dislikes_count: dc, saved_count: sc, ...video } = row;
+      return {
+        ...video,
+        admin: { name: admin_name, user_photo: admin_photo },
+        likes_count: Number(lc) || 0,
+        dislikes_count: Number(dc) || 0,
+        saved_count: Number(sc) || 0,
+      };
+    });
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
@@ -170,20 +205,131 @@ exports.getVideoById = async (req, res) => {
     if (!id) {
       return res.status(400).json({ success: false, message: "Video id is required" });
     }
-    let query = "SELECT * FROM video WHERE id = ?";
-    let params = [id];
-
-    // Apply ownership filter for regular admins
-    if (!req.isSuperAdmin) {
-      query += " AND administrator_id = ?";
-      params.push(req.administratorId);
+    const visibility = getVideoVisibility(req, "v");
+    let query = `
+      SELECT v.*, g.group_name,
+        u.name AS admin_name, u.user_photo AS admin_photo,
+        (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
+        (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
+        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count
+      FROM video v
+      LEFT JOIN \`group\` g ON g.id = v.group_id
+      LEFT JOIN user u ON u.id = v.administrator_id
+      WHERE v.id = ?
+    `;
+    const params = [id];
+    if (visibility.whereClause) {
+      query += " AND " + visibility.whereClause;
+      params.push(...visibility.params);
     }
 
-    const [results] = await db.promise().query(query, params);
-    if (results.length === 0) {
+    const [videoRows] = await db.promise().query(query, params);
+    if (!videoRows.length) {
       return res.status(404).json({ success: false, message: "Video not found" });
     }
-    return res.status(200).json({ success: true, data: results[0] });
+    const row = videoRows[0];
+    const video = {
+      id: row.id,
+      title: row.title,
+      meeting_id: row.meeting_id,
+      video_url: row.video_url,
+      poster_url: row.poster_url,
+      administrator_id: row.administrator_id,
+      duration: row.duration,
+      description: row.description,
+      group_id: row.group_id,
+      group_name: row.group_name,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+    const admin = { name: row.admin_name, user_photo: row.admin_photo };
+    const likes_count = Number(row.likes_count) || 0;
+    const dislikes_count = Number(row.dislikes_count) || 0;
+    const saved_count = Number(row.saved_count) || 0;
+
+    // Comments with member name and photo
+    const [commentsRows] = await db.promise().query(
+      `SELECT c.id, c.member_id, c.video_id, c.comment_text, c.timestamp,
+              u.name AS member_name, u.user_photo AS member_photo
+       FROM comment c
+       JOIN user u ON u.id = c.member_id
+       WHERE c.video_id = ?
+       ORDER BY c.timestamp ASC`,
+      [id]
+    );
+    const comments = (commentsRows || []).map((c) => ({
+      id: c.id,
+      member_id: c.member_id,
+      video_id: c.video_id,
+      comment_text: c.comment_text,
+      timestamp: c.timestamp,
+      member_name: c.member_name,
+      member_photo: c.member_photo,
+    }));
+
+    // Related: 1) same group, 2) same admin from other groups, 3) rest from groups user is in
+    const groupId = row.group_id;
+    const adminId = row.administrator_id;
+    const vis = getVideoVisibility(req, "v");
+
+    const relatedBaseSelect = `
+      SELECT v.id, v.title, v.poster_url, v.duration, v.description, v.group_id, v.administrator_id, v.created_at,
+             g.group_name, u.name AS admin_name, u.user_photo AS admin_photo,
+             (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
+             (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
+             (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count
+      FROM video v
+      LEFT JOIN \`group\` g ON g.id = v.group_id
+      LEFT JOIN user u ON u.id = v.administrator_id
+    `;
+    const relatedTail = vis.whereClause ? " AND " + vis.whereClause : "";
+    const relatedOrder = " ORDER BY v.created_at DESC LIMIT 8";
+
+    const [relatedSameGroup] = await db.promise().query(
+      `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
+      [groupId, id, ...vis.params]
+    );
+    const [relatedSameAdmin] = await db.promise().query(
+      `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
+      [adminId, id, groupId, ...vis.params]
+    );
+    const [relatedOtherFromMyGroups] = await db.promise().query(
+      `${relatedBaseSelect} WHERE v.id != ? AND v.group_id != ? AND v.administrator_id != ?${relatedTail}${relatedOrder}`,
+      [id, groupId, adminId, ...vis.params]
+    );
+
+    const formatRelated = (rows) =>
+      (rows || []).map((r) => {
+        const { admin_name: an, admin_photo: ap, ...v } = r;
+        return {
+          ...v,
+          admin: { name: an, user_photo: ap },
+          likes_count: Number(r.likes_count) || 0,
+          dislikes_count: Number(r.dislikes_count) || 0,
+          saved_count: Number(r.saved_count) || 0,
+        };
+      });
+
+    const relatedVideos = {
+      sameGroup: formatRelated(relatedSameGroup),
+      sameAdmin: formatRelated(relatedSameAdmin),
+      otherFromMyGroups: formatRelated(relatedOtherFromMyGroups),
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        video,
+        admin,
+        likes_count,
+        dislikes_count,
+        saved_count,
+        description: video.description,
+        comments,
+        commentCount: comments.length,
+        relatedVideos,
+      },
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
@@ -195,8 +341,14 @@ exports.deleteVideo = async (req, res) => {
     if (!id) {
       return res.status(400).json({ success: false, message: "Video id is required" });
     }
-    const query = "DELETE FROM video WHERE id = ?";
-    const [result] = await db.promise().query(query, [id]);
+    const visibility = getVideoVisibility(req, "video");
+    let query = "DELETE FROM video WHERE id = ?";
+    const params = [id];
+    if (visibility.whereClause) {
+      query += " AND " + visibility.whereClause;
+      params.push(...visibility.params);
+    }
+    const [result] = await db.promise().query(query, params);
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: "Video not found" });
     }
@@ -223,10 +375,14 @@ exports.updateVideo = (req, res) => {
         return res.status(400).json({ success: false, message: "id is required" });
       }
 
-      // Check if video exists
-      const [oldVideo] = await db
-        .promise()
-        .query("SELECT * FROM video WHERE id = ?", [id]);
+      const visibility = getVideoVisibility(req, "video");
+      let checkQuery = "SELECT * FROM video WHERE id = ?";
+      const checkParams = [id];
+      if (visibility.whereClause) {
+        checkQuery += " AND " + visibility.whereClause;
+        checkParams.push(...visibility.params);
+      }
+      const [oldVideo] = await db.promise().query(checkQuery, checkParams);
       if (oldVideo.length === 0) {
         return res.status(404).json({
           success: false,

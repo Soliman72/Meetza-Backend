@@ -14,13 +14,11 @@ router.post(
 router.get(
   "/:id",
   verifyToken,
-  checkAdminPermission,
   videoController.getVideoById
 );
 router.get(
   "/",
   verifyToken,
-  checkAdminPermission,
   videoController.getAllVideos
 );
 router.post(
