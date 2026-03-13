@@ -111,6 +111,15 @@ exports.createVideo = (req, res) => {
       // Duration from frontend is in seconds; DB column is TIME. Convert so MySQL stores correctly (e.g. 130 -> 00:02:10).
       const finalDuration = Math.max(0, parseInt(duration, 10) || 0);
 
+      // get admin_id from group 
+      const [rows] = await db.promise().query(
+        "SELECT administrator_id FROM `group` WHERE id = ?",
+        [group_id]
+      );
+      
+      const adminId = rows[0].administrator_id;
+      console.log(adminId);
+      
       // Insert the video into the database (SEC_TO_TIME converts seconds to TIME)
       const query =
         "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, duration, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, SEC_TO_TIME(?) ,? , ?)";
@@ -120,7 +129,7 @@ exports.createVideo = (req, res) => {
         meeting_id || null,
         videoUrl, // Store the video file path
         posterUrl, // Store the poster file path
-        req.body.administrator_id,
+        adminId,
         finalDuration,
         description || null,
         group_id
