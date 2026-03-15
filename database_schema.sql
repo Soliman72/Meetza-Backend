@@ -259,10 +259,12 @@ CREATE TABLE IF NOT EXISTS `comment` (
     `id` VARCHAR(36) PRIMARY KEY,
     `member_id` VARCHAR(36) NOT NULL,
     `video_id` VARCHAR(36) NOT NULL,
+    `parent_id` VARCHAR(36) NULL,
     `comment_text` TEXT NOT NULL,
     `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_member_id` (`member_id`),
     INDEX `idx_video_id` (`video_id`),
+    INDEX `idx_parent_id` (`parent_id`),
     INDEX `idx_timestamp` (`timestamp`),
     CONSTRAINT `fk_comment_member` 
         FOREIGN KEY (`member_id`) REFERENCES `member`(`user_id`) 
@@ -270,6 +272,10 @@ CREATE TABLE IF NOT EXISTS `comment` (
         ON UPDATE CASCADE,
     CONSTRAINT `fk_comment_video` 
         FOREIGN KEY (`video_id`) REFERENCES `video`(`id`) 
+        ON DELETE CASCADE 
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_comment_parent` 
+        FOREIGN KEY (`parent_id`) REFERENCES `comment`(`id`) 
         ON DELETE CASCADE 
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

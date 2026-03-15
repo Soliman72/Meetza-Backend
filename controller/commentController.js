@@ -1,56 +1,81 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 
-// Create
+// Create (comment or reply: pass optional parent_id to reply to a comment)
 exports.createComment = async (req, res) => {
   try {
-    const { video_id, comment_text } = req.body;
+    const { video_id, comment_text, parent_id } = req.body;
     const user_id = req.user?.id;
     const id = uuidv4();
 
     if (!user_id) {
       return res.status(401).json({ success: false, message: "Unauthorized: user not found" });
     }
-    // Validate required fields
     if (!video_id || !comment_text) {
       return res.status(400).json({ success: false, message: "video_id and comment_text are required" });
     }
 
-
-    // Check if video exists
     const [videoExists] = await db
       .promise()
       .query("SELECT id FROM video WHERE id = ?", [video_id]);
     if (videoExists.length === 0) {
       return res.status(400).json({ success: false, message: "Invalid video_id: not found" });
     }
+
+    if (parent_id) {
+      const [parentRows] = await db
+        .promise()
+        .query("SELECT id, video_id FROM comment WHERE id = ?", [parent_id]);
+      if (parentRows.length === 0) {
+        return res.status(400).json({ success: false, message: "parent_id: comment not found" });
+      }
+      if (parentRows[0].video_id !== video_id) {
+        return res.status(400).json({ success: false, message: "parent comment must belong to the same video" });
+      }
+    }
+
     const sql =
-      "INSERT INTO comment (id, member_id, video_id, comment_text) VALUES (?, ?, ?, ?)";
-    const rows = await db.promise().query(sql, [id, user_id, video_id, comment_text]);
-    res.status(201).json({ success: true, data: { id, user_id, video_id, comment_text } });
+      "INSERT INTO comment (id, member_id, video_id, parent_id, comment_text) VALUES (?, ?, ?, ?, ?)";
+    await db.promise().query(sql, [id, user_id, video_id, parent_id || null, comment_text]);
+    res.status(201).json({ success: true, data: { id, user_id, video_id, parent_id: parent_id || null, comment_text } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
-// Read all comments for a video
+// Read all comments for a video (top-level + replies nested under each comment)
 exports.getCommentsByVideoId = async (req, res) => {
   try {
     const { video_id } = req.params;
     if (!video_id) {
       return res.status(400).json({ message: "video_id is required" });
     }
-    // respond with number of comments
     const sqlCount = "SELECT COUNT(*) as count FROM comment WHERE video_id = ?";
     const [countRows] = await db.promise().query(sqlCount, [video_id]);
     const commentCount = countRows[0].count;
+
     const [rows] = await db
       .promise()
       .query(
-        'SELECT comment.*, user.name as "member_name", user.user_photo as "Member_photo" FROM comment JOIN user ON comment.member_id = user.id WHERE comment.video_id = ?',
+        'SELECT comment.*, user.name as "member_name", user.user_photo as "Member_photo" FROM comment JOIN user ON comment.member_id = user.id WHERE comment.video_id = ? ORDER BY comment.timestamp ASC',
         [video_id]
       );
-    res.status(200).json({ success: true, data: { commentCount, comments: rows } });
+
+    const byId = {};
+    rows.forEach((r) => {
+      byId[r.id] = { ...r, replies: [] };
+    });
+    const topLevel = [];
+    rows.forEach((r) => {
+      const item = byId[r.id];
+      if (r.parent_id && byId[r.parent_id]) {
+        byId[r.parent_id].replies.push(item);
+      } else {
+        topLevel.push(item);
+      }
+    });
+
+    res.status(200).json({ success: true, data: { commentCount, comments: topLevel } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
