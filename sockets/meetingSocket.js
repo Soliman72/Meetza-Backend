@@ -67,6 +67,17 @@ const isParticipantInMeeting = async (userId, meetingId) => {
   return rows.length > 0;
 };
 
+/** Check if user is the meeting admin (or Super_Admin) and can mute others */
+const canAdminMuteInMeeting = async (userId, meetingId) => {
+  const [userRows] = await db
+    .promise()
+    .query("SELECT role FROM user WHERE id = ? LIMIT 1", [userId]);
+  if (userRows[0]?.role === "Super_Admin") return true;
+  const access = await canAccessMeeting(userId, meetingId);
+  if (!access.ok) return false;
+  return access.meeting.administrator_id === userId;
+};
+
 const MEETING_ROOM_PREFIX = "meeting:";
 
 const registerMeetingSocket = (io) => {
@@ -348,6 +359,62 @@ const registerMeetingSocket = (io) => {
       });
       if (typeof ack === "function") {
         ack({ ok: true });
+      }
+    });
+
+    // Admin mutes a participant (meeting admin or Super_Admin only). Target client receives "adminMuteYou" and applies mute.
+    socket.on("adminMuteParticipant", async (payload = {}, ack) => {
+      try {
+        const { meetingId, targetUserId, audioMuted, videoMuted } = payload;
+        if (!meetingId || !targetUserId) {
+          if (typeof ack === "function") {
+            ack({ ok: false, message: "meetingId and targetUserId are required" });
+          }
+          return;
+        }
+        if (!meetingRooms.has(meetingId)) {
+          if (typeof ack === "function") {
+            ack({ ok: false, message: "Not in this meeting" });
+          }
+          return;
+        }
+        const allowed = await canAdminMuteInMeeting(socket.user.id, meetingId);
+        if (!allowed) {
+          if (typeof ack === "function") {
+            ack({ ok: false, message: "Only the meeting admin can mute participants" });
+          }
+          return;
+        }
+        const room = MEETING_ROOM_PREFIX + meetingId;
+        const participants = await getParticipantsInRoom(meetingId);
+        const target = participants.find((p) => p.userId === targetUserId);
+        if (!target) {
+          if (typeof ack === "function") {
+            ack({ ok: false, message: "Participant not in this meeting room" });
+          }
+          return;
+        }
+        const audio = audioMuted !== false;
+        const video = videoMuted === true;
+        io.to(target.socketId).emit("adminMuteYou", {
+          meetingId,
+          audioMuted: audio,
+          videoMuted: video,
+        });
+        socket.to(room).emit("participantMutedByAdmin", {
+          meetingId,
+          targetUserId,
+          targetSocketId: target.socketId,
+          audioMuted: audio,
+          videoMuted: video,
+        });
+        if (typeof ack === "function") {
+          ack({ ok: true });
+        }
+      } catch (error) {
+        if (typeof ack === "function") {
+          ack({ ok: false, message: error.message || "Failed to mute participant" });
+        }
       }
     });
 
