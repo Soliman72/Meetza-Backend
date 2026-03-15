@@ -223,6 +223,7 @@ CREATE TABLE IF NOT EXISTS `meeting_participant` (
 CREATE TABLE IF NOT EXISTS `video` (
     `id` VARCHAR(36) PRIMARY KEY,
     `title` VARCHAR(255) NOT NULL,
+    `slug` VARCHAR(255) NOT NULL UNIQUE,
     `meeting_id` VARCHAR(36) NULL,
     `video_url` TEXT NOT NULL,
     `poster_url` TEXT NULL,
@@ -235,6 +236,7 @@ CREATE TABLE IF NOT EXISTS `video` (
     INDEX `idx_meeting_id` (`meeting_id`),
     INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
+    INDEX `idx_slug` (`slug`),
     INDEX `idx_duration` (`duration`),
     CONSTRAINT `fk_video_meeting` 
         FOREIGN KEY (`meeting_id`) REFERENCES `meeting`(`id`) 

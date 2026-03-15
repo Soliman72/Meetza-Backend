@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
+const { createUniqueVideoSlug } = require("../utils/slug");
 
 /**
  * Single visibility rule for all video operations.
@@ -111,28 +112,30 @@ exports.createVideo = (req, res) => {
       // Duration from frontend is in seconds; DB column is TIME. Convert so MySQL stores correctly (e.g. 130 -> 00:02:10).
       const finalDuration = Math.max(0, parseInt(duration, 10) || 0);
 
-      // get admin_id from group 
       const [rows] = await db.promise().query(
         "SELECT administrator_id FROM `group` WHERE id = ?",
         [group_id]
       );
-      
-      const adminId = rows[0].administrator_id;
-      console.log(adminId);
-      
-      // Insert the video into the database (SEC_TO_TIME converts seconds to TIME)
+      const adminId = rows[0]?.administrator_id;
+      if (!adminId) {
+        return res.status(400).json({ success: false, message: "Group not found" });
+      }
+
+      const slug = await createUniqueVideoSlug(title, db);
+
       const query =
-        "INSERT INTO video (id,title , meeting_id, video_url, poster_url, administrator_id, duration, description, group_id ) VALUES (?, ?, ?, ?, ?, ?, SEC_TO_TIME(?) ,? , ?)";
-        await db.promise().query(query, [
+        "INSERT INTO video (id, title, slug, meeting_id, video_url, poster_url, administrator_id, duration, description, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, SEC_TO_TIME(?), ?, ?)";
+      await db.promise().query(query, [
         id,
         title,
+        slug,
         meeting_id || null,
-        videoUrl, // Store the video file path
-        posterUrl, // Store the poster file path
+        videoUrl,
+        posterUrl,
         adminId,
         finalDuration,
         description || null,
-        group_id
+        group_id,
       ]);
 
       return res.status(201).json({
@@ -141,12 +144,13 @@ exports.createVideo = (req, res) => {
         data: {
           id,
           title,
+          slug,
           meeting_id: meeting_id || null,
           video_url: videoUrl,
           poster_url: posterUrl,
           duration: finalDuration,
           description: description || null,
-          administrator_id: req.body.administrator_id,
+          administrator_id: adminId,
           group_id,
         },
       });
@@ -240,6 +244,7 @@ exports.getVideoById = async (req, res) => {
     const video = {
       id: row.id,
       title: row.title,
+      slug: row.slug ?? null,
       meeting_id: row.meeting_id,
       video_url: row.video_url,
       poster_url: row.poster_url,
@@ -256,7 +261,7 @@ exports.getVideoById = async (req, res) => {
     const dislikes_count = Number(row.dislikes_count) || 0;
     const saved_count = Number(row.saved_count) || 0;
 
-    // Comments with member name and photo
+    const videoId = row.id;
     const [commentsRows] = await db.promise().query(
       `SELECT c.id, c.member_id, c.video_id, c.comment_text, c.timestamp,
               u.name AS member_name, u.user_photo AS member_photo
@@ -264,7 +269,7 @@ exports.getVideoById = async (req, res) => {
        JOIN user u ON u.id = c.member_id
        WHERE c.video_id = ?
        ORDER BY c.timestamp ASC`,
-      [id]
+      [videoId]
     );
     const comments = (commentsRows || []).map((c) => ({
       id: c.id,
