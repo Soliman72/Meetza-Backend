@@ -4,11 +4,11 @@ const db = require("../config/db");
 exports.createSavedVideo = async (req, res) => {
   try {
     const { video_id } = req.body;
-    const member_id = req.user?.id;
+    const user_id = req.user?.id;
     
     // Validate required fields
-    if (!member_id) {
-      return res.status(401).json({ success: false, message: "Unauthorized: member not found" });
+    if (!user_id) {
+      return res.status(401).json({ success: false, message: "Unauthorized: user not found" });
     }
     if (!video_id) {
       return res.status(400).json({ success: false, message: "video_id is required" });
@@ -21,21 +21,21 @@ exports.createSavedVideo = async (req, res) => {
         return res.status(400).json({ success: false, message: "Invalid video_id: not found" });
     }
     const sql = "INSERT INTO saved_video (member_id, video_id, timestamp) VALUES (?, ?, NOW())";
-    await db.promise().query(sql, [member_id, video_id]);
-    res.status(201).json({ success: true, data: { member_id, video_id, timestamp: new Date() } });
+    await db.promise().query(sql, [user_id, video_id]);
+    res.status(201).json({ success: true, data: { user_id, video_id, timestamp: new Date() } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
 };
 
-// Read all saved videos for a member
-exports.getSavedVideosByMemberId = async (req, res) => {
+// Read all saved videos for a user
+exports.getSavedVideosByUserId = async (req, res) => {
   try {
-    const member_id = req.user?.id;
-    if (!member_id) {
-      return res.status(401).json({ success: false, message: "Unauthorized: member not found" });
+    const user_id = req.user?.id;
+    if (!user_id) {
+      return res.status(401).json({ success: false, message: "Unauthorized: user not found" });
     }
-    const [rows] = await db.promise().query('SELECT * FROM saved_video WHERE member_id = ?', [member_id]);
+    const [rows] = await db.promise().query('SELECT * FROM saved_video WHERE member_id = ?', [user_id]);
     if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
     res.status(200).json({ success: true, data: rows });
   } catch (err) {

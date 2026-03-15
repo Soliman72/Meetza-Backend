@@ -9,8 +9,8 @@ router.post("/", verifyToken, likeController.createLike);
 // Get likes/dislikes for a video
 router.get("/video/:video_id", verifyToken, likeController.getLikesByVideoId);
 
-// Get likes/dislikes by a member
-router.get("/member", verifyToken, likeController.getLikesByMemberId); // no need for `member_id` in URL
+// Get likes/dislikes by a user
+router.get("/user", verifyToken, likeController.getLikesByUserId); // no need for `user_id` in URL
 
 // Update a like/dislike (toggle)
 router.put("/", verifyToken, likeController.updateLike);

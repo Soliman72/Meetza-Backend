@@ -7,8 +7,8 @@ const { verifyToken } = require("../utils/verifyToken");
 router.post("/", verifyToken, commentController.createComment);
 // Get comments for a video
 router.get("/video/:video_id", commentController.getCommentsByVideoId);
-// Get comments by a member
-router.get("/member", verifyToken, commentController.getCommentsByMemberId); // no need for `member_id` in URL
+// Get comments by a user
+router.get("/user", verifyToken, commentController.getCommentsByUserId); // no need for `user_id` in URL
 // get a specific comment
 router.get("/:id", verifyToken, commentController.getCommentById);
 // Update a comment

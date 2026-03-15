@@ -5,16 +5,18 @@ const db = require("../config/db");
 exports.createComment = async (req, res) => {
   try {
     const { video_id, comment_text } = req.body;
-    const member_id = req.user?.id;
+    const user_id = req.user?.id;
     const id = uuidv4();
 
-    // Validate required fields
-    if (!member_id) {
-      return res.status(401).json({ success: false, message: "Unauthorized: member not found" });
+    if (!user_id) {
+      return res.status(401).json({ success: false, message: "Unauthorized: user not found" });
     }
+    // Validate required fields
     if (!video_id || !comment_text) {
       return res.status(400).json({ success: false, message: "video_id and comment_text are required" });
     }
+
+
     // Check if video exists
     const [videoExists] = await db
       .promise()
@@ -24,8 +26,8 @@ exports.createComment = async (req, res) => {
     }
     const sql =
       "INSERT INTO comment (id, member_id, video_id, comment_text) VALUES (?, ?, ?, ?)";
-    const rows = await db.promise().query(sql, [id, member_id, video_id, comment_text]);
-    res.status(201).json({ success: true, data: { id, member_id, video_id, comment_text } });
+    const rows = await db.promise().query(sql, [id, user_id, video_id, comment_text]);
+    res.status(201).json({ success: true, data: { id, user_id, video_id, comment_text } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
@@ -72,16 +74,16 @@ exports.getCommentById = async (req, res) => {
   }
 };
 
-// Read by member_id
-exports.getCommentsByMemberId = async (req, res) => {
+// Read by user_id
+exports.getCommentsByUserId = async (req, res) => {
   try {
-    const member_id = req.user?.id;
-    if (!member_id) {
-      return res.status(400).json({ success: false, message: "member_id is required" });
+    const user_id = req.user?.id;
+    if (!user_id) {
+      return res.status(400).json({ success: false, message: "user_id is required" });
     }
     const [rows] = await db
       .promise()
-      .query("SELECT * FROM comment WHERE member_id = ?", [member_id]);
+      .query("SELECT * FROM comment WHERE member_id = ?", [user_id]);
     if (rows.length === 0)
       return res.status(404).json({ success: false, message: "Record not found" });
     res.status(200).json({ success: true, data: rows });

@@ -4,13 +4,13 @@ const { v4: uuidv4 } = require("uuid");
 exports.createLike = async (req, res) => {
   try {
     const { video_id, like_type } = req.body;
-    const member_id = req.user?.id;
+    const user_id = req.user?.id;
 
     // Validate fields
-    if (!member_id) {
+    if (!user_id) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized: member not found",
+        message: "Unauthorized: user not found",
       });
     }
     if (!video_id || like_type === undefined) {
@@ -37,10 +37,13 @@ exports.createLike = async (req, res) => {
     }
 
     // Check if member exists
-    const memberQuery = "SELECT user_id FROM member WHERE user_id = ?";
-    const [member] = await db.promise().query(memberQuery, [member_id]);
-    if (member.length === 0) {
-      throw new Error("Member not found");
+    const userQuery = "SELECT id FROM user WHERE id = ?";
+    const [user] = await db.promise().query(userQuery, [user_id]);
+    if (user.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
     }
 
     // Check if user already liked/disliked this video
@@ -48,7 +51,7 @@ exports.createLike = async (req, res) => {
       "SELECT id, like_type FROM `like` WHERE member_id = ? AND video_id = ?";
     const [existing] = await db
       .promise()
-      .query(checkQuery, [member_id, video_id]);
+      .query(checkQuery, [user_id, video_id]);
 
     if (existing.length > 0) {
       // If user already liked/disliked — just update instead of inserting new
@@ -79,7 +82,7 @@ exports.createLike = async (req, res) => {
     const id = uuidv4();
     const insertQuery =
       "INSERT INTO `like` (id, member_id, video_id, like_type) VALUES (?, ?, ?, ?)";
-    await db.promise().query(insertQuery, [id, member_id, video_id, like_type]);
+    await db.promise().query(insertQuery, [id, user_id, video_id, like_type]);
 
     return res.status(201).json({
       success: true,
@@ -87,7 +90,7 @@ exports.createLike = async (req, res) => {
         like_type === 1
           ? "Video liked successfully"
           : "Video disliked successfully",
-      data: { id, member_id, video_id, like_type },
+      data: { id, user_id, video_id, like_type },
     });
   } catch (err) {
     return res.status(500).json({
@@ -134,14 +137,14 @@ exports.getLikesByVideoId = async (req, res) => {
   }
 };
 
-// Get all likes/dislikes by a member
-exports.getLikesByMemberId = async (req, res) => {
+// Get all likes/dislikes by a user
+exports.getLikesByUserId = async (req, res) => {
   try {
-    const member_id = req.user.id; // Get member_id from authenticated user
+    const user_id = req.user.id; // Get user_id from authenticated user
 
-    // Get all likes/dislikes for the member
+    // Get all likes/dislikes for the user
     const query = "SELECT * FROM `like` WHERE member_id = ?";
-    const [results] = await db.promise().query(query, [member_id]);
+    const [results] = await db.promise().query(query, [user_id]);
 
     return res.status(200).json({
       success: true,
@@ -159,7 +162,7 @@ exports.getLikesByMemberId = async (req, res) => {
 // Update a like/dislike for a video (toggle like/dislike)
 exports.updateLike = async (req, res) => {
   try {
-    const member_id = req.user.id; // Get member_id from authenticated user
+    const user_id = req.user.id; // Get user_id from authenticated user
     const { video_id, like_type } = req.body;
 
     // Validate like_type (0 or 1)
@@ -174,7 +177,7 @@ exports.updateLike = async (req, res) => {
     const query = "SELECT * FROM `like` WHERE member_id = ? AND video_id = ?";
     const [existingLike] = await db
       .promise()
-      .query(query, [member_id, video_id]);
+      .query(query, [user_id, video_id]);
 
     if (existingLike.length === 0) {
       return res.status(404).json({
@@ -186,7 +189,7 @@ exports.updateLike = async (req, res) => {
     // Update the like/dislike in the database
     const updateQuery =
       "UPDATE `like` SET like_type = ? WHERE member_id = ? AND video_id = ?";
-    await db.promise().query(updateQuery, [like_type, member_id, video_id]);
+    await db.promise().query(updateQuery, [like_type, user_id, video_id]);
 
     return res.status(200).json({
       success: true,
@@ -204,7 +207,7 @@ exports.updateLike = async (req, res) => {
 // Delete a like/dislike for a video
 exports.deleteLike = async (req, res) => {
   try {
-    const member_id = req.user.id; // Get member_id from authenticated user
+    const user_id = req.user.id; // Get user_id from authenticated user
     const { video_id } = req.params;
 
     // Validate video_id
@@ -217,7 +220,7 @@ exports.deleteLike = async (req, res) => {
 
     // Delete the like/dislike from the database
     const query = "DELETE FROM `like` WHERE member_id = ? AND video_id = ?";
-    const [result] = await db.promise().query(query, [member_id, video_id]);
+    const [result] = await db.promise().query(query, [user_id, video_id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({

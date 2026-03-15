@@ -5,8 +5,8 @@ const { verifyToken } = require("../utils/verifyToken");
 
 // Create a saved video
 router.post("/", verifyToken, saved_videoController.createSavedVideo);
-// Get all saved videos for a member
-router.get("/member", verifyToken, saved_videoController.getSavedVideosByMemberId);
+// Get all saved videos for a user
+router.get("/user", verifyToken, saved_videoController.getSavedVideosByUserId);
 // Get a saved video by id
 router.get("/:video_id", verifyToken, saved_videoController.getSavedVideoById);
 // Get all saved videos
