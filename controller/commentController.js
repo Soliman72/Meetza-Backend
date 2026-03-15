@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
+const { createNotification } = require("../services/notificationService");
 
 // Create (comment or reply: pass optional parent_id to reply to a comment)
 exports.createComment = async (req, res) => {
@@ -15,28 +16,80 @@ exports.createComment = async (req, res) => {
       return res.status(400).json({ success: false, message: "video_id and comment_text are required" });
     }
 
-    const [videoExists] = await db
+    const [videoRows] = await db
       .promise()
-      .query("SELECT id FROM video WHERE id = ?", [video_id]);
-    if (videoExists.length === 0) {
+      .query("SELECT id, administrator_id, title FROM video WHERE id = ?", [video_id]);
+    if (videoRows.length === 0) {
       return res.status(400).json({ success: false, message: "Invalid video_id: not found" });
     }
+    const video = videoRows[0];
 
+    let parentCommentMemberId = null;
     if (parent_id) {
       const [parentRows] = await db
         .promise()
-        .query("SELECT id, video_id FROM comment WHERE id = ?", [parent_id]);
+        .query("SELECT id, video_id, member_id FROM comment WHERE id = ?", [parent_id]);
       if (parentRows.length === 0) {
         return res.status(400).json({ success: false, message: "parent_id: comment not found" });
       }
       if (parentRows[0].video_id !== video_id) {
         return res.status(400).json({ success: false, message: "parent comment must belong to the same video" });
       }
+      parentCommentMemberId = parentRows[0].member_id;
     }
 
     const sql =
       "INSERT INTO comment (id, member_id, video_id, parent_id, comment_text) VALUES (?, ?, ?, ?, ?)";
     await db.promise().query(sql, [id, user_id, video_id, parent_id || null, comment_text]);
+
+    // Notifications (non-blocking)
+    const [commenter] = await db.promise().query("SELECT name FROM user WHERE id = ?", [user_id]);
+    const commenterName = commenter?.length ? commenter[0].name : "Someone";
+
+    try {
+      const videoOwnerId = video.administrator_id;
+      const [videoOwnerIsMember] = await db
+        .promise()
+        .query("SELECT user_id FROM member WHERE user_id = ?", [videoOwnerId]);
+
+      if (parent_id) {
+        // Notify parent comment owner about the reply (only if not replying to self)
+        if (parentCommentMemberId && parentCommentMemberId !== user_id) {
+          await createNotification({
+            senderId: user_id,
+            memberId: parentCommentMemberId,
+            title: "Reply to your comment",
+            message: `${commenterName} replied to your comment on the video "${video.title}".`,
+          });
+        }
+        // Notify video owner about the reply (if member, not the replier, and not the parent comment owner to avoid duplicate)
+        if (
+          videoOwnerIsMember.length > 0 &&
+          videoOwnerId !== user_id &&
+          videoOwnerId !== parentCommentMemberId
+        ) {
+          await createNotification({
+            senderId: user_id,
+            memberId: videoOwnerId,
+            title: "New reply on your video",
+            message: `${commenterName} replied to a comment on your video "${video.title}".`,
+          });
+        }
+      } else {
+        // Notify video owner about new comment (only if they are a member and not commenting on own video)
+        if (videoOwnerId !== user_id && videoOwnerIsMember.length > 0) {
+          await createNotification({
+            senderId: user_id,
+            memberId: videoOwnerId,
+            title: "New comment on your video",
+            message: `${commenterName} commented on your video "${video.title}".`,
+          });
+        }
+      }
+    } catch (notifyErr) {
+      console.error("Comment notification error:", notifyErr);
+    }
+
     res.status(201).json({ success: true, data: { id, user_id, video_id, parent_id: parent_id || null, comment_text } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
