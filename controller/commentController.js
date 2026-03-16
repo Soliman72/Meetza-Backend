@@ -76,15 +76,13 @@ exports.createComment = async (req, res) => {
           });
         }
       } else {
-        // Notify video owner about new comment (only if they are a member and not commenting on own video)
-        if (videoOwnerId !== user_id && videoOwnerIsMember.length > 0) {
-          await createNotification({
-            senderId: user_id,
-            memberId: videoOwnerId,
-            title: "New comment on your video",
-            message: `${commenterName} commented on your video "${video.title}".`,
-          });
-        }
+        // Notify video owner about new comment admin or member
+        await createNotification({
+          senderId: user_id,
+          memberId: videoOwnerId,
+          title: "New comment on your video",
+          message: `${commenterName} commented on your video "${video.title}".`,
+        });
       }
     } catch (notifyErr) {
       console.error("Comment notification error:", notifyErr);
