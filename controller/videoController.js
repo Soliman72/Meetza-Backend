@@ -164,6 +164,7 @@ exports.getAllVideos = async (req, res) => {
   try {
     const { title, group_id } = req.query;
     const visibility = getVideoVisibility(req, "v");
+    const userId = req.user?.id;
     const conditions = [];
     const params = [];
 
@@ -173,11 +174,27 @@ exports.getAllVideos = async (req, res) => {
         u.name AS admin_name, u.user_photo AS admin_photo,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
-        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count
+        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count${
+          userId
+            ? `,
+        EXISTS(
+          SELECT 1 FROM \`like\` l2
+          WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
+        ) AS user_like,
+        EXISTS(
+          SELECT 1 FROM \`like\` l3
+          WHERE l3.video_id = v.id AND l3.member_id = ? AND l3.like_type = 0
+        ) AS user_dislike`
+            : ""
+        }
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
     `;
+
+    if (userId) {
+      params.push(userId, userId);
+    }
 
     if (visibility.whereClause) {
       conditions.push(visibility.whereClause);
@@ -197,13 +214,24 @@ exports.getAllVideos = async (req, res) => {
 
     const [rows] = await db.promise().query(query, params);
     const data = (rows || []).map((row) => {
-      const { admin_name, admin_photo, likes_count: lc, dislikes_count: dc, saved_count: sc, ...video } = row;
+      const {
+        admin_name,
+        admin_photo,
+        likes_count: lc,
+        dislikes_count: dc,
+        saved_count: sc,
+        user_like,
+        user_dislike,
+        ...video
+      } = row;
       return {
         ...video,
         admin: { name: admin_name, user_photo: admin_photo },
         likes_count: Number(lc) || 0,
         dislikes_count: Number(dc) || 0,
         saved_count: Number(sc) || 0,
+        user_like: !!user_like,
+        user_dislike: !!user_dislike,
       };
     });
     return res.status(200).json({ success: true, data });
@@ -219,18 +247,35 @@ exports.getVideoById = async (req, res) => {
       return res.status(400).json({ success: false, message: "Video id is required" });
     }
     const visibility = getVideoVisibility(req, "v");
+    const userId = req.user?.id;
     let query = `
       SELECT v.*, g.group_name,
         u.name AS admin_name, u.user_photo AS admin_photo,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
-        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count
+        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count${
+          userId
+            ? `,
+        EXISTS(
+          SELECT 1 FROM \`like\` l2
+          WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
+        ) AS user_like,
+        EXISTS(
+          SELECT 1 FROM \`like\` l3
+          WHERE l3.video_id = v.id AND l3.member_id = ? AND l3.like_type = 0
+        ) AS user_dislike`
+            : ""
+        }
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
       WHERE v.id = ?
     `;
-    const params = [id];
+    const params = [];
+    if (userId) {
+      params.push(userId, userId);
+    }
+    params.push(id);
     if (visibility.whereClause) {
       query += " AND " + visibility.whereClause;
       params.push(...visibility.params);
@@ -260,6 +305,8 @@ exports.getVideoById = async (req, res) => {
     const likes_count = Number(row.likes_count) || 0;
     const dislikes_count = Number(row.dislikes_count) || 0;
     const saved_count = Number(row.saved_count) || 0;
+    const user_like = !!row.user_like;
+    const user_dislike = !!row.user_dislike;
 
     const videoId = row.id;
     const [commentsRows] = await db.promise().query(
@@ -289,6 +336,8 @@ exports.getVideoById = async (req, res) => {
         likes_count,
         dislikes_count,
         saved_count,
+        user_like,
+        user_dislike,
         description: video.description,
         comments,
         commentCount: comments.length,
@@ -320,12 +369,25 @@ exports.getRelatedVideos = async (req, res) => {
     const { group_id: groupId, administrator_id: adminId } = videoRows[0];
 
     const visibility = getVideoVisibility(req, "v");
+    const userId = req.user?.id;
     const relatedBaseSelect = `
       SELECT v.id, v.title, v.poster_url, v.duration, v.description, v.group_id, v.administrator_id, v.created_at,
              g.group_name, u.name AS admin_name, u.user_photo AS admin_photo,
              (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
              (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
-             (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count
+             (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count${
+               userId
+                 ? `,
+             EXISTS(
+               SELECT 1 FROM \`like\` l2
+               WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
+             ) AS user_like,
+             EXISTS(
+               SELECT 1 FROM \`like\` l3
+               WHERE l3.video_id = v.id AND l3.member_id = ? AND l3.like_type = 0
+             ) AS user_dislike`
+                 : ""
+             }
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
@@ -335,22 +397,28 @@ exports.getRelatedVideos = async (req, res) => {
 
     const formatRelated = (rows) =>
       (rows || []).map((r) => {
-        const { admin_name: an, admin_photo: ap, ...v } = r;
+        const { admin_name: an, admin_photo: ap, user_like, user_dislike, ...v } = r;
         return {
           ...v,
           admin: { name: an, user_photo: ap },
           likes_count: Number(r.likes_count) || 0,
           dislikes_count: Number(r.dislikes_count) || 0,
           saved_count: Number(r.saved_count) || 0,
+          user_like: !!user_like,
+          user_dislike: !!user_dislike,
         };
       });
 
     // If group_id sent in query: return only videos in that group (excluding current video)
     const filterGroupId = queryGroupId || groupId;
     if (queryGroupId !== undefined && queryGroupId !== "") {
+      const baseParams = [];
+      if (userId) {
+        baseParams.push(userId, userId);
+      }
       const [sameGroupOnly] = await db.promise().query(
         `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
-        [filterGroupId, id, ...visibility.params]
+        [...baseParams, filterGroupId, id, ...visibility.params]
       );
       return res.status(200).json({
         success: true,
@@ -361,20 +429,25 @@ exports.getRelatedVideos = async (req, res) => {
       });
     }
 
+    const baseParams = [];
+    if (userId) {
+      baseParams.push(userId, userId);
+    }
+
     // 1) Videos in the same group as the current video
     const [relatedSameGroup] = await db.promise().query(
       `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
-      [groupId, id, ...visibility.params]
+      [...baseParams, groupId, id, ...visibility.params]
     );
     // 2) Videos by same admin from other groups
     const [relatedSameAdmin] = await db.promise().query(
       `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
-      [adminId, id, groupId, ...visibility.params]
+      [...baseParams, adminId, id, groupId, ...visibility.params]
     );
     // 3) Other videos from groups the user is in (excluding same group and same admin)
     const [relatedOtherFromMyGroups] = await db.promise().query(
       `${relatedBaseSelect} WHERE v.id != ? AND v.group_id != ? AND v.administrator_id != ?${relatedTail}${relatedOrder}`,
-      [id, groupId, adminId, ...visibility.params]
+      [...baseParams, id, groupId, adminId, ...visibility.params]
     );
 
     return res.status(200).json({
