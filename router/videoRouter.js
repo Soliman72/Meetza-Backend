@@ -9,34 +9,28 @@ router.post(
   "/create",
   verifyToken,
   checkAdminPermission,
-  videoController.createVideo
+  videoController.createVideo,
 );
-router.get(
-  "/:id/related",
-  verifyToken,
-  videoController.getRelatedVideos
-);
-router.get(
-  "/:id",
-  verifyToken,
-  videoController.getVideoById
-);
-router.get(
-  "/",
-  verifyToken,
-  videoController.getAllVideos
-);
+router.get("/:id/related", verifyToken, videoController.getRelatedVideos);
+router.get("/:id", verifyToken, videoController.getVideoById);
+router.get("/", verifyToken, videoController.getAllVideos);
 router.post(
   "/:id",
   verifyToken,
   checkAdminPermission,
-  videoController.updateVideo
+  videoController.updateVideo,
 );
 router.delete(
   "/:id",
   verifyToken,
   checkAdminPermission,
-  videoController.deleteVideo
+  videoController.deleteVideo,
+);
+
+router.post(
+  "/summarize_video/:video_id",
+  verifyToken,
+  videoController.summarizeVideo,
 );
 
 module.exports = router;

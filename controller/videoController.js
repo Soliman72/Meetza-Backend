@@ -3,6 +3,8 @@ const db = require("../config/db");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
 const { createUniqueVideoSlug } = require("../utils/slug");
+const axios = require("axios");
+const FormData = require("form-data");
 
 /**
  * Single visibility rule for all video operations.
@@ -42,12 +44,15 @@ exports.createVideo = (req, res) => {
     }
 
     try {
-      const { title, meeting_id, group_id , duration, description } = req.body;
+      const { title, meeting_id, group_id, duration, description } = req.body;
       const id = uuidv4();
 
       // Ensure both files are uploaded
-      if (!req.files && (!req.body.video_file || !req.body.poster_file)) { 
-          return res.status(400).json({ success: false, message: "Both video and poster files are required" });
+      if (!req.files && (!req.body.video_file || !req.body.poster_file)) {
+        return res.status(400).json({
+          success: false,
+          message: "Both video and poster files are required",
+        });
       }
 
       let videoUrl = "";
@@ -76,67 +81,75 @@ exports.createVideo = (req, res) => {
       }
 
       // Validate required fields
-      if (! group_id || !title ) {
-        return res.status(400).json({ success: false, message: "group_id and title are required" });
+      if (!group_id || !title) {
+        return res
+          .status(400)
+          .json({ success: false, message: "group_id and title are required" });
       }
 
-      if ( meeting_id )
-      {
+      if (meeting_id) {
         const meetingCheckQuery = "SELECT * FROM meeting WHERE id = ?";
         const [meetingRows] = await db
           .promise()
           .query(meetingCheckQuery, [meeting_id]);
-  
+
         if (meetingRows.length === 0) {
-          return res.status(404).json({ success: false, message: "Meeting not found" });
+          return res
+            .status(404)
+            .json({ success: false, message: "Meeting not found" });
         }
       }
 
       // check if group exists
       const groupCheckQuery = "SELECT * FROM `group` WHERE id = ?";
-      const [groupRows] = await db
-        .promise()
-        .query( groupCheckQuery, [ group_id ] );
-      if ( groupRows.length === 0 ) {
-        return res.status(404).json({ success: false, message: "Group not found" });
+      const [groupRows] = await db.promise().query(groupCheckQuery, [group_id]);
+      if (groupRows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Group not found" });
       }
-
 
       // Check if user is authenticated and has a valid id
       if (req.user && req.user.id !== undefined) {
         req.body.administrator_id = req.user.id;
       } else {
-        return res.status(401).json({ success: false, message: "Unauthorized: administrator_id is required" });
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized: administrator_id is required",
+        });
       }
 
       // Duration from frontend is in seconds; DB column is TIME. Convert so MySQL stores correctly (e.g. 130 -> 00:02:10).
       const finalDuration = Math.max(0, parseInt(duration, 10) || 0);
 
-      const [rows] = await db.promise().query(
-        "SELECT administrator_id FROM `group` WHERE id = ?",
-        [group_id]
-      );
+      const [rows] = await db
+        .promise()
+        .query("SELECT administrator_id FROM `group` WHERE id = ?", [group_id]);
       const adminId = rows[0]?.administrator_id;
       if (!adminId) {
-        return res.status(400).json({ success: false, message: "Group not found" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Group not found" });
       }
 
       const slug = await createUniqueVideoSlug(title, db);
 
       const query =
         "INSERT INTO video (id, title, slug, meeting_id, video_url, poster_url, administrator_id, duration, description, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, SEC_TO_TIME(?), ?, ?)";
-      await db.promise().query(query, [
-        id,
-        title,
-        slug,
-        meeting_id || null,
-        videoUrl,
-        posterUrl,
-        adminId,
-        finalDuration,
-        description || null,
-        group_id,
-      ]);
+      await db
+        .promise()
+        .query(query, [
+          id,
+          title,
+          slug,
+          meeting_id || null,
+          videoUrl,
+          posterUrl,
+          adminId,
+          finalDuration,
+          description || null,
+          group_id,
+        ]);
 
       return res.status(201).json({
         success: true,
@@ -155,7 +168,11 @@ exports.createVideo = (req, res) => {
         },
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: "Database error", error: err.message });
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
     }
   });
 };
@@ -236,7 +253,9 @@ exports.getAllVideos = async (req, res) => {
     });
     return res.status(200).json({ success: true, data });
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Database error", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -244,7 +263,9 @@ exports.getVideoById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Video id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Video id is required" });
     }
     const visibility = getVideoVisibility(req, "v");
     const userId = req.user?.id;
@@ -283,7 +304,9 @@ exports.getVideoById = async (req, res) => {
 
     const [videoRows] = await db.promise().query(query, params);
     if (!videoRows.length) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
     const row = videoRows[0];
     const video = {
@@ -316,7 +339,7 @@ exports.getVideoById = async (req, res) => {
        JOIN user u ON u.id = c.member_id
        WHERE c.video_id = ?
        ORDER BY c.timestamp ASC`,
-      [videoId]
+      [videoId],
     );
     const comments = (commentsRows || []).map((c) => ({
       id: c.id,
@@ -344,7 +367,9 @@ exports.getVideoById = async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Database error", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -353,10 +378,13 @@ exports.getRelatedVideos = async (req, res) => {
     const { id } = req.params;
     const { group_id: queryGroupId } = req.query;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Video id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Video id is required" });
     }
     const visibilityForCheck = getVideoVisibility(req, "video");
-    let videoQuery = "SELECT id, group_id, administrator_id FROM video WHERE id = ?";
+    let videoQuery =
+      "SELECT id, group_id, administrator_id FROM video WHERE id = ?";
     const videoParams = [id];
     if (visibilityForCheck.whereClause) {
       videoQuery += " AND " + visibilityForCheck.whereClause;
@@ -364,7 +392,9 @@ exports.getRelatedVideos = async (req, res) => {
     }
     const [videoRows] = await db.promise().query(videoQuery, videoParams);
     if (!videoRows.length) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
     const { group_id: groupId, administrator_id: adminId } = videoRows[0];
 
@@ -392,12 +422,20 @@ exports.getRelatedVideos = async (req, res) => {
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
     `;
-    const relatedTail = visibility.whereClause ? " AND " + visibility.whereClause : "";
+    const relatedTail = visibility.whereClause
+      ? " AND " + visibility.whereClause
+      : "";
     const relatedOrder = " ORDER BY v.created_at DESC LIMIT 8";
 
     const formatRelated = (rows) =>
       (rows || []).map((r) => {
-        const { admin_name: an, admin_photo: ap, user_like, user_dislike, ...v } = r;
+        const {
+          admin_name: an,
+          admin_photo: ap,
+          user_like,
+          user_dislike,
+          ...v
+        } = r;
         return {
           ...v,
           admin: { name: an, user_photo: ap },
@@ -416,10 +454,12 @@ exports.getRelatedVideos = async (req, res) => {
       if (userId) {
         baseParams.push(userId, userId);
       }
-      const [sameGroupOnly] = await db.promise().query(
-        `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
-        [...baseParams, filterGroupId, id, ...visibility.params]
-      );
+      const [sameGroupOnly] = await db
+        .promise()
+        .query(
+          `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
+          [...baseParams, filterGroupId, id, ...visibility.params],
+        );
       return res.status(200).json({
         success: true,
         data: {
@@ -435,20 +475,26 @@ exports.getRelatedVideos = async (req, res) => {
     }
 
     // 1) Videos in the same group as the current video
-    const [relatedSameGroup] = await db.promise().query(
-      `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
-      [...baseParams, groupId, id, ...visibility.params]
-    );
+    const [relatedSameGroup] = await db
+      .promise()
+      .query(
+        `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
+        [...baseParams, groupId, id, ...visibility.params],
+      );
     // 2) Videos by same admin from other groups
-    const [relatedSameAdmin] = await db.promise().query(
-      `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
-      [...baseParams, adminId, id, groupId, ...visibility.params]
-    );
+    const [relatedSameAdmin] = await db
+      .promise()
+      .query(
+        `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
+        [...baseParams, adminId, id, groupId, ...visibility.params],
+      );
     // 3) Other videos from groups the user is in (excluding same group and same admin)
-    const [relatedOtherFromMyGroups] = await db.promise().query(
-      `${relatedBaseSelect} WHERE v.id != ? AND v.group_id != ? AND v.administrator_id != ?${relatedTail}${relatedOrder}`,
-      [...baseParams, id, groupId, adminId, ...visibility.params]
-    );
+    const [relatedOtherFromMyGroups] = await db
+      .promise()
+      .query(
+        `${relatedBaseSelect} WHERE v.id != ? AND v.group_id != ? AND v.administrator_id != ?${relatedTail}${relatedOrder}`,
+        [...baseParams, id, groupId, adminId, ...visibility.params],
+      );
 
     return res.status(200).json({
       success: true,
@@ -459,7 +505,9 @@ exports.getRelatedVideos = async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Database error", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -467,7 +515,9 @@ exports.deleteVideo = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Video id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Video id is required" });
     }
     const visibility = getVideoVisibility(req, "video");
     let query = "DELETE FROM video WHERE id = ?";
@@ -478,11 +528,17 @@ exports.deleteVideo = async (req, res) => {
     }
     const [result] = await db.promise().query(query, params);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
-    return res.status(200).json({ success: true, message: "Video deleted successfully" });
+    return res
+      .status(200)
+      .json({ success: true, message: "Video deleted successfully" });
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Database error", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Database error", error: err.message });
   }
 };
 
@@ -500,7 +556,9 @@ exports.updateVideo = (req, res) => {
       const { id } = req.params;
 
       if (!id) {
-        return res.status(400).json({ success: false, message: "id is required" });
+        return res
+          .status(400)
+          .json({ success: false, message: "id is required" });
       }
 
       const visibility = getVideoVisibility(req, "video");
@@ -522,8 +580,8 @@ exports.updateVideo = (req, res) => {
       const updateParams = [];
 
       // Handle basic fields from body
-      const { title, meeting_id, group_id ,  duration, description } = req.body;
-      if ( title) {
+      const { title, meeting_id, group_id, duration, description } = req.body;
+      if (title) {
         updateFields.push("title = ?");
         updateParams.push(title);
       }
@@ -534,14 +592,16 @@ exports.updateVideo = (req, res) => {
           .promise()
           .query(meetingCheckQuery, [meeting_id]);
         if (meetingRows.length === 0) {
-          return res.status(404).json({ success: false, message: "Meeting not found" });
+          return res
+            .status(404)
+            .json({ success: false, message: "Meeting not found" });
         }
         updateFields.push("meeting_id = ?");
         updateParams.push(meeting_id);
       }
-      if (duration!==undefined && duration!==null && duration!=='') {
+      if (duration !== undefined && duration !== null && duration !== "") {
         // Duration from frontend is in seconds; DB column is TIME. Convert so MySQL stores correctly (e.g. 130 -> 00:02:10).
-        const finalDuration = Math.max(0, parseInt(duration, 102) || 0);
+        const finalDuration = Math.max(0, parseInt(duration, 10) || 0);
         updateFields.push("duration = SEC_TO_TIME(?)");
         updateParams.push(finalDuration);
       }
@@ -549,9 +609,9 @@ exports.updateVideo = (req, res) => {
         updateFields.push("description = ?");
         updateParams.push(description);
       }
-      if ( group_id ) {
+      if (group_id) {
         updateFields.push("group_id = ?");
-        updateParams.push( group_id );
+        updateParams.push(group_id);
       }
       // Handle video/poster file updates
       let newVideoUrl, newPosterUrl;
@@ -583,17 +643,162 @@ exports.updateVideo = (req, res) => {
       }
 
       if (updateFields.length === 0) {
-        return res.status(400).json({ success: false, message: "No new data provided for update" });
+        return res
+          .status(400)
+          .json({ success: false, message: "No new data provided for update" });
       }
-
-      updateParams.push(id);
 
       const sql = `UPDATE video SET ${updateFields.join(", ")} WHERE id = ?`;
       const [result] = await db.promise().query(sql, [...updateParams, id]);
 
-      return res.status(200).json({ success: true, message: "Video updated successfully" });
+      return res
+        .status(200)
+        .json({ success: true, message: "Video updated successfully" });
     } catch (err) {
-      return res.status(500).json({ success: false, message: "Database error", error: err.message });
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+  });
+};
+
+exports.summarizeVideo = async (req, res) => {
+  upload.single("file")(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
+    // On Windows, `localhost` can resolve to IPv6 (::1) which may fail if your service
+    // only listens on IPv4. Default to 127.0.0.1 but allow overriding via env.
+    const apiUrl =
+      process.env.SUMMARIZE_API_URL || "http://127.0.0.1:8000/summarize_video";
+    const apiKey =
+      process.env.SUMMARIZE_API_KEY || "#$$0limaaaannnn##sddsdsd23233522dd";
+    const timeoutMs = 300000;
+    const requestedLocalization = (req.header("X-Localization") || "ar")
+      .toString()
+      .toLowerCase()
+      .trim();
+    const localization =
+      requestedLocalization === "en" || requestedLocalization === "ar"
+        ? requestedLocalization
+        : "ar";
+    const { video_id } = req.params;
+
+    if (!video_id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing video_id in request" });
+    }
+
+    try {
+      // 1) If already summarized in DB for this language, return without calling API
+      const [existingRows] = await db
+        .promise()
+        .query(
+          `SELECT language, transcript, summary
+           FROM video_transcript_summary
+           WHERE video_id = ? AND language = ?
+           LIMIT 1`,
+          [video_id, localization],
+        );
+      if (existingRows && existingRows.length) {
+        const row = existingRows[0];
+        if (row.transcript || row.summary) {
+          return res.status(200).json({
+            success: true,
+            data: {
+              video_id,
+              language: row.language,
+              transcript: row.transcript,
+              summary: row.summary,
+              cached: true,
+            },
+          });
+        }
+      }
+
+      // support url (string) or uploaded file (file)
+      const fs = require("fs");
+      const fileBuffer = req.file
+        ? req.file.buffer ||
+          (req.file.path ? fs.readFileSync(req.file.path) : null)
+        : null;
+      const url = req.body?.url;
+
+      if (!fileBuffer && !url) {
+        return res.status(400).json({
+          success: false,
+          message: "No file or url provided",
+        });
+      }
+
+      const callSummarizeApi = async () => {
+        const form = new FormData();
+        if (fileBuffer) {
+          form.append("file", fileBuffer, {
+            filename: req.file?.originalname || "file.mp4",
+            contentType: req.file?.mimetype || "video/mp4",
+          });
+        } else {
+          form.append("url", url);
+        }
+
+        const apiRes = await axios.post(`${apiUrl}/${video_id}`, form, {
+          headers: {
+            ...form.getHeaders(),
+            "X-API-Key": apiKey,
+            "X-Localization": localization,
+          },
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+          timeout: timeoutMs,
+        });
+        return apiRes.data;
+      };
+
+      // 2) Not cached -> call API once using requested localization, then store
+      const data = await callSummarizeApi();
+      const transcript = data?.data?.transcript ?? data?.transcript ?? null;
+      const summary = data?.data?.summary ?? data?.summary ?? null;
+      const storedLanguage = data?.data?.language ?? data?.language ?? localization;
+
+      await db.promise().query(
+        `INSERT INTO video_transcript_summary (video_id, language, transcript, summary)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE transcript = VALUES(transcript), summary = VALUES(summary), updated_at = CURRENT_TIMESTAMP`,
+        [video_id, storedLanguage, transcript, summary],
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          video_id,
+          language: storedLanguage,
+          transcript,
+          summary,
+          cached: false,
+        },
+      });
+    } catch (e) {
+      if (e.response && e.response.data) {
+        return res.status(500).json({
+          success: false,
+          message:
+            "Summarization API error: " +
+            (e.response.data.detail ||
+              e.response.data.message ||
+              "Unknown error"),
+          error: e.response.data,
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        message: "Summarization API connection error",
+        error: e.message || e,
+      });
     }
   });
 };
