@@ -676,7 +676,7 @@ exports.summarizeVideo = async (req, res) => {
       process.env.SUMMARIZE_API_URL || "http://127.0.0.1:8000/summarize_video";
     const apiKey =
       process.env.SUMMARIZE_API_KEY || "#$$0limaaaannnn##sddsdsd23233522dd";
-    const timeoutMs = 300000;
+    const timeoutMs = 1800000;
     const requestedLocalization = (req.header("X-Localization") || "ar")
       .toString()
       .toLowerCase()
@@ -695,15 +695,13 @@ exports.summarizeVideo = async (req, res) => {
 
     try {
       // 1) If already summarized in DB for this language, return without calling API
-      const [existingRows] = await db
-        .promise()
-        .query(
-          `SELECT language, transcript, summary
+      const [existingRows] = await db.promise().query(
+        `SELECT language, transcript, summary
            FROM video_transcript_summary
            WHERE video_id = ? AND language = ?
            LIMIT 1`,
-          [video_id, localization],
-        );
+        [video_id, localization],
+      );
       if (existingRows && existingRows.length) {
         const row = existingRows[0];
         if (row.transcript || row.summary) {
@@ -763,7 +761,8 @@ exports.summarizeVideo = async (req, res) => {
       const data = await callSummarizeApi();
       const transcript = data?.data?.transcript ?? data?.transcript ?? null;
       const summary = data?.data?.summary ?? data?.summary ?? null;
-      const storedLanguage = data?.data?.language ?? data?.language ?? localization;
+      const storedLanguage =
+        data?.data?.language ?? data?.language ?? localization;
 
       await db.promise().query(
         `INSERT INTO video_transcript_summary (video_id, language, transcript, summary)
