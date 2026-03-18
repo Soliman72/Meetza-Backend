@@ -253,6 +253,27 @@ CREATE TABLE IF NOT EXISTS `video` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
+-- 10a. VIDEO TRANSCRIPT & SUMMARY TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `video_transcript_summary` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `video_id` VARCHAR(36) NOT NULL,
+    `language` VARCHAR(10) NOT NULL,
+    `transcript` LONGTEXT NULL,
+    `summary` LONGTEXT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `unique_video_language` (`video_id`, `language`),
+    INDEX `idx_video_id` (`video_id`),
+    INDEX `idx_language` (`language`),
+    CONSTRAINT `fk_video_transcript_summary_video`
+        FOREIGN KEY (`video_id`) REFERENCES `video`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
 -- 11. COMMENT TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `comment` (
