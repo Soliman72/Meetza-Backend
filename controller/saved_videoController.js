@@ -35,7 +35,10 @@ exports.getSavedVideosByUserId = async (req, res) => {
     if (!user_id) {
       return res.status(401).json({ success: false, message: "Unauthorized: user not found" });
     }
-    const [rows] = await db.promise().query('SELECT * FROM saved_video WHERE member_id = ?', [user_id]);
+    // Return the same fields as `video` plus extra info from `saved_video` (timestamp)
+    const query =
+      "SELECT v.*, sv.timestamp AS saved_at FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id WHERE sv.member_id = ? ORDER BY sv.timestamp DESC";
+    const [rows] = await db.promise().query(query, [user_id]);
     if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
     res.status(200).json({ success: true, data: rows });
   } catch (err) {
