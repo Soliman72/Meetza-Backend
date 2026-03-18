@@ -39,7 +39,6 @@ exports.getSavedVideosByUserId = async (req, res) => {
     const query =
       "SELECT v.*, sv.timestamp AS saved_at FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id WHERE sv.member_id = ? ORDER BY sv.timestamp DESC";
     const [rows] = await db.promise().query(query, [user_id]);
-    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
     res.status(200).json({ success: true, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
@@ -53,13 +52,14 @@ exports.getSavedVideoById = async (req, res) => {
     if (!video_id) {
       return res.status(400).json({ success: false, message: "id is required" });
     }
+    const user_id = req.user?.id;
     // Count saved videos
     const sqlCount = 'SELECT COUNT(*) as count FROM saved_video WHERE video_id = ?';
     const [countRows] = await db.promise().query(sqlCount, [video_id]);
     const savedVideoCount = countRows[0].count;
-    const [rows] = await db.promise().query('SELECT * FROM saved_video WHERE video_id = ?', [video_id]);
-    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
-    res.status(200).json({ success: true, data: { savedVideoCount, saved_videos: rows } });
+    const query = "SELECT v.*, sv.timestamp AS saved_at FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id WHERE sv.video_id = ? AND sv.member_id = ? ORDER BY sv.timestamp DESC";
+    const [rows] = await db.promise().query(query, [video_id, user_id]);
+    res.status(200).json({ success: true, data: { savedVideoCount, saved_video: rows } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
@@ -68,8 +68,8 @@ exports.getSavedVideoById = async (req, res) => {
 // Read all saved videos
 exports.getAllSavedVideos = async (req, res) => {
   try {
-    const [rows] = await db.promise().query('SELECT * FROM saved_video');
-    if (rows.length === 0) return res.status(404).json({ success: false, message: "Record not found" });
+    const query = "SELECT v.*, sv.timestamp AS saved_at FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id ORDER BY sv.timestamp DESC";
+    const [rows] = await db.promise().query(query);
     res.status(200).json({ success: true, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
@@ -79,17 +79,14 @@ exports.getAllSavedVideos = async (req, res) => {
 // delete
 exports.deleteSavedVideo = async (req, res) => {
   try {
-    const member_id = req.user?.id;
+    const user_id = req.user?.id;
     const { video_id } = req.params;
-    if (!member_id || !video_id) {
-      return res.status(400).json({ success: false, message: "member_id and video_id are required" });
+    if (!user_id || !video_id) {
+      return res.status(400).json({ success: false, message: "user_id and video_id are required" });
     }
     const sql = 'DELETE FROM saved_video WHERE member_id = ? AND video_id = ?';
-    const [result] = await db.promise().query(sql, [member_id, video_id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Record not found" });
-    }
-    res.status(200).json({ success: true, message: "Saved video deleted successfully" });
+    const [result] = await db.promise().query(sql, [user_id, video_id]);
+    res.status(200).json({ success: true, data: result });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
   }
