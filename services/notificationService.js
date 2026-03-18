@@ -57,6 +57,19 @@ const createNotification = async ({ senderId, memberId, title, message }) => {
       .query("SELECT * FROM user WHERE id = ?", [senderId]);
 
     const senderName = sender.length > 0 ? sender[0].name : "Meetza Team";
+
+    // Ensure recipient exists in `member` table (notifications.member_id FK -> member.user_id)
+    // This allows admins (who might not be in `member`) to receive notifications.
+    const [[recipient]] = await db
+      .promise()
+      .query("SELECT id FROM user WHERE id = ? LIMIT 1", [memberId]);
+    if (!recipient) {
+      return { success: false, error: "Recipient user not found" };
+    }
+    await db
+      .promise()
+      .query("INSERT IGNORE INTO member (user_id) VALUES (?)", [memberId]);
+
     // 1) Save to DB
     await db
       .promise()

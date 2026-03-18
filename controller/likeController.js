@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { createNotification } = require("../services/notificationService");
 
 exports.createLike = async (req, res) => {
   try {
@@ -26,15 +27,17 @@ exports.createLike = async (req, res) => {
       });
     }
 
-    // Check if video exists
-    const videoQuery = "SELECT id FROM video WHERE id = ?";
-    const [video] = await db.promise().query(videoQuery, [video_id]);
-    if (video.length === 0) {
+    // Check if video exists + get group owner for notification
+    const videoQuery =
+      'SELECT v.id, v.title, v.group_id, g.group_name, g.administrator_id AS group_admin_id FROM video v JOIN `group` g ON g.id = v.group_id WHERE v.id = ?';
+    const [videoRows] = await db.promise().query(videoQuery, [video_id]);
+    if (videoRows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Video not found",
       });
     }
+    const video = videoRows[0];
 
     // Check if member exists
     const userQuery = "SELECT id FROM user WHERE id = ?";
@@ -69,6 +72,24 @@ exports.createLike = async (req, res) => {
       const updateQuery = "UPDATE `like` SET like_type = ? WHERE id = ?";
       await db.promise().query(updateQuery, [like_type, existing[0].id]);
 
+      // Notify group owner (non-blocking)
+      try {
+        if (video.group_admin_id && video.group_admin_id !== user_id) {
+          const [actorRows] = await db
+            .promise()
+            .query("SELECT name FROM user WHERE id = ? LIMIT 1", [user_id]);
+          const actorName = actorRows?.length ? actorRows[0].name : "Someone";
+          await createNotification({
+            senderId: user_id,
+            memberId: video.group_admin_id,
+            title: "Reaction updated on your group video",
+            message: `${actorName} updated their reaction on the video "${video.title}" in the group "${video.group_name}".`,
+          });
+        }
+      } catch (notifyErr) {
+        console.error("Like notification error:", notifyErr);
+      }
+
       return res.status(200).json({
         success: true,
         message:
@@ -83,6 +104,24 @@ exports.createLike = async (req, res) => {
     const insertQuery =
       "INSERT INTO `like` (id, member_id, video_id, like_type) VALUES (?, ?, ?, ?)";
     await db.promise().query(insertQuery, [id, user_id, video_id, like_type]);
+
+    // Notify group owner (non-blocking)
+    try {
+      if (video.group_admin_id && video.group_admin_id !== user_id) {
+        const [actorRows] = await db
+          .promise()
+          .query("SELECT name FROM user WHERE id = ? LIMIT 1", [user_id]);
+        const actorName = actorRows?.length ? actorRows[0].name : "Someone";
+        await createNotification({
+          senderId: user_id,
+          memberId: video.group_admin_id,
+          title: like_type === 1 ? "New like on your group video" : "New dislike on your group video",
+          message: `${actorName} ${like_type === 1 ? "liked" : "disliked"} the video "${video.title}" in the group "${video.group_name}".`,
+        });
+      }
+    } catch (notifyErr) {
+      console.error("Like notification error:", notifyErr);
+    }
 
     return res.status(201).json({
       success: true,
