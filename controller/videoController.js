@@ -3,6 +3,7 @@ const db = require("../config/db");
 const { upload, uploadToCloudinary } = require("../utils/uploadFile");
 const { validateFileType } = require("../utils/validateFiles");
 const { createUniqueVideoSlug } = require("../utils/slug");
+const { resolveVideoId } = require("../utils/resolveVideoId");
 const axios = require("axios");
 const FormData = require("form-data");
 
@@ -263,12 +264,17 @@ exports.getVideoById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Video id is required" });
+      return res.status(400).json({ success: false, message: "Video id is required" });
     }
+
+    const resolvedVideoId = await resolveVideoId(db, id);
+    if (!resolvedVideoId) {
+      return res.status(404).json({ success: false, message: "Video not found" });
+    }
+
     const visibility = getVideoVisibility(req, "v");
     const userId = req.user?.id;
+
     let query = `
       SELECT v.*, g.group_name,
         u.name AS admin_name, u.user_photo AS admin_photo,
@@ -290,24 +296,19 @@ exports.getVideoById = async (req, res) => {
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
-      WHERE v.id = ?
+      WHERE v.id = ?${visibility.whereClause ? " AND " + visibility.whereClause : ""}
     `;
+
     const params = [];
-    if (userId) {
-      params.push(userId, userId);
-    }
-    params.push(id);
-    if (visibility.whereClause) {
-      query += " AND " + visibility.whereClause;
-      params.push(...visibility.params);
-    }
+    if (userId) params.push(userId, userId);
+    params.push(resolvedVideoId);
+    if (visibility.whereClause) params.push(...visibility.params);
 
     const [videoRows] = await db.promise().query(query, params);
     if (!videoRows.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Video not found" });
+      return res.status(404).json({ success: false, message: "Video not found" });
     }
+
     const row = videoRows[0];
     const video = {
       id: row.id,
@@ -378,28 +379,36 @@ exports.getRelatedVideos = async (req, res) => {
     const { id } = req.params;
     const { group_id: queryGroupId } = req.query;
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Video id is required" });
+      return res.status(400).json({ success: false, message: "Video id is required" });
     }
-    const visibilityForCheck = getVideoVisibility(req, "video");
+
+    const resolvedVideoId = await resolveVideoId(db, id);
+    if (!resolvedVideoId) {
+      return res.status(404).json({ success: false, message: "Video not found" });
+    }
+
+    // Verify requester can access the current video (admin or group member rules)
+    const visibilityForCheck = getVideoVisibility(req, "v");
     let videoQuery =
-      "SELECT id, group_id, administrator_id FROM video WHERE id = ?";
-    const videoParams = [id];
+      "SELECT v.id, v.group_id, v.administrator_id FROM video v WHERE v.id = ?";
+    const videoParams = [resolvedVideoId];
     if (visibilityForCheck.whereClause) {
       videoQuery += " AND " + visibilityForCheck.whereClause;
       videoParams.push(...visibilityForCheck.params);
     }
+
     const [videoRows] = await db.promise().query(videoQuery, videoParams);
     if (!videoRows.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Video not found" });
+      return res.status(404).json({ success: false, message: "Video not found" });
     }
+
     const { group_id: groupId, administrator_id: adminId } = videoRows[0];
+    const currentVideoId = videoRows[0].id;
 
     const visibility = getVideoVisibility(req, "v");
     const userId = req.user?.id;
+    const relatedTail = visibility.whereClause ? " AND " + visibility.whereClause : "";
+
     const relatedBaseSelect = `
       SELECT v.id, v.title, v.poster_url, v.duration, v.description, v.group_id, v.administrator_id, v.created_at,
              g.group_name, u.name AS admin_name, u.user_photo AS admin_photo,
@@ -422,9 +431,7 @@ exports.getRelatedVideos = async (req, res) => {
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
     `;
-    const relatedTail = visibility.whereClause
-      ? " AND " + visibility.whereClause
-      : "";
+
     const relatedOrder = " ORDER BY v.created_at DESC LIMIT 8";
 
     const formatRelated = (rows) =>
@@ -447,19 +454,19 @@ exports.getRelatedVideos = async (req, res) => {
         };
       });
 
+    const baseParams = [];
+    if (userId) baseParams.push(userId, userId);
+
     // If group_id sent in query: return only videos in that group (excluding current video)
     const filterGroupId = queryGroupId || groupId;
     if (queryGroupId !== undefined && queryGroupId !== "") {
-      const baseParams = [];
-      if (userId) {
-        baseParams.push(userId, userId);
-      }
       const [sameGroupOnly] = await db
         .promise()
         .query(
           `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
-          [...baseParams, filterGroupId, id, ...visibility.params],
+          [...baseParams, filterGroupId, currentVideoId, ...visibility.params],
         );
+
       return res.status(200).json({
         success: true,
         data: {
@@ -469,31 +476,28 @@ exports.getRelatedVideos = async (req, res) => {
       });
     }
 
-    const baseParams = [];
-    if (userId) {
-      baseParams.push(userId, userId);
-    }
-
     // 1) Videos in the same group as the current video
     const [relatedSameGroup] = await db
       .promise()
       .query(
         `${relatedBaseSelect} WHERE v.group_id = ? AND v.id != ?${relatedTail}${relatedOrder}`,
-        [...baseParams, groupId, id, ...visibility.params],
+        [...baseParams, groupId, currentVideoId, ...visibility.params],
       );
+
     // 2) Videos by same admin from other groups
     const [relatedSameAdmin] = await db
       .promise()
       .query(
         `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
-        [...baseParams, adminId, id, groupId, ...visibility.params],
+        [...baseParams, adminId, currentVideoId, groupId, ...visibility.params],
       );
+
     // 3) Other videos from groups the user is in (excluding same group and same admin)
     const [relatedOtherFromMyGroups] = await db
       .promise()
       .query(
         `${relatedBaseSelect} WHERE v.id != ? AND v.group_id != ? AND v.administrator_id != ?${relatedTail}${relatedOrder}`,
-        [...baseParams, id, groupId, adminId, ...visibility.params],
+        [...baseParams, currentVideoId, groupId, adminId, ...visibility.params],
       );
 
     return res.status(200).json({
@@ -515,17 +519,24 @@ exports.deleteVideo = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Video id is required" });
+      return res.status(400).json({ success: false, message: "Video id is required" });
     }
-    const visibility = getVideoVisibility(req, "video");
-    let query = "DELETE FROM video WHERE id = ?";
-    const params = [id];
+
+    const resolvedVideoId = await resolveVideoId(db, id);
+    if (!resolvedVideoId) {
+      return res.status(404).json({ success: false, message: "Video not found" });
+    }
+
+    const visibility = getVideoVisibility(req, "v");
+    let query = `DELETE FROM video WHERE id = ?`;
+    const params = [resolvedVideoId];
     if (visibility.whereClause) {
       query += " AND " + visibility.whereClause;
       params.push(...visibility.params);
     }
+
+    console.log(query, params);
+
     const [result] = await db.promise().query(query, params);
     if (result.affectedRows === 0) {
       return res
@@ -558,16 +569,25 @@ exports.updateVideo = (req, res) => {
       if (!id) {
         return res
           .status(400)
-          .json({ success: false, message: "id is required" });
+          .json({ success: false, message: "Video id is required" });
       }
 
-      const visibility = getVideoVisibility(req, "video");
-      let checkQuery = "SELECT * FROM video WHERE id = ?";
-      const checkParams = [id];
+      const resolvedVideoId = await resolveVideoId(db, id);
+      if (!resolvedVideoId) {
+        return res.status(404).json({
+          success: false,
+          message: "Video not found",
+        });
+      }
+
+      const visibility = getVideoVisibility(req, "v");
+      let checkQuery = `SELECT * FROM video v WHERE v.id = ?`;
+      const checkParams = [resolvedVideoId];
       if (visibility.whereClause) {
         checkQuery += " AND " + visibility.whereClause;
         checkParams.push(...visibility.params);
       }
+
       const [oldVideo] = await db.promise().query(checkQuery, checkParams);
       if (oldVideo.length === 0) {
         return res.status(404).json({
@@ -649,7 +669,7 @@ exports.updateVideo = (req, res) => {
       }
 
       const sql = `UPDATE video SET ${updateFields.join(", ")} WHERE id = ?`;
-      const [result] = await db.promise().query(sql, [...updateParams, id]);
+      const [result] = await db.promise().query(sql, [...updateParams, resolvedVideoId]);
 
       return res
         .status(200)
@@ -694,13 +714,20 @@ exports.summarizeVideo = async (req, res) => {
     }
 
     try {
+      const resolvedVideoId = await resolveVideoId(db, video_id);
+      if (!resolvedVideoId) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Video not found" });
+      }
+
       // 1) If already summarized in DB for this language, return without calling API
       const [existingRows] = await db.promise().query(
         `SELECT language, transcript, summary
            FROM video_transcript_summary
            WHERE video_id = ? AND language = ?
            LIMIT 1`,
-        [video_id, localization],
+        [resolvedVideoId, localization],
       );
       if (existingRows && existingRows.length) {
         const row = existingRows[0];
@@ -708,7 +735,7 @@ exports.summarizeVideo = async (req, res) => {
           return res.status(200).json({
             success: true,
             data: {
-              video_id,
+              video_id: resolvedVideoId,
               language: row.language,
               transcript: row.transcript,
               summary: row.summary,
@@ -744,7 +771,7 @@ exports.summarizeVideo = async (req, res) => {
           form.append("url", url);
         }
 
-        const apiRes = await axios.post(`${apiUrl}/${video_id}`, form, {
+        const apiRes = await axios.post(`${apiUrl}/${resolvedVideoId}`, form, {
           headers: {
             ...form.getHeaders(),
             "X-API-Key": apiKey,
@@ -768,13 +795,13 @@ exports.summarizeVideo = async (req, res) => {
         `INSERT INTO video_transcript_summary (video_id, language, transcript, summary)
          VALUES (?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE transcript = VALUES(transcript), summary = VALUES(summary), updated_at = CURRENT_TIMESTAMP`,
-        [video_id, storedLanguage, transcript, summary],
+        [resolvedVideoId, storedLanguage, transcript, summary],
       );
 
       return res.status(200).json({
         success: true,
         data: {
-          video_id,
+          video_id: resolvedVideoId,
           language: storedLanguage,
           transcript,
           summary,
