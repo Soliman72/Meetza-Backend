@@ -37,7 +37,7 @@ exports.getSavedVideosByUserId = async (req, res) => {
     }
     // Return the same fields as `video` plus extra info from `saved_video` (timestamp)
     const query =
-      "SELECT v.*, sv.timestamp AS saved_at FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id WHERE sv.member_id = ? ORDER BY sv.timestamp DESC";
+      "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id WHERE sv.member_id = ? ORDER BY sv.timestamp DESC";
     const [rows] = await db.promise().query(query, [user_id]);
     res.status(200).json({ success: true, data: rows });
   } catch (err) {
@@ -57,7 +57,7 @@ exports.getSavedVideoById = async (req, res) => {
     const sqlCount = 'SELECT COUNT(*) as count FROM saved_video WHERE video_id = ?';
     const [countRows] = await db.promise().query(sqlCount, [video_id]);
     const savedVideoCount = countRows[0].count;
-    const query = "SELECT v.*, sv.timestamp AS saved_at FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id WHERE sv.video_id = ? AND sv.member_id = ? ORDER BY sv.timestamp DESC";
+    const query = "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id WHERE sv.video_id = ? AND sv.member_id = ? ORDER BY sv.timestamp DESC";
     const [rows] = await db.promise().query(query, [video_id, user_id]);
     res.status(200).json({ success: true, data: { savedVideoCount, saved_video: rows } });
   } catch (err) {
@@ -68,7 +68,7 @@ exports.getSavedVideoById = async (req, res) => {
 // Read all saved videos
 exports.getAllSavedVideos = async (req, res) => {
   try {
-    const query = "SELECT v.*, sv.timestamp AS saved_at FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id ORDER BY sv.timestamp DESC";
+    const query = "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id ORDER BY sv.timestamp DESC";
     const [rows] = await db.promise().query(query);
     res.status(200).json({ success: true, data: rows });
   } catch (err) {
