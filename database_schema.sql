@@ -261,6 +261,7 @@ CREATE TABLE IF NOT EXISTS `video_transcript_summary` (
     `language` VARCHAR(10) NOT NULL,
     `transcript` LONGTEXT NULL,
     `summary` LONGTEXT NULL,
+    `topics` LONGTEXT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),

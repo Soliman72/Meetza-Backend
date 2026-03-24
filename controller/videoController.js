@@ -33,6 +33,30 @@ function getVideoVisibility(req, tableAlias = "v") {
   return { whereClause: "", params: [] };
 }
 
+function getRequestedLocalization(req) {
+  const requestedLocalization = (req.header("X-Localization") || "ar")
+    .toString()
+    .toLowerCase()
+    .trim();
+  return requestedLocalization === "en" || requestedLocalization === "ar"
+    ? requestedLocalization
+    : "ar";
+}
+
+function normalizeTopics(value) {
+  if (value == null) return null;
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : value;
+    } catch (_e) {
+      return value;
+    }
+  }
+  return value;
+}
+
 // Create a video with file upload
 exports.createVideo = (req, res) => {
   // Apply multer upload middleware to handle file uploads
@@ -192,7 +216,21 @@ exports.getAllVideos = async (req, res) => {
         u.name AS admin_name, u.user_photo AS admin_photo,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
-        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count${
+        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count,
+        (
+          SELECT vts.topics
+          FROM video_transcript_summary vts
+          WHERE vts.video_id = v.id AND vts.language = 'ar'
+          ORDER BY vts.updated_at DESC
+          LIMIT 1
+        ) AS topics_ar,
+        (
+          SELECT vts.topics
+          FROM video_transcript_summary vts
+          WHERE vts.video_id = v.id AND vts.language = 'en'
+          ORDER BY vts.updated_at DESC
+          LIMIT 1
+        ) AS topics_en${
           userId
             ? `,
         EXISTS(
@@ -238,6 +276,8 @@ exports.getAllVideos = async (req, res) => {
         likes_count: lc,
         dislikes_count: dc,
         saved_count: sc,
+        topics_ar,
+        topics_en,
         user_like,
         user_dislike,
         ...video
@@ -248,6 +288,10 @@ exports.getAllVideos = async (req, res) => {
         likes_count: Number(lc) || 0,
         dislikes_count: Number(dc) || 0,
         saved_count: Number(sc) || 0,
+        topics: {
+          ar: normalizeTopics(topics_ar),
+          en: normalizeTopics(topics_en),
+        },
         user_like: !!user_like,
         user_dislike: !!user_dislike,
       };
@@ -264,12 +308,16 @@ exports.getVideoById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Video id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Video id is required" });
     }
 
     const resolvedVideoId = await resolveVideoId(db, id);
     if (!resolvedVideoId) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
 
     const visibility = getVideoVisibility(req, "v");
@@ -280,7 +328,21 @@ exports.getVideoById = async (req, res) => {
         u.name AS admin_name, u.user_photo AS admin_photo,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
         (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
-        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count${
+        (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count,
+        (
+          SELECT vts.topics
+          FROM video_transcript_summary vts
+          WHERE vts.video_id = v.id AND vts.language = 'ar'
+          ORDER BY vts.updated_at DESC
+          LIMIT 1
+        ) AS topics_ar,
+        (
+          SELECT vts.topics
+          FROM video_transcript_summary vts
+          WHERE vts.video_id = v.id AND vts.language = 'en'
+          ORDER BY vts.updated_at DESC
+          LIMIT 1
+        ) AS topics_en${
           userId
             ? `,
         EXISTS(
@@ -306,7 +368,9 @@ exports.getVideoById = async (req, res) => {
 
     const [videoRows] = await db.promise().query(query, params);
     if (!videoRows.length) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
 
     const row = videoRows[0];
@@ -329,6 +393,10 @@ exports.getVideoById = async (req, res) => {
     const likes_count = Number(row.likes_count) || 0;
     const dislikes_count = Number(row.dislikes_count) || 0;
     const saved_count = Number(row.saved_count) || 0;
+    const topics = {
+      ar: normalizeTopics(row.topics_ar),
+      en: normalizeTopics(row.topics_en),
+    };
     const user_like = !!row.user_like;
     const user_dislike = !!row.user_dislike;
 
@@ -360,6 +428,7 @@ exports.getVideoById = async (req, res) => {
         likes_count,
         dislikes_count,
         saved_count,
+        topics,
         user_like,
         user_dislike,
         description: video.description,
@@ -379,12 +448,16 @@ exports.getRelatedVideos = async (req, res) => {
     const { id } = req.params;
     const { group_id: queryGroupId } = req.query;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Video id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Video id is required" });
     }
 
     const resolvedVideoId = await resolveVideoId(db, id);
     if (!resolvedVideoId) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
 
     // Verify requester can access the current video (admin or group member rules)
@@ -399,7 +472,9 @@ exports.getRelatedVideos = async (req, res) => {
 
     const [videoRows] = await db.promise().query(videoQuery, videoParams);
     if (!videoRows.length) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
 
     const { group_id: groupId, administrator_id: adminId } = videoRows[0];
@@ -407,14 +482,30 @@ exports.getRelatedVideos = async (req, res) => {
 
     const visibility = getVideoVisibility(req, "v");
     const userId = req.user?.id;
-    const relatedTail = visibility.whereClause ? " AND " + visibility.whereClause : "";
+    const relatedTail = visibility.whereClause
+      ? " AND " + visibility.whereClause
+      : "";
 
     const relatedBaseSelect = `
       SELECT v.id, v.title, v.poster_url, v.duration, v.description, v.group_id, v.administrator_id, v.created_at,
              g.group_name, u.name AS admin_name, u.user_photo AS admin_photo,
              (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
              (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 0) AS dislikes_count,
-             (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count${
+             (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count,
+             (
+               SELECT vts.topics
+               FROM video_transcript_summary vts
+               WHERE vts.video_id = v.id AND vts.language = 'ar'
+               ORDER BY vts.updated_at DESC
+               LIMIT 1
+             ) AS topics_ar,
+             (
+               SELECT vts.topics
+               FROM video_transcript_summary vts
+               WHERE vts.video_id = v.id AND vts.language = 'en'
+               ORDER BY vts.updated_at DESC
+               LIMIT 1
+             ) AS topics_en${
                userId
                  ? `,
              EXISTS(
@@ -439,6 +530,8 @@ exports.getRelatedVideos = async (req, res) => {
         const {
           admin_name: an,
           admin_photo: ap,
+          topics_ar,
+          topics_en,
           user_like,
           user_dislike,
           ...v
@@ -449,6 +542,10 @@ exports.getRelatedVideos = async (req, res) => {
           likes_count: Number(r.likes_count) || 0,
           dislikes_count: Number(r.dislikes_count) || 0,
           saved_count: Number(r.saved_count) || 0,
+          topics: {
+            ar: normalizeTopics(topics_ar),
+            en: normalizeTopics(topics_en),
+          },
           user_like: !!user_like,
           user_dislike: !!user_dislike,
         };
@@ -519,12 +616,16 @@ exports.deleteVideo = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Video id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Video id is required" });
     }
 
     const resolvedVideoId = await resolveVideoId(db, id);
     if (!resolvedVideoId) {
-      return res.status(404).json({ success: false, message: "Video not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
 
     const visibility = getVideoVisibility(req, "v");
@@ -669,7 +770,9 @@ exports.updateVideo = (req, res) => {
       }
 
       const sql = `UPDATE video SET ${updateFields.join(", ")} WHERE id = ?`;
-      const [result] = await db.promise().query(sql, [...updateParams, resolvedVideoId]);
+      const [result] = await db
+        .promise()
+        .query(sql, [...updateParams, resolvedVideoId]);
 
       return res
         .status(200)
@@ -697,14 +800,7 @@ exports.summarizeVideo = async (req, res) => {
     const apiKey =
       process.env.SUMMARIZE_API_KEY || "#$$0limaaaannnn##sddsdsd23233522dd";
     const timeoutMs = 1800000;
-    const requestedLocalization = (req.header("X-Localization") || "ar")
-      .toString()
-      .toLowerCase()
-      .trim();
-    const localization =
-      requestedLocalization === "en" || requestedLocalization === "ar"
-        ? requestedLocalization
-        : "ar";
+    const localization = getRequestedLocalization(req);
     const { video_id } = req.params;
 
     if (!video_id) {
@@ -723,7 +819,7 @@ exports.summarizeVideo = async (req, res) => {
 
       // 1) If already summarized in DB for this language, return without calling API
       const [existingRows] = await db.promise().query(
-        `SELECT language, transcript, summary
+        `SELECT language, transcript, summary, topics
            FROM video_transcript_summary
            WHERE video_id = ? AND language = ?
            LIMIT 1`,
@@ -732,6 +828,7 @@ exports.summarizeVideo = async (req, res) => {
       if (existingRows && existingRows.length) {
         const row = existingRows[0];
         if (row.transcript || row.summary) {
+          const normalizedTopics = normalizeTopics(row.topics);
           return res.status(200).json({
             success: true,
             data: {
@@ -739,6 +836,7 @@ exports.summarizeVideo = async (req, res) => {
               language: row.language,
               transcript: row.transcript,
               summary: row.summary,
+              topics: normalizedTopics,
               cached: true,
             },
           });
@@ -788,14 +886,23 @@ exports.summarizeVideo = async (req, res) => {
       const data = await callSummarizeApi();
       const transcript = data?.data?.transcript ?? data?.transcript ?? null;
       const summary = data?.data?.summary ?? data?.summary ?? null;
+      const topics = normalizeTopics(
+        data?.data?.topics ?? data?.topics ?? null,
+      );
       const storedLanguage =
         data?.data?.language ?? data?.language ?? localization;
+      const topicsForDb =
+        topics == null
+          ? null
+          : typeof topics === "string"
+            ? topics
+            : JSON.stringify(topics);
 
       await db.promise().query(
-        `INSERT INTO video_transcript_summary (video_id, language, transcript, summary)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE transcript = VALUES(transcript), summary = VALUES(summary), updated_at = CURRENT_TIMESTAMP`,
-        [resolvedVideoId, storedLanguage, transcript, summary],
+        `INSERT INTO video_transcript_summary (video_id, language, transcript, summary, topics)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE transcript = VALUES(transcript), summary = VALUES(summary), topics = VALUES(topics), updated_at = CURRENT_TIMESTAMP`,
+        [resolvedVideoId, storedLanguage, transcript, summary, topicsForDb],
       );
 
       return res.status(200).json({
@@ -805,6 +912,7 @@ exports.summarizeVideo = async (req, res) => {
           language: storedLanguage,
           transcript,
           summary,
+          topics,
           cached: false,
         },
       });
