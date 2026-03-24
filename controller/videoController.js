@@ -57,6 +57,24 @@ function normalizeTopics(value) {
   return value;
 }
 
+function buildVideoSearchCondition(searchTerm, videoAlias = "v") {
+  const term = (searchTerm || "").toString().trim();
+  if (!term) return { clause: "", params: [] };
+  const likeTerm = `%${term}%`;
+  return {
+    clause: `(
+      ${videoAlias}.title LIKE ?
+      OR EXISTS (
+        SELECT 1
+        FROM video_transcript_summary vts
+        WHERE vts.video_id = ${videoAlias}.id
+          AND (vts.transcript LIKE ? OR vts.topics LIKE ?)
+      )
+    )`,
+    params: [likeTerm, likeTerm, likeTerm],
+  };
+}
+
 // Create a video with file upload
 exports.createVideo = (req, res) => {
   // Apply multer upload middleware to handle file uploads
@@ -204,7 +222,8 @@ exports.createVideo = (req, res) => {
 
 exports.getAllVideos = async (req, res) => {
   try {
-    const { title, group_id } = req.query;
+    const { group_id, q } = req.query;
+    const searchTerm = q;
     const visibility = getVideoVisibility(req, "v");
     const userId = req.user?.id;
     const conditions = [];
@@ -260,9 +279,10 @@ exports.getAllVideos = async (req, res) => {
       conditions.push("v.group_id = ?");
       params.push(group_id);
     }
-    if (title) {
-      conditions.push("v.title LIKE ?");
-      params.push(`%${title}%`);
+    const searchFilter = buildVideoSearchCondition(searchTerm, "v");
+    if (searchFilter.clause) {
+      conditions.push(searchFilter.clause);
+      params.push(...searchFilter.params);
     }
     if (conditions.length) {
       query += " WHERE " + conditions.join(" AND ");
@@ -858,32 +878,29 @@ exports.summarizeVideo = async (req, res) => {
         });
       }
 
-      const callSummarizeApi = async () => {
-        const form = new FormData();
-        if (fileBuffer) {
-          form.append("file", fileBuffer, {
-            filename: req.file?.originalname || "file.mp4",
-            contentType: req.file?.mimetype || "video/mp4",
-          });
-        } else {
-          form.append("url", url);
-        }
-
-        const apiRes = await axios.post(`${apiUrl}/${resolvedVideoId}`, form, {
-          headers: {
-            ...form.getHeaders(),
-            "X-API-Key": apiKey,
-            "X-Localization": localization,
-          },
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-          timeout: timeoutMs,
-        });
-        return apiRes.data;
-      };
-
       // 2) Not cached -> call API once using requested localization, then store
-      const data = await callSummarizeApi();
+      const form = new FormData();
+      if (fileBuffer) {
+        form.append("file", fileBuffer, {
+          filename: req.file?.originalname || "file.mp4",
+          contentType: req.file?.mimetype || "video/mp4",
+        });
+      } else {
+        form.append("url", url);
+      }
+
+      const apiRes = await axios.post(`${apiUrl}/${resolvedVideoId}`, form, {
+        headers: {
+          ...form.getHeaders(),
+          "X-API-Key": apiKey,
+          "X-Localization": localization,
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: timeoutMs,
+      });
+      const data = apiRes.data;
+
       const transcript = data?.data?.transcript ?? data?.transcript ?? null;
       const summary = data?.data?.summary ?? data?.summary ?? null;
       const topics = normalizeTopics(
