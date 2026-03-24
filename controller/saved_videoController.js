@@ -68,8 +68,15 @@ exports.getSavedVideoById = async (req, res) => {
 // Read all saved videos
 exports.getAllSavedVideos = async (req, res) => {
   try {
-    const query = "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id ORDER BY sv.timestamp DESC";
-    const [rows] = await db.promise().query(query);
+    const { group_id } = req.query;
+    let query = "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id";
+    const params = [];
+    if (group_id) {
+      query += " WHERE v.group_id = ?";
+      params.push(group_id);
+    }
+    query += " ORDER BY sv.timestamp DESC";
+    const [rows] = await db.promise().query(query, params);
     res.status(200).json({ success: true, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, message: "Database error", error: err.message });
