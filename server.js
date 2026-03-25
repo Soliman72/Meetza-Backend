@@ -50,6 +50,9 @@ app.set("io", io);
 chatController.registerChatIo(io);
 registerChatSocket(io);
 const registerMeetingSocket = require("./sockets/meetingSocket");
+const {
+  bootstrapMeetingRecurrenceJobs,
+} = require("./services/meetingRecurrenceScheduler");
 
 registerMeetingSocket(io);
 
@@ -203,6 +206,10 @@ const getLocalIP = () => {
 };
 
 server.listen(port, "0.0.0.0", () => {
+  bootstrapMeetingRecurrenceJobs().catch((err) => {
+    console.error("[meeting recurrence] Bootstrap failed:", err.message);
+  });
+
   const localIP = getLocalIP();
   const isDocker =
     process.env.DOCKER_ENV === "true" ||

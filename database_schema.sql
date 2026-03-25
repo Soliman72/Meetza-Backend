@@ -179,20 +179,58 @@ CREATE TABLE IF NOT EXISTS `meeting` (
     `status` ENUM('Scheduled', 'Completed', 'Cancelled') NOT NULL,
     `administrator_id` VARCHAR(36) NOT NULL,
     `group_id` VARCHAR(36) NOT NULL,
+    `is_weekly` TINYINT(1) NOT NULL DEFAULT 0,
+    `series_id` VARCHAR(36) NULL DEFAULT NULL,
+    `poster_url` TEXT NULL,
+    `description` TEXT NULL,
+    `recording` VARCHAR(1) NOT NULL DEFAULT '0',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
+    INDEX `idx_meeting_series_id` (`series_id`),
     INDEX `idx_start_time` (`start_time`),
     INDEX `idx_end_time` (`end_time`),
     INDEX `idx_status` (`status`),
-    CONSTRAINT `fk_meeting_administrator` 
+    CONSTRAINT `fk_meeting_administrator`
         FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 
         ON DELETE CASCADE 
         ON UPDATE CASCADE,
     CONSTRAINT `fk_meeting_group` 
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
         ON DELETE CASCADE 
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 9a. MEETING SERIES (weekly recurrence template; id matches meeting.series_id)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `meeting_series` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `group_id` VARCHAR(36) NOT NULL,
+    `administrator_id` VARCHAR(36) NOT NULL,
+    `original_meeting_id` VARCHAR(36) NULL,
+    `duration_ms` INT UNSIGNED NOT NULL,
+    `day_of_week` TINYINT NOT NULL COMMENT '0=Sunday .. 6=Saturday (node-schedule)',
+    `start_hour` TINYINT UNSIGNED NOT NULL,
+    `start_minute` TINYINT UNSIGNED NOT NULL,
+    `start_second` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_meeting_series_active` (`is_active`),
+    INDEX `idx_meeting_series_group` (`group_id`),
+    CONSTRAINT `fk_meeting_series_group`
+        FOREIGN KEY (`group_id`) REFERENCES `group`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_meeting_series_administrator`
+        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_meeting_series_original_meeting`
+        FOREIGN KEY (`original_meeting_id`) REFERENCES `meeting`(`id`)
+        ON DELETE SET NULL
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

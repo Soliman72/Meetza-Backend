@@ -63,6 +63,10 @@ router.get("/", verifyToken, meetingController.getAllMeetings);
  *                 enum: [Scheduled, Completed, Cancelled]
  *               description:
  *                 type: string
+ *               weekly:
+ *                 type: string
+ *                 description: If true or 1, creates a weekly recurring series (status must be Scheduled). Same weekday and time as start_time.
+ *                 enum: ["true", "false", "1", "0"]
  *               poster_file:
  *                 type: string
  *                 format: binary
@@ -94,6 +98,66 @@ router.post(
   verifyToken,
   checkAdminPermission,
   meetingController.createMeeting,
+);
+
+/**
+ * @swagger
+ * /api/meeting/{id}/deactivate-recurrence:
+ *   patch:
+ *     summary: Stop weekly recurrence for a meeting's series
+ *     description: >
+ *       Deactivates the cron job and updates the is_weekly status to 0 for all current meetings belonging to the series.
+ *     tags: [Meetings]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Meeting ID
+ *     responses:
+ *       200:
+ *         description: Recurrence stopped.
+ *       403:
+ *         description: Forbidden.
+ *       404:
+ *         description: Meeting or Series not found.
+ */
+router.patch(
+  "/:id/deactivate-recurrence",
+  verifyToken,
+  checkAdminPermission,
+  meetingController.deactivateMeetingRecurrence,
+);
+
+/**
+ * @swagger
+ * /api/meeting/{id}/activate-recurrence:
+ *   post:
+ *     summary: Start weekly recurrence for a specific meeting or series
+ *     description: >
+ *       Activates the cron job. If the ID is a meeting ID and the meeting is not already part of a series, it creates a new series. If the ID is a series ID, it restarts that series.
+ *     tags: [Meetings]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Meeting ID or Series ID
+ *     responses:
+ *       200:
+ *         description: Recurrence started.
+ *       403:
+ *         description: Forbidden.
+ *       404:
+ *         description: Meeting or Series not found.
+ */
+router.post(
+  "/:id/activate-recurrence",
+  verifyToken,
+  checkAdminPermission,
+  meetingController.activateMeetingRecurrence,
 );
 
 /**
