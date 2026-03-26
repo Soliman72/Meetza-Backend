@@ -788,6 +788,37 @@ exports.updateMeetingById = async (req, res) => {
           console.error("Failed to sync meeting_series template:", e);
         }
 
+        // Notify all group members that a meeting has been updated
+        try {
+          const effectiveGroupId = group_id || meeting.group_id;
+          const effectiveTitle = title ?? meeting.title;
+          const effectiveStart = start_time ?? meeting.start_time;
+          const effectiveEnd = end_time ?? meeting.end_time;
+
+          const [members] = await db
+            .promise()
+            .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
+              effectiveGroupId,
+            ]);
+
+          const notificationTitle = "Meeting updated";
+          const notificationMessage = `The meeting "${effectiveTitle}" has been updated. New schedule: ${effectiveStart} to ${effectiveEnd}.`;
+
+          await Promise.all(
+            members.map((m) =>
+              createNotification({
+                senderId: meeting.administrator_id,
+                memberId: m.member_id,
+                title: notificationTitle,
+                message: notificationMessage,
+              }),
+            ),
+          );
+        } catch (notifyErr) {
+          // Do not block meeting update if notifications fail
+          console.error("Failed to send meeting update notifications:", notifyErr);
+        }
+
         return res
           .status(200)
           .json({ success: true, message: "Meeting updated successfully" });
