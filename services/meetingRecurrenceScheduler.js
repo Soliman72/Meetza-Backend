@@ -39,23 +39,12 @@ async function spawnWeeklyOccurrence(seriesId, fireDate) {
   }
   const s = rows[0];
 
-  if (!s.original_meeting_id) {
+  if (!s.template_title) {
     console.warn(
-      `[meeting recurrence] Skipped spawn for series ${seriesId}: original_meeting_id is null`,
+      `[meeting recurrence] Skipped spawn for series ${seriesId}: template_title is missing`,
     );
     return;
   }
-
-  const [orig] = await db
-    .promise()
-    .query("SELECT * FROM meeting WHERE id = ?", [s.original_meeting_id]);
-  if (orig.length === 0) {
-    console.warn(
-      `[meeting recurrence] Skipped spawn for series ${seriesId}: original meeting ${s.original_meeting_id} missing`,
-    );
-    return;
-  }
-  const originalMeeting = orig[0];
 
   const startMysql = toMysqlDatetime(fireDate);
   const endAt = new Date(fireDate.getTime() + Number(s.duration_ms));
@@ -90,14 +79,14 @@ async function spawnWeeklyOccurrence(seriesId, fireDate) {
     VALUES (?, ?, ?, ?, 'Scheduled', ?, ?, ?, ?, ?, 1, ?)`,
     [
       meetingId,
-      originalMeeting.title,
+      s.template_title,
       startMysql,
       endMysql,
       s.administrator_id,
       s.group_id,
-      originalMeeting.poster_url,
-      originalMeeting.description,
-      originalMeeting.recording,
+      s.template_poster_url,
+      s.template_description,
+      s.template_recording,
       seriesId,
     ],
   );
@@ -109,7 +98,7 @@ async function spawnWeeklyOccurrence(seriesId, fireDate) {
         s.group_id,
       ]);
     const notificationTitle = "New meeting scheduled";
-    const notificationMessage = `A new meeting "${originalMeeting.title}" is scheduled from ${startMysql} to ${endMysql}.`;
+    const notificationMessage = `A new meeting "${s.template_title}" is scheduled from ${startMysql} to ${endMysql}.`;
     await Promise.all(
       members.map((m) =>
         createNotification({
@@ -134,17 +123,25 @@ function registerWeeklySeriesJob(seriesRow) {
 
   // Run exactly 1 minute after the server starts (or after the series is activated)
   const scheduledTime = new Date(Date.now() + 60 * 1000);
-  console.log(`[meeting recurrence] Test job scheduled to run at: ${scheduledTime.toLocaleString()}`);
+  console.log(
+    `[meeting recurrence] Test job scheduled to run at: ${scheduledTime.toLocaleString()}`,
+  );
 
-  schedule.scheduleJob(jobNameForSeries(seriesId), scheduledTime, (fireDate) => {
-    console.log(`[meeting recurrence] Cron job firing NOW for series ${seriesId}!`);
-    spawnWeeklyOccurrence(seriesId, fireDate).catch((err) => {
-      console.error(
-        `[meeting recurrence] spawnWeeklyOccurrence failed for ${seriesId}:`,
-        err,
+  schedule.scheduleJob(
+    jobNameForSeries(seriesId),
+    scheduledTime,
+    (fireDate) => {
+      console.log(
+        `[meeting recurrence] Cron job firing NOW for series ${seriesId}!`,
       );
-    });
-  });
+      spawnWeeklyOccurrence(seriesId, fireDate).catch((err) => {
+        console.error(
+          `[meeting recurrence] spawnWeeklyOccurrence failed for ${seriesId}:`,
+          err,
+        );
+      });
+    },
+  );
 }
 
 async function bootstrapMeetingRecurrenceJobs() {
@@ -167,6 +164,10 @@ async function activateWeeklySeries({
   groupId,
   administratorId,
   originalMeetingId,
+  templateTitle,
+  templatePosterUrl,
+  templateDescription,
+  templateRecording,
   durationMs,
   startDate,
 }) {
@@ -179,13 +180,18 @@ async function activateWeeklySeries({
   await db.promise().query(
     `INSERT INTO meeting_series (
       id, is_active, group_id, administrator_id, original_meeting_id,
+      template_title, template_poster_url, template_description, template_recording,
       duration_ms, day_of_week, start_hour, start_minute, start_second
-    ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       seriesId,
       groupId,
       administratorId,
       originalMeetingId,
+      templateTitle,
+      templatePosterUrl,
+      templateDescription,
+      templateRecording,
       durationMs,
       dayOfWeek,
       startHour,

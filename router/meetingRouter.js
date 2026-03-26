@@ -264,6 +264,16 @@ router.put(
  *         schema:
  *           type: string
  *         description: Meeting ID.
+ *       - in: query
+ *         name: scope
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [single, series]
+ *           default: single
+ *         description: >
+ *           single = delete only this meeting occurrence (this week).
+ *           series = delete the entire weekly series forever (stops recurrence, deletes all occurrences).
  *     responses:
  *       200:
  *         description: Meeting deleted successfully.

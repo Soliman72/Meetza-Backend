@@ -265,6 +265,10 @@ exports.createMeeting = async (req, res) => {
             groupId: group_id,
             administratorId: group.administrator_id,
             originalMeetingId: id,
+            templateTitle: title,
+            templatePosterUrl: posterUrl,
+            templateDescription: description,
+            templateRecording: recording,
             durationMs,
             startDate: start,
           });
@@ -555,8 +559,9 @@ exports.updateMeetingById = async (req, res) => {
           status,
           description,
           recording,
+          weekly,
         } = req.body;
-        if (recording !== "1" && recording !== "0") {
+        if (req.body.recording && recording !== "1" && recording !== "0") {
           return res
             .status(400)
             .json({ success: false, message: "Recording must be 1 or 0" });
@@ -660,11 +665,29 @@ exports.updateMeetingById = async (req, res) => {
           updates.push("recording = ?");
           params.push(recording);
         }
+        const originalSeriesId = meeting.series_id;
+        let isWeeklyChanged = false;
+        let isWeeklyNewVal = false;
+        if (weekly !== undefined && weekly !== null) {
+          isWeeklyNewVal = parseWeeklyFlag(weekly);
+          if (isWeeklyNewVal !== Boolean(meeting.is_weekly)) {
+            isWeeklyChanged = true;
+            updates.push("is_weekly = ?");
+            params.push(isWeeklyNewVal ? 1 : 0);
+
+            if (isWeeklyNewVal && !originalSeriesId) {
+              meeting.series_id = uuidv4();
+              updates.push("series_id = ?");
+              params.push(meeting.series_id);
+            }
+          }
+        }
+
         if (updates.length === 0) {
           return res.status(400).json({
             success: false,
             message:
-              "At least one field to update is required (title, start_time, end_time, status, group_id, description, poster_url, recording)",
+              "At least one field to update is required (title, start_time, end_time, status, group_id, description, poster_url, recording, weekly)",
           });
         }
 
@@ -689,6 +712,81 @@ exports.updateMeetingById = async (req, res) => {
         params.push(id);
         const query = `UPDATE meeting SET ${updates.join(", ")} WHERE id = ?`;
         await db.promise().query(query, [...params, id]);
+
+        if (isWeeklyChanged) {
+          try {
+            if (isWeeklyNewVal) {
+              if (!originalSeriesId) {
+                const durationMs = newEnd.getTime() - newStart.getTime();
+                await activateWeeklySeries({
+                  seriesId: meeting.series_id,
+                  groupId: group_id || meeting.group_id,
+                  administratorId: meeting.administrator_id,
+                  originalMeetingId: id,
+                  templateTitle: title ?? meeting.title,
+                  templatePosterUrl: posterUrl ?? meeting.poster_url,
+                  templateDescription: description ?? meeting.description,
+                  templateRecording: recording ?? meeting.recording,
+                  durationMs,
+                  startDate: newStart,
+                });
+              } else {
+                await reactivateSeriesInDb(meeting.series_id);
+              }
+            } else {
+              if (originalSeriesId) {
+                await deactivateSeriesInDb(originalSeriesId);
+              }
+            }
+          } catch (recErr) {
+            console.error("Failed to toggle recurrence during update:", recErr);
+          }
+        }
+
+        // Keep series template in sync so recurrence does not depend on any single meeting row
+        try {
+          const effectiveSeriesId = meeting.series_id;
+          const didTemplateChange =
+            title != null ||
+            description != null ||
+            posterUrl != null ||
+            recording != null;
+          const shouldSyncTemplate =
+            effectiveSeriesId &&
+            (isWeeklyNewVal || meeting.is_weekly) &&
+            didTemplateChange;
+          if (shouldSyncTemplate) {
+            const sets = [];
+            const sParams = [];
+            if (title != null) {
+              sets.push("template_title = ?");
+              sParams.push(title);
+            }
+            if (posterUrl != null) {
+              sets.push("template_poster_url = ?");
+              sParams.push(posterUrl);
+            }
+            if (description != null) {
+              sets.push("template_description = ?");
+              sParams.push(description);
+            }
+            if (recording != null) {
+              sets.push("template_recording = ?");
+              sParams.push(recording);
+            }
+            if (sets.length > 0) {
+              sParams.push(effectiveSeriesId);
+              await db
+                .promise()
+                .query(
+                  `UPDATE meeting_series SET ${sets.join(", ")} WHERE id = ?`,
+                  sParams,
+                );
+            }
+          }
+        } catch (e) {
+          console.error("Failed to sync meeting_series template:", e);
+        }
 
         return res
           .status(200)
@@ -832,6 +930,10 @@ exports.activateMeetingRecurrence = async (req, res) => {
             groupId: meeting.group_id,
             administratorId: meeting.administrator_id,
             originalMeetingId: id,
+            templateTitle: meeting.title,
+            templatePosterUrl: meeting.poster_url,
+            templateDescription: meeting.description,
+            templateRecording: meeting.recording,
             durationMs,
             startDate: start,
           });
@@ -892,6 +994,11 @@ exports.activateMeetingRecurrence = async (req, res) => {
 exports.deleteMeetingById = async (req, res) => {
   try {
     const { id } = req.params;
+    const scopeRaw = req.query?.scope;
+    const scope =
+      scopeRaw && String(scopeRaw).toLowerCase() === "series"
+        ? "series"
+        : "single";
     if (!id) {
       return res
         .status(400)
@@ -915,11 +1022,60 @@ exports.deleteMeetingById = async (req, res) => {
       });
     }
 
-    await db.promise().query("DELETE FROM meeting WHERE id = ?", [id]);
+    if (scope === "series" && meeting.series_id) {
+      const seriesId = meeting.series_id;
+      await deactivateSeriesInDb(seriesId);
+      await db
+        .promise()
+        .query("DELETE FROM meeting WHERE series_id = ?", [seriesId]);
+      await db
+        .promise()
+        .query("DELETE FROM meeting_series WHERE id = ?", [seriesId]);
+    } else {
+      await db.promise().query("DELETE FROM meeting WHERE id = ?", [id]);
+    }
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Meeting deleted successfully" });
+    // Notify all group members that a meeting has been deleted
+    try {
+      const [members] = await db
+        .promise()
+        .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
+          meeting.group_id,
+        ]);
+
+      const notificationTitle =
+        scope === "series" && meeting.series_id
+          ? "Meeting series deleted"
+          : "Meeting deleted";
+      const notificationMessage =
+        scope === "series" && meeting.series_id
+          ? `The weekly meeting series "${meeting.title}" has been deleted forever.`
+          : `The meeting "${meeting.title}" scheduled for ${meeting.start_time} has been deleted.`;
+
+      await Promise.all(
+        members.map((m) =>
+          createNotification({
+            senderId: meeting.administrator_id,
+            memberId: m.member_id,
+            title: notificationTitle,
+            message: notificationMessage,
+          }),
+        ),
+      );
+    } catch (notifyErr) {
+      console.error(
+        "Failed to send meeting deletion notifications:",
+        notifyErr,
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message:
+        scope === "series" && meeting.series_id
+          ? "Meeting series deleted successfully"
+          : "Meeting deleted successfully",
+    });
   } catch (err) {
     return res
       .status(500)
