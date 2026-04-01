@@ -95,6 +95,7 @@ const registerMeetingSocket = (io) => {
         name: s.user?.name,
         email: s.user?.email,
         user_photo: s.user?.user_photo,
+        state: s.meetingStates ? s.meetingStates[meetingId] : null
       }));
     };
 
@@ -144,6 +145,36 @@ const registerMeetingSocket = (io) => {
           user_photo: socket.user.user_photo,
           meetingId,
         });
+
+        // --- NEW CODE: Sync existing states specifically to the newly joined participant ---
+        participants.forEach((p) => {
+          if (p.socketId !== socket.id && p.state) {
+            // Re-trigger screen share started if it was already active
+            if (p.state.isScreenSharing) {
+              socket.emit("screenShareStarted", { meetingId, socketId: p.socketId });
+            }
+            // Catch up on latest mic/camera statuses
+            if (p.state.audioMuted !== undefined || p.state.videoMuted !== undefined) {
+              socket.emit("mediaStateUpdated", {
+                socketId: p.socketId,
+                userId: p.userId,
+                meetingId,
+                audioMuted: !!p.state.audioMuted,
+                videoMuted: !!p.state.videoMuted,
+              });
+            }
+            // Catch up if hand was left raised
+            if (p.state.handRaised) {
+              socket.emit("handRaised", {
+                socketId: p.socketId,
+                userId: p.userId,
+                meetingId,
+                raised: true,
+              });
+            }
+          }
+        });
+        // -----------------------------------------------------------------------------------
       } catch (error) {
         if (typeof ack === "function") {
           ack({ ok: false, message: error.message });
@@ -295,6 +326,12 @@ const registerMeetingSocket = (io) => {
         }
         return;
       }
+      // Track media state
+      if (!socket.meetingStates) socket.meetingStates = {};
+      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
+      socket.meetingStates[meetingId].audioMuted = !!audioMuted;
+      socket.meetingStates[meetingId].videoMuted = !!videoMuted;
+
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket.to(room).emit("mediaStateUpdated", {
         socketId: socket.id,
@@ -323,6 +360,11 @@ const registerMeetingSocket = (io) => {
         }
         return;
       }
+      // Track hand raise state
+      if (!socket.meetingStates) socket.meetingStates = {};
+      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
+      socket.meetingStates[meetingId].handRaised = raised !== false;
+
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket.to(room).emit("handRaised", {
         socketId: socket.id,
@@ -431,6 +473,11 @@ const registerMeetingSocket = (io) => {
           ack({ ok: false, message: "Not in this meeting" });
         return;
       }
+      // Track screen share state on the socket
+      if (!socket.meetingStates) socket.meetingStates = {};
+      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
+      socket.meetingStates[meetingId].isScreenSharing = true;
+
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket
         .to(room)
@@ -450,6 +497,11 @@ const registerMeetingSocket = (io) => {
           ack({ ok: false, message: "Not in this meeting" });
         return;
       }
+      // Track screen share stopping on the socket
+      if (!socket.meetingStates) socket.meetingStates = {};
+      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
+      socket.meetingStates[meetingId].isScreenSharing = false;
+
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket
         .to(room)
