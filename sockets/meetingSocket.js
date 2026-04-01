@@ -147,33 +147,37 @@ const registerMeetingSocket = (io) => {
         });
 
         // --- NEW CODE: Sync existing states specifically to the newly joined participant ---
-        participants.forEach((p) => {
-          if (p.socketId !== socket.id && p.state) {
-            // Re-trigger screen share started if it was already active
-            if (p.state.isScreenSharing) {
-              socket.emit("screenShareStarted", { meetingId, socketId: p.socketId });
+        // We add a setTimeout because the frontend needs a moment to process the 'ack' callback
+        // and mount the participant components before it can successfully handle these state updates.
+        setTimeout(() => {
+          participants.forEach((p) => {
+            if (p.socketId !== socket.id && p.state) {
+              // Re-trigger screen share started if it was already active
+              if (p.state.isScreenSharing) {
+                socket.emit("screenShareStarted", { meetingId, socketId: p.socketId });
+              }
+              // Catch up on latest mic/camera statuses
+              if (p.state.audioMuted !== undefined || p.state.videoMuted !== undefined) {
+                socket.emit("mediaStateUpdated", {
+                  socketId: p.socketId,
+                  userId: p.userId,
+                  meetingId,
+                  audioMuted: !!p.state.audioMuted,
+                  videoMuted: !!p.state.videoMuted,
+                });
+              }
+              // Catch up if hand was left raised
+              if (p.state.handRaised) {
+                socket.emit("handRaised", {
+                  socketId: p.socketId,
+                  userId: p.userId,
+                  meetingId,
+                  raised: true,
+                });
+              }
             }
-            // Catch up on latest mic/camera statuses
-            if (p.state.audioMuted !== undefined || p.state.videoMuted !== undefined) {
-              socket.emit("mediaStateUpdated", {
-                socketId: p.socketId,
-                userId: p.userId,
-                meetingId,
-                audioMuted: !!p.state.audioMuted,
-                videoMuted: !!p.state.videoMuted,
-              });
-            }
-            // Catch up if hand was left raised
-            if (p.state.handRaised) {
-              socket.emit("handRaised", {
-                socketId: p.socketId,
-                userId: p.userId,
-                meetingId,
-                raised: true,
-              });
-            }
-          }
-        });
+          });
+        }, 1500);
         // -----------------------------------------------------------------------------------
       } catch (error) {
         if (typeof ack === "function") {
