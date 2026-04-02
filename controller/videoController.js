@@ -249,9 +249,8 @@ exports.getAllVideos = async (req, res) => {
           WHERE vts.video_id = v.id AND vts.language = 'en'
           ORDER BY vts.updated_at DESC
           LIMIT 1
-        ) AS topics_en${
-          userId
-            ? `,
+        ) AS topics_en${userId
+        ? `,
         EXISTS(
           SELECT 1 FROM \`like\` l2
           WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
@@ -260,8 +259,8 @@ exports.getAllVideos = async (req, res) => {
           SELECT 1 FROM \`like\` l3
           WHERE l3.video_id = v.id AND l3.member_id = ? AND l3.like_type = 0
         ) AS user_dislike`
-            : ""
-        }
+        : ""
+      }
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
@@ -362,9 +361,8 @@ exports.getVideoById = async (req, res) => {
           WHERE vts.video_id = v.id AND vts.language = 'en'
           ORDER BY vts.updated_at DESC
           LIMIT 1
-        ) AS topics_en${
-          userId
-            ? `,
+        ) AS topics_en${userId
+        ? `,
         EXISTS(
           SELECT 1 FROM \`like\` l2
           WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
@@ -373,8 +371,8 @@ exports.getVideoById = async (req, res) => {
           SELECT 1 FROM \`like\` l3
           WHERE l3.video_id = v.id AND l3.member_id = ? AND l3.like_type = 0
         ) AS user_dislike`
-            : ""
-        }
+        : ""
+      }
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
@@ -525,9 +523,8 @@ exports.getRelatedVideos = async (req, res) => {
                WHERE vts.video_id = v.id AND vts.language = 'en'
                ORDER BY vts.updated_at DESC
                LIMIT 1
-             ) AS topics_en${
-               userId
-                 ? `,
+             ) AS topics_en${userId
+        ? `,
              EXISTS(
                SELECT 1 FROM \`like\` l2
                WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
@@ -536,8 +533,8 @@ exports.getRelatedVideos = async (req, res) => {
                SELECT 1 FROM \`like\` l3
                WHERE l3.video_id = v.id AND l3.member_id = ? AND l3.like_type = 0
              ) AS user_dislike`
-                 : ""
-             }
+        : ""
+      }
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
@@ -649,14 +646,14 @@ exports.deleteVideo = async (req, res) => {
     }
 
     const visibility = getVideoVisibility(req, "v");
-    let query = `DELETE FROM video WHERE id = ?`;
+    let query = `DELETE v FROM video v WHERE v.id = ?`;
     const params = [resolvedVideoId];
     if (visibility.whereClause) {
       query += " AND " + visibility.whereClause;
       params.push(...visibility.params);
     }
 
-    console.log(query, params);
+    // console.log(query, params);
 
     const [result] = await db.promise().query(query, params);
     if (result.affectedRows === 0) {
@@ -867,7 +864,7 @@ exports.summarizeVideo = async (req, res) => {
       const fs = require("fs");
       const fileBuffer = req.file
         ? req.file.buffer ||
-          (req.file.path ? fs.readFileSync(req.file.path) : null)
+        (req.file.path ? fs.readFileSync(req.file.path) : null)
         : null;
       const url = req.body?.url;
 
