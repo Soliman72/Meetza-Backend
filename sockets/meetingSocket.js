@@ -95,7 +95,6 @@ const registerMeetingSocket = (io) => {
         name: s.user?.name,
         email: s.user?.email,
         user_photo: s.user?.user_photo,
-        state: s.meetingStates ? s.meetingStates[meetingId] : null
       }));
     };
 
@@ -146,38 +145,6 @@ const registerMeetingSocket = (io) => {
           meetingId,
         });
 
-        // --- NEW CODE: Sync existing states specifically to the newly joined participant ---
-        // We add a setTimeout because the frontend needs a moment to process the 'ack' callback
-        // and mount the participant components before it can successfully handle these state updates.
-        setTimeout(() => {
-          participants.forEach((p) => {
-            if (p.socketId !== socket.id && p.state) {
-              // Re-trigger screen share started if it was already active
-              if (p.state.isScreenSharing) {
-                socket.emit("screenShareStarted", { meetingId, socketId: p.socketId });
-              }
-              // Catch up on latest mic/camera statuses
-              if (p.state.audioMuted !== undefined || p.state.videoMuted !== undefined) {
-                socket.emit("mediaStateUpdated", {
-                  socketId: p.socketId,
-                  userId: p.userId,
-                  meetingId,
-                  audioMuted: !!p.state.audioMuted,
-                  videoMuted: !!p.state.videoMuted,
-                });
-              }
-              // Catch up if hand was left raised
-              if (p.state.handRaised) {
-                socket.emit("handRaised", {
-                  socketId: p.socketId,
-                  userId: p.userId,
-                  meetingId,
-                  raised: true,
-                });
-              }
-            }
-          });
-        }, 1500);
         // -----------------------------------------------------------------------------------
       } catch (error) {
         if (typeof ack === "function") {
@@ -330,12 +297,6 @@ const registerMeetingSocket = (io) => {
         }
         return;
       }
-      // Track media state
-      if (!socket.meetingStates) socket.meetingStates = {};
-      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
-      socket.meetingStates[meetingId].audioMuted = !!audioMuted;
-      socket.meetingStates[meetingId].videoMuted = !!videoMuted;
-
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket.to(room).emit("mediaStateUpdated", {
         socketId: socket.id,
@@ -364,10 +325,6 @@ const registerMeetingSocket = (io) => {
         }
         return;
       }
-      // Track hand raise state
-      if (!socket.meetingStates) socket.meetingStates = {};
-      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
-      socket.meetingStates[meetingId].handRaised = raised !== false;
 
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket.to(room).emit("handRaised", {
@@ -414,7 +371,10 @@ const registerMeetingSocket = (io) => {
         const { meetingId, targetUserId, audioMuted, videoMuted } = payload;
         if (!meetingId || !targetUserId) {
           if (typeof ack === "function") {
-            ack({ ok: false, message: "meetingId and targetUserId are required" });
+            ack({
+              ok: false,
+              message: "meetingId and targetUserId are required",
+            });
           }
           return;
         }
@@ -427,7 +387,10 @@ const registerMeetingSocket = (io) => {
         const allowed = await canAdminMuteInMeeting(socket.user.id, meetingId);
         if (!allowed) {
           if (typeof ack === "function") {
-            ack({ ok: false, message: "Only the meeting admin can mute participants" });
+            ack({
+              ok: false,
+              message: "Only the meeting admin can mute participants",
+            });
           }
           return;
         }
@@ -459,7 +422,10 @@ const registerMeetingSocket = (io) => {
         }
       } catch (error) {
         if (typeof ack === "function") {
-          ack({ ok: false, message: error.message || "Failed to mute participant" });
+          ack({
+            ok: false,
+            message: error.message || "Failed to mute participant",
+          });
         }
       }
     });
@@ -477,10 +443,6 @@ const registerMeetingSocket = (io) => {
           ack({ ok: false, message: "Not in this meeting" });
         return;
       }
-      // Track screen share state on the socket
-      if (!socket.meetingStates) socket.meetingStates = {};
-      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
-      socket.meetingStates[meetingId].isScreenSharing = true;
 
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket
@@ -501,10 +463,6 @@ const registerMeetingSocket = (io) => {
           ack({ ok: false, message: "Not in this meeting" });
         return;
       }
-      // Track screen share stopping on the socket
-      if (!socket.meetingStates) socket.meetingStates = {};
-      if (!socket.meetingStates[meetingId]) socket.meetingStates[meetingId] = {};
-      socket.meetingStates[meetingId].isScreenSharing = false;
 
       const room = MEETING_ROOM_PREFIX + meetingId;
       socket
