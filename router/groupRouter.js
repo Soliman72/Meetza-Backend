@@ -224,5 +224,25 @@ router.delete(
   groupController.deleteGroup,
 );
 
-module.exports = router;
+router.get(
+  "/:id/admins",
+  verifyToken,
+  checkAdminPermission,
+  groupController.getGroupAdmins,
+);
 
+router.post(
+  "/:id/admins",
+  verifyToken,
+  checkAdminPermission,
+  groupController.addGroupAdmin,
+);
+
+router.delete(
+  "/:id/admins/:userId",
+  verifyToken,
+  checkAdminPermission,
+  groupController.removeGroupAdmin,
+);
+
+module.exports = router;

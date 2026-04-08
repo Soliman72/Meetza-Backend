@@ -1,6 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
-const { getOwnershipFilter } = require("../utils/checkAdminPermission");
 const {
   upload,
   uploadToCloudinary,
@@ -13,6 +12,11 @@ const {
   deactivateSeriesInDb,
   reactivateSeriesInDb,
 } = require("../services/meetingRecurrenceScheduler");
+const {
+  isGroupAdmin,
+  isMeetingAdmin,
+  assignMeetingAdmin,
+} = require("../utils/resourceAdminAccess");
 
 function parseWeeklyFlag(raw) {
   if (raw === undefined || raw === null || raw === "") {
@@ -129,11 +133,14 @@ exports.createMeeting = async (req, res) => {
         });
       }
 
-      if (group.administrator_id !== administrator_id && !req.isSuperAdmin) {
+      if (
+        !req.isSuperAdmin &&
+        !(await isGroupAdmin(administrator_id, group_id))
+      ) {
         return res.status(403).json({
           success: false,
           message:
-            "Only the administrator of this group and super admin can create meetings for it",
+            "Only group admins and super admin can create meetings for it",
         });
       }
 
@@ -256,6 +263,30 @@ exports.createMeeting = async (req, res) => {
           isWeekly ? 1 : 0,
           seriesId,
         ]);
+
+      await assignMeetingAdmin({
+        meetingId: id,
+        userId: req.user.id,
+        role: "OWNER",
+        assignedBy: req.user.id,
+      });
+
+      const [groupOwners] = await db
+        .promise()
+        .query(
+          "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER'",
+          [group_id],
+        );
+      await Promise.all(
+        groupOwners.map((owner) =>
+          assignMeetingAdmin({
+            meetingId: id,
+            userId: owner.user_id || req.user.id,
+            role: "OWNER",
+            assignedBy: req.user.id,
+          }),
+        ),
+      );
 
       if (isWeekly) {
         const durationMs = end.getTime() - start.getTime();
@@ -432,7 +463,14 @@ exports.getAllMeetings = async (req, res) => {
       }
     }
 
-    const ownershipFilter = getOwnershipFilter(req, "administrator_id");
+    const ownershipFilter =
+      req.user.role === "Super_Admin"
+        ? { whereClause: "", params: [] }
+        : {
+            whereClause:
+              "WHERE EXISTS (SELECT 1 FROM meeting_admin ma WHERE ma.meeting_id = meeting.id AND ma.user_id = ?)",
+            params: [userId],
+          };
     let query = "SELECT * FROM meeting";
     let params = [];
     const conditions = [];
@@ -513,9 +551,9 @@ exports.getMeetingById = async (req, res) => {
 
     const meeting = results[0];
     const isSuperAdmin = req.user?.role === "Super_Admin";
-    const isMeetingAdmin = meeting.administrator_id === userId;
+    const isMeetingAdminUser = await isMeetingAdmin(userId, id);
 
-    if (isSuperAdmin || isMeetingAdmin) {
+    if (isSuperAdmin || isMeetingAdminUser) {
       return res.status(200).json({ success: true, data: meeting });
     }
 
@@ -583,14 +621,14 @@ exports.updateMeetingById = async (req, res) => {
         }
 
         const meeting = existing[0];
-        if (
-          req.user.role !== "Super_Admin" &&
-          req.user.role !== "Administrator" &&
-          meeting.administrator_id !== req.user.id
-        ) {
+        const canUpdate =
+          req.user.role === "Super_Admin" ||
+          (req.user.role === "Administrator" &&
+            (await isMeetingAdmin(req.user.id, id)));
+        if (!canUpdate) {
           return res.status(403).json({
             success: false,
-            message: "Only the meeting administrator can update this meeting",
+            message: "Only meeting admins can update this meeting",
           });
         }
 
@@ -797,9 +835,10 @@ exports.updateMeetingById = async (req, res) => {
 
           const [members] = await db
             .promise()
-            .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
-              effectiveGroupId,
-            ]);
+            .query(
+              "SELECT member_id FROM group_membership WHERE group_id = ?",
+              [effectiveGroupId],
+            );
 
           const notificationTitle = "Meeting updated";
           const notificationMessage = `The meeting "${effectiveTitle}" has been updated. New schedule: ${effectiveStart} to ${effectiveEnd}.`;
@@ -816,7 +855,10 @@ exports.updateMeetingById = async (req, res) => {
           );
         } catch (notifyErr) {
           // Do not block meeting update if notifications fail
-          console.error("Failed to send meeting update notifications:", notifyErr);
+          console.error(
+            "Failed to send meeting update notifications:",
+            notifyErr,
+          );
         }
 
         return res
@@ -853,11 +895,7 @@ exports.deactivateMeetingRecurrence = async (req, res) => {
     }
 
     const meeting = meetingRows[0];
-    if (
-      !req.isSuperAdmin &&
-      meeting.administrator_id !== req.administratorId &&
-      meeting.administrator_id !== req.user?.id
-    ) {
+    if (!req.isSuperAdmin && !(await isMeetingAdmin(req.user?.id, id))) {
       return res.status(403).json({
         success: false,
         message:
@@ -915,11 +953,7 @@ exports.activateMeetingRecurrence = async (req, res) => {
       const meeting = meetingRows[0];
 
       // Check permissions
-      if (
-        !req.isSuperAdmin &&
-        meeting.administrator_id !== req.administratorId &&
-        meeting.administrator_id !== req.user?.id
-      ) {
+      if (!req.isSuperAdmin && !(await isMeetingAdmin(req.user?.id, id))) {
         return res.status(403).json({
           success: false,
           message:
@@ -998,7 +1032,10 @@ exports.activateMeetingRecurrence = async (req, res) => {
       }
 
       const sr = seriesRowsCheck[0];
-      if (!req.isSuperAdmin && sr.administrator_id !== req.administratorId) {
+      if (
+        !req.isSuperAdmin &&
+        !(await isMeetingAdmin(req.user?.id, sr.original_meeting_id || id))
+      ) {
         return res.status(403).json({
           success: false,
           message:
@@ -1046,7 +1083,7 @@ exports.deleteMeetingById = async (req, res) => {
     }
 
     const meeting = existing[0];
-    if (!req.isSuperAdmin && meeting.administrator_id !== req.administratorId) {
+    if (!req.isSuperAdmin && !(await isMeetingAdmin(req.user?.id, id))) {
       return res.status(403).json({
         success: false,
         message: "Only the meeting administrator can delete this meeting",
@@ -1252,10 +1289,10 @@ exports.getMeetingParticipants = async (req, res) => {
     const meeting = meetingRows[0];
 
     const userId = req.user?.id;
-    const isMeetingAdmin = meeting.administrator_id === userId;
+    const isMeetingAdminUser = await isMeetingAdmin(userId, meetingId);
     const isSuperAdmin = req.user?.role === "Super_Admin";
 
-    if (!isSuperAdmin && !isMeetingAdmin) {
+    if (!isSuperAdmin && !isMeetingAdminUser) {
       const [membership] = await db
         .promise()
         .query(
@@ -1282,6 +1319,191 @@ exports.getMeetingParticipants = async (req, res) => {
     );
 
     return res.status(200).json({ success: true, data: rows });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Database error", error: err.message });
+  }
+};
+
+exports.getMeetingAdmins = async (req, res) => {
+  try {
+    const { id: meetingId } = req.params;
+    const [meetingRows] = await db
+      .promise()
+      .query("SELECT group_id FROM meeting WHERE id = ?", [meetingId]);
+    if (meetingRows.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Meeting not found" });
+    }
+    if (
+      !req.isSuperAdmin &&
+      !(await isMeetingAdmin(req.user.id, meetingId)) &&
+      !(await isGroupAdmin(req.user.id, meetingRows[0].group_id))
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Only meeting/group admins can view meeting admins",
+      });
+    }
+    const [rows] = await db.promise().query(
+      `SELECT ma.id, ma.meeting_id, ma.user_id, ma.role, ma.assigned_by, ma.created_at,
+              u.name, u.email, u.user_photo
+       FROM meeting_admin ma
+       JOIN user u ON u.id = ma.user_id
+       WHERE ma.meeting_id = ?
+       ORDER BY FIELD(ma.role, 'OWNER', 'ADMIN'), ma.created_at ASC`,
+      [meetingId],
+    );
+    return res.status(200).json({ success: true, data: rows });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Database error", error: err.message });
+  }
+};
+
+exports.addMeetingAdmin = async (req, res) => {
+  try {
+    const { id: meetingId } = req.params;
+    const { user_id, role = "ADMIN" } = req.body;
+    if (!user_id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "user_id is required" });
+    }
+    if (!["OWNER", "ADMIN"].includes(role)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "role must be OWNER or ADMIN" });
+    }
+    const [meetingRows] = await db
+      .promise()
+      .query("SELECT group_id FROM meeting WHERE id = ?", [meetingId]);
+    if (meetingRows.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Meeting not found" });
+    }
+    const groupId = meetingRows[0].group_id;
+    if (
+      !req.isSuperAdmin &&
+      !(await isMeetingAdmin(req.user.id, meetingId)) &&
+      !(await isGroupAdmin(req.user.id, groupId))
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Only meeting/group admins can add meeting admins",
+      });
+    }
+    if (!(await isGroupAdmin(user_id, groupId))) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting admin must already be a group admin",
+      });
+    }
+    const [targetUserRows] = await db
+      .promise()
+      .query("SELECT id FROM user WHERE id = ? LIMIT 1", [user_id]);
+    if (targetUserRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "user_id must be a valid user.id from user table",
+      });
+    }
+    const [assignedByRows] = await db
+      .promise()
+      .query("SELECT id FROM user WHERE id = ? LIMIT 1", [req.user.id]);
+    if (assignedByRows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated requester is invalid",
+      });
+    }
+
+    await assignMeetingAdmin({
+      meetingId,
+      userId: user_id,
+      role,
+      assignedBy: req.user.id,
+    });
+    return res
+      .status(200)
+      .json({ success: true, message: "Meeting admin upserted successfully" });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Database error", error: err.message });
+  }
+};
+
+exports.removeMeetingAdmin = async (req, res) => {
+  try {
+    const { id: meetingId, userId } = req.params;
+    const [meetingRows] = await db
+      .promise()
+      .query("SELECT group_id FROM meeting WHERE id = ?", [meetingId]);
+    if (meetingRows.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Meeting not found" });
+    }
+    const groupId = meetingRows[0].group_id;
+    if (
+      !req.isSuperAdmin &&
+      !(await isMeetingAdmin(req.user.id, meetingId)) &&
+      !(await isGroupAdmin(req.user.id, groupId))
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Only meeting/group admins can remove meeting admins",
+      });
+    }
+
+    const [owners] = await db
+      .promise()
+      .query(
+        "SELECT id FROM meeting_admin WHERE meeting_id = ? AND role = 'OWNER'",
+        [meetingId],
+      );
+    // Accept either target user_id or meeting_admin.id in path param.
+    const [targetByUser] = await db.promise().query(
+      "SELECT id, user_id, role FROM meeting_admin WHERE meeting_id = ? AND user_id = ? LIMIT 1",
+      [meetingId, userId],
+    );
+    let targetRecord = targetByUser[0];
+    if (!targetRecord) {
+      const [targetByAdminRowId] = await db.promise().query(
+        "SELECT id, user_id, role FROM meeting_admin WHERE meeting_id = ? AND id = ? LIMIT 1",
+        [meetingId, userId],
+      );
+      targetRecord = targetByAdminRowId[0];
+    }
+    if (!targetRecord) {
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message:
+            "Meeting admin not found. Use target user_id (user.id) or meeting_admin.id.",
+        });
+    }
+    if (targetRecord.role === "OWNER" && owners.length <= 1) {
+      return res.status(409).json({
+        success: false,
+        message: "Cannot remove the last meeting owner",
+      });
+    }
+    await db
+      .promise()
+      .query("DELETE FROM meeting_admin WHERE meeting_id = ? AND user_id = ?", [
+        meetingId,
+        targetRecord.user_id,
+      ]);
+    return res
+      .status(200)
+      .json({ success: true, message: "Meeting admin removed successfully" });
   } catch (err) {
     return res
       .status(500)

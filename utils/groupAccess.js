@@ -65,11 +65,13 @@ const ensureGroupAccess = async (userId, groupId) => {
           u.email,
           u.user_photo,
           CASE
-            WHEN g.administrator_id = ? THEN 'Administrator'
+            WHEN ga.user_id IS NOT NULL THEN 'Administrator'
             WHEN gm.member_id IS NOT NULL THEN 'Member'
             ELSE NULL
           END AS membership_role
         FROM \`group\` g
+        LEFT JOIN group_admin ga
+          ON ga.group_id = g.id AND ga.user_id = ?
         LEFT JOIN group_membership gm
           ON gm.group_id = g.id AND gm.member_id = ?
         JOIN user u ON u.id = g.administrator_id

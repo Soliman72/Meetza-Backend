@@ -514,3 +514,59 @@ CREATE TABLE IF NOT EXISTS `social_auth` (
 -- END OF SCHEMA
 -- =============================================
 
+-- =============================================
+-- 19. GROUP ADMIN TABLE (multi-admin per group)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `group_admin` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `group_id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN') NOT NULL DEFAULT 'ADMIN',
+    `assigned_by` VARCHAR(36) NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_group_admin` (`group_id`, `user_id`),
+    INDEX `idx_group_admin_group_id` (`group_id`),
+    INDEX `idx_group_admin_user_id` (`user_id`),
+    CONSTRAINT `fk_group_admin_group`
+        FOREIGN KEY (`group_id`) REFERENCES `group`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_group_admin_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_group_admin_assigned_by`
+        FOREIGN KEY (`assigned_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 20. MEETING ADMIN TABLE (multi-admin per meeting)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `meeting_admin` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `meeting_id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN') NOT NULL DEFAULT 'ADMIN',
+    `assigned_by` VARCHAR(36) NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_meeting_admin` (`meeting_id`, `user_id`),
+    INDEX `idx_meeting_admin_meeting_id` (`meeting_id`),
+    INDEX `idx_meeting_admin_user_id` (`user_id`),
+    CONSTRAINT `fk_meeting_admin_meeting`
+        FOREIGN KEY (`meeting_id`) REFERENCES `meeting`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_meeting_admin_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_meeting_admin_assigned_by`
+        FOREIGN KEY (`assigned_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

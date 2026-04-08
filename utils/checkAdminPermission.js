@@ -23,6 +23,9 @@ exports.checkAdminPermission = async (req, res, next) => {
       });
     }
 
+    const isSuperAdminFromUserTable = req.user.role === "Super_Admin";
+    let isSuperAdmin = isSuperAdminFromUserTable;
+
     // Fetch administrator details to check admin role
     const [adminRows] = await db
       .promise()
@@ -35,7 +38,7 @@ exports.checkAdminPermission = async (req, res, next) => {
       const adminRecord = adminRows[0];
       adminRole = adminRecord.role;
       // Super_Admin can be determined from either user table or administrator table
-      isSuperAdmin = adminRole === "Super_Admin";
+      isSuperAdmin = adminRole === "Super_Admin" || isSuperAdminFromUserTable;
     } else {
       // If no administrator record exists but user is Super_Admin, allow access
       if (!isSuperAdminFromUserTable) {
