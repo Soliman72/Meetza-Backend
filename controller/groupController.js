@@ -6,7 +6,34 @@ const { createGroupContent } = require("./groupContentController");
 const {
   isGroupAdmin,
   assignGroupAdmin,
+  assignMeetingAdmin,
 } = require("../utils/resourceAdminAccess");
+
+async function attachAdminsToGroups(groups) {
+  if (!Array.isArray(groups) || groups.length === 0) return groups;
+  const groupIds = groups.map((g) => g.id);
+  const placeholders = groupIds.map(() => "?").join(",");
+  const [admins] = await db.promise().query(
+    `SELECT ga.group_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
+            u.name, u.email, u.user_photo
+     FROM group_admin ga
+     JOIN user u ON u.id = ga.user_id
+     WHERE ga.group_id IN (${placeholders})
+     ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
+    groupIds,
+  );
+
+  const adminsByGroup = admins.reduce((acc, row) => {
+    if (!acc[row.group_id]) acc[row.group_id] = [];
+    acc[row.group_id].push(row);
+    return acc;
+  }, {});
+
+  return groups.map((group) => ({
+    ...group,
+    admins: adminsByGroup[group.id] || [],
+  }));
+}
 
 // Create
 exports.createGroup = async (req, res) => {
@@ -151,7 +178,7 @@ exports.getAllGroups = async (req, res) => {
 
     // get all groups with admin info
     let sql =
-      "SELECT g.*, u.name as admin_name, u.email as admin_email, u.user_photo as admin_photo FROM `group` g LEFT JOIN user u ON g.administrator_id = u.id";
+      "SELECT g.* FROM `group` g LEFT JOIN user u ON g.administrator_id = u.id";
     let params = [];
     let hasWhere = false;
 
@@ -208,7 +235,8 @@ exports.getAllGroups = async (req, res) => {
     }
 
     const [rows] = await db.promise().query(sql, params);
-    res.status(200).json({ success: true, data: rows });
+    const groupsWithAdmins = await attachAdminsToGroups(rows);
+    res.status(200).json({ success: true, data: groupsWithAdmins });
   } catch (err) {
     res
       .status(500)
@@ -240,7 +268,8 @@ exports.getGroupById = async (req, res) => {
           .json({ success: false, message: "Access denied to this group" });
       }
     }
-    res.status(200).json({ success: true, data: rows[0] });
+    const groupsWithAdmins = await attachAdminsToGroups([rows[0]]);
+    res.status(200).json({ success: true, data: groupsWithAdmins[0] });
   } catch (err) {
     res
       .status(500)
@@ -434,11 +463,11 @@ exports.getGroupAdmins = async (req, res) => {
 exports.addGroupAdmin = async (req, res) => {
   try {
     const { id: groupId } = req.params;
-    const { user_id, role = "ADMIN" } = req.body;
-    if (!user_id) {
+    const { email, role = "ADMIN" } = req.body;
+    if (!email) {
       return res
         .status(400)
-        .json({ success: false, message: "user_id is required" });
+        .json({ success: false, message: "email is required" });
     }
     if (!["OWNER", "ADMIN"].includes(role)) {
       return res
@@ -467,13 +496,14 @@ exports.addGroupAdmin = async (req, res) => {
 
     const [targetUserRows] = await db
       .promise()
-      .query("SELECT id FROM user WHERE id = ? LIMIT 1", [user_id]);
+      .query("SELECT id, email FROM user WHERE email = ? LIMIT 1", [email]);
     if (targetUserRows.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "user_id must be a valid user.id from user table",
+        message: "email must belong to an existing user",
       });
     }
+    const targetUserId = targetUserRows[0].id;
     const [assignedByRows] = await db
       .promise()
       .query("SELECT id FROM user WHERE id = ? LIMIT 1", [req.user.id]);
@@ -486,13 +516,27 @@ exports.addGroupAdmin = async (req, res) => {
 
     await assignGroupAdmin({
       groupId,
-      userId: user_id,
+      userId: targetUserId,
       role,
       assignedBy: req.user.id,
     });
-    return res
-      .status(200)
-      .json({ success: true, message: "Group admin upserted successfully" });
+    const [meetings] = await db
+      .promise()
+      .query("SELECT id FROM meeting WHERE group_id = ?", [groupId]);
+    await Promise.all(
+      meetings.map((meeting) =>
+        assignMeetingAdmin({
+          meetingId: meeting.id,
+          userId: targetUserId,
+          role,
+          assignedBy: req.user.id,
+        }),
+      ),
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Group admin upserted successfully by email",
+    });
   } catch (err) {
     return res
       .status(500)
@@ -502,7 +546,13 @@ exports.addGroupAdmin = async (req, res) => {
 
 exports.removeGroupAdmin = async (req, res) => {
   try {
-    const { id: groupId, userId } = req.params;
+    const { id: groupId, email } = req.params;
+    const targetEmail = email || req.body?.email || req.query?.email;
+    if (!targetEmail) {
+      return res
+        .status(400)
+        .json({ success: false, message: "email is required" });
+    }
     if (!req.isSuperAdmin) {
       const allowed = await isGroupAdmin(req.user.id, groupId);
       if (!allowed) {
@@ -519,28 +569,18 @@ exports.removeGroupAdmin = async (req, res) => {
         "SELECT id FROM group_admin WHERE group_id = ? AND role = 'OWNER'",
         [groupId],
       );
-    // Accept either target user_id or group_admin.id in path param.
-    const [targetByUser] = await db
-      .promise()
-      .query(
-        "SELECT id, user_id, role FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
-        [groupId, userId],
-      );
+    const [targetByUser] = await db.promise().query(
+      `SELECT ga.id, ga.user_id, ga.role, u.email
+         FROM group_admin ga
+         JOIN user u ON u.id = ga.user_id
+         WHERE ga.group_id = ? AND u.email = ? LIMIT 1`,
+      [groupId, targetEmail],
+    );
     let targetRecord = targetByUser[0];
-    if (!targetRecord) {
-      const [targetByAdminRowId] = await db
-        .promise()
-        .query(
-          "SELECT id, user_id, role FROM group_admin WHERE group_id = ? AND id = ? LIMIT 1",
-          [groupId, userId],
-        );
-      targetRecord = targetByAdminRowId[0];
-    }
     if (!targetRecord) {
       return res.status(404).json({
         success: false,
-        message:
-          "Group admin not found. Use target user_id (user.id) or group_admin.id.",
+        message: "Group admin not found for provided email",
       });
     }
     if (targetRecord.role === "OWNER" && owners.length <= 1) {

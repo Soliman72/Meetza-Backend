@@ -239,7 +239,7 @@ router.post(
 );
 
 router.delete(
-  "/:id/admins/:userId",
+  "/:id/admins/:email",
   verifyToken,
   checkAdminPermission,
   groupController.removeGroupAdmin,

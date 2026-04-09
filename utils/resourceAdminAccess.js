@@ -15,7 +15,11 @@ async function isMeetingAdmin(userId, meetingId) {
   const [rows] = await db
     .promise()
     .query(
-      "SELECT id FROM meeting_admin WHERE meeting_id = ? AND user_id = ? LIMIT 1",
+      `SELECT ga.id
+       FROM meeting m
+       JOIN group_admin ga ON ga.group_id = m.group_id
+       WHERE m.id = ? AND ga.user_id = ?
+       LIMIT 1`,
       [meetingId, userId],
     );
   return rows.length > 0;

@@ -107,10 +107,30 @@ const ensureGroupAccess = async (userId, groupId) => {
     [groupData.group_id]
   );
 
-  // Add group_media as array to groupData
+  const [adminRows] = await db.promise().query(
+    `
+      SELECT
+        ga.group_id,
+        ga.user_id,
+        ga.role,
+        ga.assigned_by,
+        ga.created_at,
+        u.name,
+        u.email,
+        u.user_photo
+      FROM group_admin ga
+      JOIN user u ON u.id = ga.user_id
+      WHERE ga.group_id = ?
+      ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC
+    `,
+    [groupData.group_id]
+  );
+
+  // Keep backward compatible fields while also returning all admins.
   return {
     ...groupData,
     group_media: mediaRows || [],
+    admins: adminRows || [],
   };
 };
 

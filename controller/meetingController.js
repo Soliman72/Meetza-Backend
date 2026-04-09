@@ -18,6 +18,33 @@ const {
   assignMeetingAdmin,
 } = require("../utils/resourceAdminAccess");
 
+async function attachAdminsToMeetings(meetings) {
+  if (!Array.isArray(meetings) || meetings.length === 0) return meetings;
+  const groupIds = [...new Set(meetings.map((m) => m.group_id).filter(Boolean))];
+  if (groupIds.length === 0) {
+    return meetings.map((meeting) => ({ ...meeting, admins: [] }));
+  }
+  const placeholders = groupIds.map(() => "?").join(",");
+  const [admins] = await db.promise().query(
+    `SELECT ga.group_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
+            u.name, u.email, u.user_photo
+     FROM group_admin ga
+     JOIN user u ON u.id = ga.user_id
+     WHERE ga.group_id IN (${placeholders})
+     ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
+    groupIds,
+  );
+  const adminsByGroup = admins.reduce((acc, row) => {
+    if (!acc[row.group_id]) acc[row.group_id] = [];
+    acc[row.group_id].push(row);
+    return acc;
+  }, {});
+  return meetings.map((meeting) => ({
+    ...meeting,
+    admins: adminsByGroup[meeting.group_id] || [],
+  }));
+}
+
 function parseWeeklyFlag(raw) {
   if (raw === undefined || raw === null || raw === "") {
     return false;
@@ -264,25 +291,18 @@ exports.createMeeting = async (req, res) => {
           seriesId,
         ]);
 
-      await assignMeetingAdmin({
-        meetingId: id,
-        userId: req.user.id,
-        role: "OWNER",
-        assignedBy: req.user.id,
-      });
-
-      const [groupOwners] = await db
+      const [groupAdmins] = await db
         .promise()
         .query(
-          "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER'",
+          "SELECT user_id, role FROM group_admin WHERE group_id = ?",
           [group_id],
         );
       await Promise.all(
-        groupOwners.map((owner) =>
+        groupAdmins.map((admin) =>
           assignMeetingAdmin({
             meetingId: id,
-            userId: owner.user_id || req.user.id,
-            role: "OWNER",
+            userId: admin.user_id,
+            role: admin.role || "ADMIN",
             assignedBy: req.user.id,
           }),
         ),
@@ -468,7 +488,7 @@ exports.getAllMeetings = async (req, res) => {
         ? { whereClause: "", params: [] }
         : {
             whereClause:
-              "WHERE EXISTS (SELECT 1 FROM meeting_admin ma WHERE ma.meeting_id = meeting.id AND ma.user_id = ?)",
+              "WHERE EXISTS (SELECT 1 FROM group_admin ga WHERE ga.group_id = meeting.group_id AND ga.user_id = ?)",
             params: [userId],
           };
     let query = "SELECT * FROM meeting";
@@ -514,11 +534,13 @@ exports.getAllMeetings = async (req, res) => {
       }
       memberQuery += " ORDER BY start_time DESC";
       const [meetings] = await db.promise().query(memberQuery, memberParams);
-      return res.status(200).json({ success: true, data: meetings });
+      const meetingsWithAdmins = await attachAdminsToMeetings(meetings);
+      return res.status(200).json({ success: true, data: meetingsWithAdmins });
     }
     if (req.user.role === "Super_Admin" || req.user.role === "Administrator") {
       const [meetings] = await db.promise().query(query, params);
-      return res.status(200).json({ success: true, data: meetings });
+      const meetingsWithAdmins = await attachAdminsToMeetings(meetings);
+      return res.status(200).json({ success: true, data: meetingsWithAdmins });
     }
 
     return res.status(403).json({ success: false, message: "Access denied" });
@@ -554,7 +576,8 @@ exports.getMeetingById = async (req, res) => {
     const isMeetingAdminUser = await isMeetingAdmin(userId, id);
 
     if (isSuperAdmin || isMeetingAdminUser) {
-      return res.status(200).json({ success: true, data: meeting });
+      const meetingsWithAdmins = await attachAdminsToMeetings([meeting]);
+      return res.status(200).json({ success: true, data: meetingsWithAdmins[0] });
     }
 
     const [membership] = await db
@@ -564,7 +587,8 @@ exports.getMeetingById = async (req, res) => {
         [meeting.group_id, userId],
       );
     if (membership.length > 0) {
-      return res.status(200).json({ success: true, data: meeting });
+      const meetingsWithAdmins = await attachAdminsToMeetings([meeting]);
+      return res.status(200).json({ success: true, data: meetingsWithAdmins[0] });
     }
 
     return res.status(403).json({
@@ -1348,13 +1372,13 @@ exports.getMeetingAdmins = async (req, res) => {
       });
     }
     const [rows] = await db.promise().query(
-      `SELECT ma.id, ma.meeting_id, ma.user_id, ma.role, ma.assigned_by, ma.created_at,
+      `SELECT ga.id, ? AS meeting_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
               u.name, u.email, u.user_photo
-       FROM meeting_admin ma
-       JOIN user u ON u.id = ma.user_id
-       WHERE ma.meeting_id = ?
-       ORDER BY FIELD(ma.role, 'OWNER', 'ADMIN'), ma.created_at ASC`,
-      [meetingId],
+       FROM group_admin ga
+       JOIN user u ON u.id = ga.user_id
+       WHERE ga.group_id = ?
+       ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
+      [meetingId, meetingRows[0].group_id],
     );
     return res.status(200).json({ success: true, data: rows });
   } catch (err) {
@@ -1365,148 +1389,17 @@ exports.getMeetingAdmins = async (req, res) => {
 };
 
 exports.addMeetingAdmin = async (req, res) => {
-  try {
-    const { id: meetingId } = req.params;
-    const { user_id, role = "ADMIN" } = req.body;
-    if (!user_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "user_id is required" });
-    }
-    if (!["OWNER", "ADMIN"].includes(role)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "role must be OWNER or ADMIN" });
-    }
-    const [meetingRows] = await db
-      .promise()
-      .query("SELECT group_id FROM meeting WHERE id = ?", [meetingId]);
-    if (meetingRows.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Meeting not found" });
-    }
-    const groupId = meetingRows[0].group_id;
-    if (
-      !req.isSuperAdmin &&
-      !(await isMeetingAdmin(req.user.id, meetingId)) &&
-      !(await isGroupAdmin(req.user.id, groupId))
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Only meeting/group admins can add meeting admins",
-      });
-    }
-    if (!(await isGroupAdmin(user_id, groupId))) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting admin must already be a group admin",
-      });
-    }
-    const [targetUserRows] = await db
-      .promise()
-      .query("SELECT id FROM user WHERE id = ? LIMIT 1", [user_id]);
-    if (targetUserRows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "user_id must be a valid user.id from user table",
-      });
-    }
-    const [assignedByRows] = await db
-      .promise()
-      .query("SELECT id FROM user WHERE id = ? LIMIT 1", [req.user.id]);
-    if (assignedByRows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: "Authenticated requester is invalid",
-      });
-    }
-
-    await assignMeetingAdmin({
-      meetingId,
-      userId: user_id,
-      role,
-      assignedBy: req.user.id,
-    });
-    return res
-      .status(200)
-      .json({ success: true, message: "Meeting admin upserted successfully" });
-  } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Database error", error: err.message });
-  }
+  return res.status(410).json({
+    success: false,
+    message:
+      "Manual meeting admin assignment is disabled. Assign group admins by email using group admin APIs.",
+  });
 };
 
 exports.removeMeetingAdmin = async (req, res) => {
-  try {
-    const { id: meetingId, userId } = req.params;
-    const [meetingRows] = await db
-      .promise()
-      .query("SELECT group_id FROM meeting WHERE id = ?", [meetingId]);
-    if (meetingRows.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Meeting not found" });
-    }
-    const groupId = meetingRows[0].group_id;
-    if (
-      !req.isSuperAdmin &&
-      !(await isMeetingAdmin(req.user.id, meetingId)) &&
-      !(await isGroupAdmin(req.user.id, groupId))
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Only meeting/group admins can remove meeting admins",
-      });
-    }
-
-    const [owners] = await db
-      .promise()
-      .query(
-        "SELECT id FROM meeting_admin WHERE meeting_id = ? AND role = 'OWNER'",
-        [meetingId],
-      );
-    // Accept either target user_id or meeting_admin.id in path param.
-    const [targetByUser] = await db.promise().query(
-      "SELECT id, user_id, role FROM meeting_admin WHERE meeting_id = ? AND user_id = ? LIMIT 1",
-      [meetingId, userId],
-    );
-    let targetRecord = targetByUser[0];
-    if (!targetRecord) {
-      const [targetByAdminRowId] = await db.promise().query(
-        "SELECT id, user_id, role FROM meeting_admin WHERE meeting_id = ? AND id = ? LIMIT 1",
-        [meetingId, userId],
-      );
-      targetRecord = targetByAdminRowId[0];
-    }
-    if (!targetRecord) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message:
-            "Meeting admin not found. Use target user_id (user.id) or meeting_admin.id.",
-        });
-    }
-    if (targetRecord.role === "OWNER" && owners.length <= 1) {
-      return res.status(409).json({
-        success: false,
-        message: "Cannot remove the last meeting owner",
-      });
-    }
-    await db
-      .promise()
-      .query("DELETE FROM meeting_admin WHERE meeting_id = ? AND user_id = ?", [
-        meetingId,
-        targetRecord.user_id,
-      ]);
-    return res
-      .status(200)
-      .json({ success: true, message: "Meeting admin removed successfully" });
-  } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Database error", error: err.message });
-  }
+  return res.status(410).json({
+    success: false,
+    message:
+      "Manual meeting admin removal is disabled. Remove group admins by email using group admin APIs.",
+  });
 };

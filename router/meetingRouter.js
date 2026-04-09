@@ -388,7 +388,7 @@ router.post(
 );
 
 router.delete(
-  "/:id/admins/:userId",
+  "/:id/admins/:email",
   verifyToken,
   checkAdminPermission,
   meetingController.removeMeetingAdmin,
