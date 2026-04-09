@@ -182,8 +182,9 @@ exports.getAllGroups = async (req, res) => {
     let params = [];
     let hasWhere = false;
 
-    // Apply access filter for regular admins via group_admin table
-    if (req.user.role !== "Super_Admin") {
+    // Apply access filter for regular admins via group_admin table.
+    // If it's an Administrator, they only see their groups. Members and Super_Admins see all groups.
+    if (req.user.role === "Administrator") {
       sql +=
         " JOIN group_admin ga_access ON ga_access.group_id = g.id AND ga_access.user_id = ?";
       params.push(req.user.id);
@@ -496,11 +497,17 @@ exports.addGroupAdmin = async (req, res) => {
 
     const [targetUserRows] = await db
       .promise()
-      .query("SELECT id, email FROM user WHERE email = ? LIMIT 1", [email]);
+      .query("SELECT id, email, role FROM user WHERE email = ? LIMIT 1", [email]);
     if (targetUserRows.length === 0) {
       return res.status(400).json({
         success: false,
         message: "email must belong to an existing user",
+      });
+    }
+    if (targetUserRows[0].role !== "Administrator") {
+      return res.status(400).json({
+        success: false,
+        message: "The user must have an Administrator role to be added as a group admin",
       });
     }
     const targetUserId = targetUserRows[0].id;

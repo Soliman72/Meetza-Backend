@@ -111,6 +111,7 @@ exports.getMyGroups = async (req, res) => {
           gc.id AS group_content_id,
           COALESCE(stats.member_count, 0) + 1 AS member_count,
           CASE
+            WHEN ga.user_id IS NOT NULL THEN 'Administrator'
             WHEN g.administrator_id = ? THEN 'Administrator'
             WHEN gm.member_id IS NOT NULL THEN 'Member'
             ELSE NULL
@@ -119,6 +120,8 @@ exports.getMyGroups = async (req, res) => {
           msg.created_at AS last_message_at,
           msg.sender_name AS last_sender_name
         FROM \`group\` g
+        LEFT JOIN group_admin ga
+          ON ga.group_id = g.id AND ga.user_id = ?
         LEFT JOIN group_membership gm
           ON gm.group_id = g.id AND gm.member_id = ?
         LEFT JOIN (
@@ -143,11 +146,11 @@ exports.getMyGroups = async (req, res) => {
           GROUP BY group_id
         ) stats ON stats.group_id = g.id
         LEFT JOIN group_content gc ON gc.group_id = g.id
-        WHERE g.administrator_id = ? OR gm.member_id IS NOT NULL
+        WHERE ga.user_id IS NOT NULL OR g.administrator_id = ? OR gm.member_id IS NOT NULL
         ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
       `;
 
-      queryParams = [userId, userId, userId];
+      queryParams = [userId, userId, userId, userId];
     }
 
     const [rows] = await db.promise().query(queryStr, queryParams);
@@ -183,6 +186,7 @@ exports.getUnreadGroups = async (req, res) => {
         gc.id AS group_content_id,
         COALESCE(stats.member_count, 0) + 1 AS member_count,
         CASE
+          WHEN ga.user_id IS NOT NULL THEN 'Administrator'
           WHEN g.administrator_id = ? THEN 'Administrator'
           WHEN gm.member_id IS NOT NULL THEN 'Member'
           ELSE NULL
@@ -192,6 +196,8 @@ exports.getUnreadGroups = async (req, res) => {
         msg.sender_name AS last_sender_name,
         unread_stats.unread_count
       FROM \`group\` g
+      LEFT JOIN group_admin ga
+        ON ga.group_id = g.id AND ga.user_id = ?
       LEFT JOIN group_membership gm
         ON gm.group_id = g.id AND gm.member_id = ?
       LEFT JOIN (
@@ -229,11 +235,11 @@ exports.getUnreadGroups = async (req, res) => {
       ) unread_stats ON unread_stats.group_id = g.id
       LEFT JOIN group_content gc ON gc.group_id = g.id
       WHERE unread_stats.unread_count > 0
-        AND (g.administrator_id = ? OR gm.member_id IS NOT NULL)
+        AND (ga.user_id IS NOT NULL OR g.administrator_id = ? OR gm.member_id IS NOT NULL)
 
       ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
       `,
-      [userId, userId, userId, userId]
+      [userId, userId, userId, userId, userId]
     );
 
     return res.json({ success: true, data: rows });
@@ -325,7 +331,7 @@ exports.sendMessage = (req, res) => {
       if (validator.isURL(messageText, {
         require_protocol: true,
         protocols: ["http", "https"],
-      })){
+      })) {
         // if it is valid url then push it to uploadedMedia
         uploadedMedia.push({
           id: uuidv4(),
@@ -551,16 +557,21 @@ exports.getGroupInfo = async (req, res) => {
           u.name,
           u.email,
           u.user_photo,
-          CASE WHEN u.id = ? THEN 'Administrator' ELSE 'Member' END AS role
+          CASE WHEN ga_role.user_id IS NOT NULL THEN 'Administrator'
+               WHEN u.id = ? THEN 'Administrator'
+               ELSE 'Member' END AS role
         FROM (
           SELECT member_id AS user_id FROM group_membership WHERE group_id = ?
+          UNION
+          SELECT user_id FROM group_admin WHERE group_id = ?
           UNION
           SELECT ? AS user_id
         ) participant
         JOIN user u ON u.id = participant.user_id
+        LEFT JOIN group_admin ga_role ON ga_role.group_id = ? AND ga_role.user_id = u.id
         ORDER BY role DESC, u.name ASC
       `,
-      [group.administrator_id, groupId, group.administrator_id]
+      [group.administrator_id, groupId, groupId, group.administrator_id, groupId]
     );
 
     let content = null;
