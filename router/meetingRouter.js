@@ -373,25 +373,5 @@ router.get(
   meetingController.getMeetingParticipants,
 );
 
-router.get(
-  "/:id/admins",
-  verifyToken,
-  checkAdminPermission,
-  meetingController.getMeetingAdmins,
-);
-
-router.post(
-  "/:id/admins",
-  verifyToken,
-  checkAdminPermission,
-  meetingController.addMeetingAdmin,
-);
-
-router.delete(
-  "/:id/admins/:email",
-  verifyToken,
-  checkAdminPermission,
-  meetingController.removeMeetingAdmin,
-);
 
 module.exports = router;

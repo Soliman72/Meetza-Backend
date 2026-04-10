@@ -17,6 +17,10 @@ const {
   isMeetingAdmin,
   assignMeetingAdmin,
 } = require("../utils/resourceAdminAccess");
+const {
+  ensureGroupAccess,
+  GroupAccessError,
+} = require("../utils/groupAccess");
 
 async function attachAdminsToMeetings(meetings) {
   if (!Array.isArray(meetings) || meetings.length === 0) return meetings;
@@ -272,8 +276,8 @@ exports.createMeeting = async (req, res) => {
         }
       }
       const seriesId = isWeekly ? uuidv4() : null;
-      const query = `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id, poster_url, description, recording, is_weekly, series_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      const query = `INSERT INTO meeting (id, title, start_time, end_time, status, group_id, poster_url, description, recording, is_weekly, series_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
       await db
         .promise()
         .query(query, [
@@ -282,7 +286,6 @@ exports.createMeeting = async (req, res) => {
           start_time,
           end_time,
           status,
-          group.administrator_id,
           group_id,
           posterUrl,
           description,
@@ -467,10 +470,6 @@ exports.getAllMeetings = async (req, res) => {
 
     // When group_id filter is used, ensure user has access to that group (admin or member)
     if (group_id) {
-      const {
-        ensureGroupAccess,
-        GroupAccessError,
-      } = require("../utils/groupAccess");
       try {
         await ensureGroupAccess(userId, group_id);
       } catch (e) {
@@ -488,7 +487,7 @@ exports.getAllMeetings = async (req, res) => {
         ? { whereClause: "", params: [] }
         : {
             whereClause:
-              "WHERE EXISTS (SELECT 1 FROM group_admin ga WHERE ga.group_id = meeting.group_id AND ga.user_id = ?)",
+              "WHERE EXISTS (SELECT 1 FROM group_admin ga WHERE ga.group_id = meeting.group_id AND (ga.user_id = ?)",
             params: [userId],
           };
     let query = "SELECT * FROM meeting";
@@ -1017,7 +1016,6 @@ exports.activateMeetingRecurrence = async (req, res) => {
           await activateWeeklySeries({
             seriesId,
             groupId: meeting.group_id,
-            administratorId: meeting.administrator_id,
             originalMeetingId: id,
             templateTitle: meeting.title,
             templatePosterUrl: meeting.poster_url,
@@ -1144,10 +1142,14 @@ exports.deleteMeetingById = async (req, res) => {
           ? `The weekly meeting series "${meeting.title}" has been deleted forever.`
           : `The meeting "${meeting.title}" scheduled for ${meeting.start_time} has been deleted.`;
 
+      const [admins] = await db
+        .promise()
+        .query("SELECT user_id FROM group_admin WHERE group_id = ? LIMIT 1", [meeting.group_id]);
+      const adminId = admins[0].user_id;
       await Promise.all(
         members.map((m) =>
           createNotification({
-            senderId: meeting.administrator_id,
+            senderId: adminId,
             memberId: m.member_id,
             title: notificationTitle,
             message: notificationMessage,
@@ -1192,8 +1194,8 @@ exports.joinMeeting = async (req, res) => {
     const [meetingRows] = await db
       .promise()
       .query(
-        "SELECT m.*, g.administrator_id AS group_admin_id FROM meeting m JOIN `group` g ON g.id = m.group_id WHERE m.id = ?",
-        [meetingId],
+        "SELECT m.* ga.user_id AS group_admin_id FROM meeting JOIN group_admin ga ON ga.group_id = m.group_id AND ga.user_id = ? WHERE m.id = ?",
+        [userId, meetingId],
       );
     if (meetingRows.length === 0) {
       return res
@@ -1327,7 +1329,7 @@ exports.getMeetingParticipants = async (req, res) => {
         return res.status(403).json({
           success: false,
           message:
-            "Only the meeting administrator or group members can view participants",
+            "Only the meeting admins or group members can view participants",
         });
       }
     }
@@ -1348,58 +1350,4 @@ exports.getMeetingParticipants = async (req, res) => {
       .status(500)
       .json({ success: false, message: "Database error", error: err.message });
   }
-};
-
-exports.getMeetingAdmins = async (req, res) => {
-  try {
-    const { id: meetingId } = req.params;
-    const [meetingRows] = await db
-      .promise()
-      .query("SELECT group_id FROM meeting WHERE id = ?", [meetingId]);
-    if (meetingRows.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Meeting not found" });
-    }
-    if (
-      !req.isSuperAdmin &&
-      !(await isMeetingAdmin(req.user.id, meetingId)) &&
-      !(await isGroupAdmin(req.user.id, meetingRows[0].group_id))
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Only meeting/group admins can view meeting admins",
-      });
-    }
-    const [rows] = await db.promise().query(
-      `SELECT ga.id, ? AS meeting_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
-              u.name, u.email, u.user_photo
-       FROM group_admin ga
-       JOIN user u ON u.id = ga.user_id
-       WHERE ga.group_id = ?
-       ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
-      [meetingId, meetingRows[0].group_id],
-    );
-    return res.status(200).json({ success: true, data: rows });
-  } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Database error", error: err.message });
-  }
-};
-
-exports.addMeetingAdmin = async (req, res) => {
-  return res.status(410).json({
-    success: false,
-    message:
-      "Manual meeting admin assignment is disabled. Assign group admins by email using group admin APIs.",
-  });
-};
-
-exports.removeMeetingAdmin = async (req, res) => {
-  return res.status(410).json({
-    success: false,
-    message:
-      "Manual meeting admin removal is disabled. Remove group admins by email using group admin APIs.",
-  });
 };

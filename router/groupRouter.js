@@ -224,12 +224,6 @@ router.delete(
   groupController.deleteGroup,
 );
 
-router.get(
-  "/:id/admins",
-  verifyToken,
-  checkAdminPermission,
-  groupController.getGroupAdmins,
-);
 
 router.post(
   "/:id/admins",

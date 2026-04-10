@@ -75,14 +75,13 @@ async function spawnWeeklyOccurrence(seriesId, fireDate) {
 
   const meetingId = uuidv4();
   await db.promise().query(
-    `INSERT INTO meeting (id, title, start_time, end_time, status, administrator_id, group_id, poster_url, description, recording, is_weekly, series_id)
-    VALUES (?, ?, ?, ?, 'Scheduled', ?, ?, ?, ?, ?, 1, ?)`,
+    `INSERT INTO meeting (id, title, start_time, end_time, status, group_id, poster_url, description, recording, is_weekly, series_id)
+    VALUES (?, ?, ?, ?, 'Scheduled', ?, ?, ?, ?, 1, ?)`,
     [
       meetingId,
       s.template_title,
       startMysql,
       endMysql,
-      s.administrator_id,
       s.group_id,
       s.template_poster_url,
       s.template_description,
@@ -97,12 +96,16 @@ async function spawnWeeklyOccurrence(seriesId, fireDate) {
       .query("SELECT member_id FROM group_membership WHERE group_id = ?", [
         s.group_id,
       ]);
+    const [admins] = await db
+      .promise()
+      .query("SELECT user_id FROM group_admin WHERE group_id = ? LIMIT 1", [s.group_id]);
+    const adminId = admins[0].user_id;
     const notificationTitle = "New meeting scheduled";
     const notificationMessage = `A new meeting "${s.template_title}" is scheduled from ${startMysql} to ${endMysql}.`;
     await Promise.all(
       members.map((m) =>
         createNotification({
-          senderId: s.administrator_id,
+          senderId: adminId,
           memberId: m.member_id,
           title: notificationTitle,
           message: notificationMessage,
@@ -162,7 +165,6 @@ async function bootstrapMeetingRecurrenceJobs() {
 async function activateWeeklySeries({
   seriesId,
   groupId,
-  administratorId,
   originalMeetingId,
   templateTitle,
   templatePosterUrl,
@@ -179,14 +181,13 @@ async function activateWeeklySeries({
 
   await db.promise().query(
     `INSERT INTO meeting_series (
-      id, is_active, group_id, administrator_id, original_meeting_id,
+      id, is_active, group_id, original_meeting_id,
       template_title, template_poster_url, template_description, template_recording,
       duration_ms, day_of_week, start_hour, start_minute, start_second
-    ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       seriesId,
       groupId,
-      administratorId,
       originalMeetingId,
       templateTitle,
       templatePosterUrl,

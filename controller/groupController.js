@@ -47,16 +47,15 @@ exports.createGroup = async (req, res) => {
       try {
         const {
           group_name,
-          position_id,
           description,
           year,
           semester,
           group_content_name,
           group_content_description,
+          administrator_id,
         } = req.body;
         if (
           !group_name ||
-          !position_id ||
           !year ||
           !semester ||
           !group_content_name
@@ -64,7 +63,7 @@ exports.createGroup = async (req, res) => {
           return res.status(400).json({
             success: false,
             message:
-              "group_name, position_id, year, semester, and group_content_name are required fields",
+              "group_name year, semester, and group_content_name are required fields",
           });
         }
         if (!["1", "2", "3", "4"].includes(year.toString())) {
@@ -78,19 +77,34 @@ exports.createGroup = async (req, res) => {
             message: "semester must be Fall, Spring, or Summer",
           });
         }
-        const [positionRows] = await db
-          .promise()
-          .query("SELECT * FROM `position` WHERE id = ?", [position_id]);
-        if (positionRows.length === 0) {
+        let admin_id;
+        if (req.user.role === "Super_Admin") {
+          admin_id = administrator_id;
+          if (!administrator_id) {
+            return res.status(400).json({
+              success: false,
+              message: "administrator_id is required",
+            });
+          }
+        } else if (req.user.role === "Administrator") {
+          admin_id = req.user.id;
+        } else {
           return res.status(400).json({
             success: false,
-            message: "Invalid position_id: not found",
+            message: "Invalid role",
           });
         }
-
-        // get administrator_id from position_id
-        let administrator_id = positionRows[0].administrator_id;
-
+        if (admin_id) {
+          const [adminRows] = await db
+            .promise()
+            .query("SELECT * FROM administrator WHERE user_id = ?", [admin_id]);
+          if (adminRows.length === 0) {
+            return res.status(400).json({
+              success: false,
+              message: "Invalid admin_id: not found",
+            });
+          }
+        }
         let group_photo_url;
         if (req.files?.group_photo) {
           const group_photo = req.files.group_photo[0];
@@ -111,14 +125,12 @@ exports.createGroup = async (req, res) => {
 
         const id = uuidv4();
         const sql =
-          "INSERT INTO `group` (id, group_name, position_id, administrator_id, description, group_photo, year, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+          "INSERT INTO `group` (id, group_name, description, group_photo, year, semester) VALUES (?, ?, ?, ?, ?, ?)";
         const [result] = await db
           .promise()
           .query(sql, [
             id,
             group_name,
-            position_id,
-            administrator_id,
             description,
             group_photo_url,
             year,
@@ -127,7 +139,7 @@ exports.createGroup = async (req, res) => {
 
         await assignGroupAdmin({
           groupId: id,
-          userId: req.user.id,
+          userId: admin_id,
           role: "OWNER",
           assignedBy: req.user.id,
         });
@@ -151,8 +163,6 @@ exports.createGroup = async (req, res) => {
           data: {
             id,
             group_name,
-            position_id,
-            administrator_id,
             description,
             group_photo: group_photo_url,
             group_content_id: group_content.data.id,
@@ -178,15 +188,16 @@ exports.getAllGroups = async (req, res) => {
 
     // get all groups with admin info
     let sql =
-      "SELECT g.* FROM `group` g LEFT JOIN user u ON g.administrator_id = u.id";
+      "SELECT g.* FROM `group` g LEFT JOIN group_admin ga ON ga.group_id = g.id";
     let params = [];
     let hasWhere = false;
 
     // Apply access filter for regular admins via group_admin table.
     // If it's an Administrator, they only see their groups. Members and Super_Admins see all groups.
     if (req.user.role === "Administrator") {
-      sql +=
-        " JOIN group_admin ga_access ON ga_access.group_id = g.id AND ga_access.user_id = ?";
+      sql += hasWhere ? " AND" : " WHERE";
+      hasWhere = true;
+      sql += " ga.user_id = ?";
       params.push(req.user.id);
     }
 
@@ -289,7 +300,7 @@ exports.updateGroup = async (req, res) => {
       }
       try {
         const { id } = req.params;
-        const { group_name, position_id, description, year, semester } =
+        const { group_name, description, year, semester } =
           req.body;
         if (!id) {
           return res
@@ -297,7 +308,6 @@ exports.updateGroup = async (req, res) => {
             .json({ success: false, message: "id is required" });
         }
         if (
-          !position_id &&
           !group_name &&
           !description &&
           !req.files?.group_photo &&
@@ -338,17 +348,6 @@ exports.updateGroup = async (req, res) => {
             message: "semester must be Fall, Spring, or Summer",
           });
         }
-        if (position_id) {
-          const [positionRows] = await db
-            .promise()
-            .query("SELECT * FROM position WHERE id = ?", [position_id]);
-          if (positionRows.length === 0) {
-            return res.status(400).json({
-              success: false,
-              message: "Invalid position_id: not found",
-            });
-          }
-        }
 
         let group_photo_url;
         if (req.files?.group_photo) {
@@ -366,7 +365,6 @@ exports.updateGroup = async (req, res) => {
 
         const sql = `UPDATE \`group\` SET 
         group_name = COALESCE(?, group_name), 
-        position_id = COALESCE(?, position_id),
         description = COALESCE(?, description),
         group_photo = COALESCE(?, group_photo),
         year = COALESCE(?, year),
@@ -376,7 +374,6 @@ exports.updateGroup = async (req, res) => {
           .promise()
           .query(sql, [
             group_name,
-            position_id,
             description,
             group_photo_url,
             year,
@@ -427,35 +424,6 @@ exports.deleteGroup = async (req, res) => {
       .json({ success: true, message: "Group deleted successfully" });
   } catch (err) {
     res
-      .status(500)
-      .json({ success: false, message: "Database error", error: err.message });
-  }
-};
-
-exports.getGroupAdmins = async (req, res) => {
-  try {
-    const { id: groupId } = req.params;
-    if (!req.isSuperAdmin) {
-      const allowed = await isGroupAdmin(req.user.id, groupId);
-      if (!allowed) {
-        return res.status(403).json({
-          success: false,
-          message: "Only group admins can view group admins",
-        });
-      }
-    }
-    const [rows] = await db.promise().query(
-      `SELECT ga.id, ga.group_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
-              u.name, u.email, u.user_photo
-       FROM group_admin ga
-       JOIN user u ON u.id = ga.user_id
-       WHERE ga.group_id = ?
-       ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
-      [groupId],
-    );
-    return res.status(200).json({ success: true, data: rows });
-  } catch (err) {
-    return res
       .status(500)
       .json({ success: false, message: "Database error", error: err.message });
   }
@@ -540,6 +508,22 @@ exports.addGroupAdmin = async (req, res) => {
         }),
       ),
     );
+    // check if this group has any meetings
+    const [newMeetings] = await db
+      .promise()
+      .query("SELECT id FROM meeting WHERE group_id = ?", [groupId]);
+    if (newMeetings.length > 0) {
+      await Promise.all(
+        newMeetings.map((meeting) =>
+          assignMeetingAdmin({
+            meetingId: meeting.id,
+            userId: targetUserId,
+            role,
+            assignedBy: req.user.id,
+          }),
+        ),
+      );
+    }
     return res.status(200).json({
       success: true,
       message: "Group admin upserted successfully by email",
@@ -559,6 +543,15 @@ exports.removeGroupAdmin = async (req, res) => {
       return res
         .status(400)
         .json({ success: false, message: "email is required" });
+    }
+    const [removerRows] = await db
+      .promise()
+      .query("SELECT user_id FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1", [groupId, req.user.id]);
+    if (removerRows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Only group owners can remove admins",
+      });
     }
     if (!req.isSuperAdmin) {
       const allowed = await isGroupAdmin(req.user.id, groupId);

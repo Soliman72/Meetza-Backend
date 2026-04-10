@@ -76,14 +76,12 @@ CREATE TABLE IF NOT EXISTS `group_content` (
     `id` VARCHAR(36) PRIMARY KEY,
     `content_name` VARCHAR(255) NOT NULL,
     `content_description` TEXT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
     `group_id` VARCHAR(36) NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
-    CONSTRAINT `fk_group_content_administrator` 
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 
+    CONSTRAINT `fk_group_content_group` 
+        FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
         ON DELETE CASCADE 
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -115,22 +113,16 @@ CREATE TABLE IF NOT EXISTS `group` (
     `description` TEXT NULL,
     `group_photo` TEXT NULL,
     `position_id` VARCHAR(36) NOT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
     `group_content_id` VARCHAR(36) NULL,
     `year` ENUM('1', '2', '3', '4') NOT NULL,
     `semester` ENUM('Fall', 'Spring', 'Summer') NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_position_id` (`position_id`),
-    INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_content_id` (`group_content_id`),
     INDEX `idx_year_semester` (`year`, `semester`),
     CONSTRAINT `fk_group_position` 
         FOREIGN KEY (`position_id`) REFERENCES `position`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE,
-    CONSTRAINT `fk_group_administrator` 
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 
         ON DELETE CASCADE 
         ON UPDATE CASCADE,
     CONSTRAINT `fk_group_content` 
@@ -138,14 +130,6 @@ CREATE TABLE IF NOT EXISTS `group` (
         ON DELETE SET NULL 
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Add foreign key constraint for group_content.group_id after group table is created
--- (Resolving circular dependency between group and group_content)
-ALTER TABLE `group_content` 
-    ADD CONSTRAINT `fk_group_content_group` 
-        FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE;
 
 -- =============================================
 -- 8. GROUP MEMBERSHIP TABLE
@@ -177,7 +161,6 @@ CREATE TABLE IF NOT EXISTS `meeting` (
     `start_time` DATETIME NOT NULL,
     `end_time` DATETIME NOT NULL,
     `status` ENUM('Scheduled', 'Completed', 'Cancelled') NOT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
     `group_id` VARCHAR(36) NOT NULL,
     `is_weekly` TINYINT(1) NOT NULL DEFAULT 0,
     `series_id` VARCHAR(36) NULL DEFAULT NULL,
@@ -186,16 +169,11 @@ CREATE TABLE IF NOT EXISTS `meeting` (
     `recording` VARCHAR(1) NOT NULL DEFAULT '0',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
     INDEX `idx_meeting_series_id` (`series_id`),
     INDEX `idx_start_time` (`start_time`),
     INDEX `idx_end_time` (`end_time`),
     INDEX `idx_status` (`status`),
-    CONSTRAINT `fk_meeting_administrator`
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE,
     CONSTRAINT `fk_meeting_group` 
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
         ON DELETE CASCADE 
@@ -209,7 +187,6 @@ CREATE TABLE IF NOT EXISTS `meeting_series` (
     `id` VARCHAR(36) PRIMARY KEY,
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `group_id` VARCHAR(36) NOT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
     `original_meeting_id` VARCHAR(36) NULL,
     `template_title` VARCHAR(255) NOT NULL,
     `template_poster_url` TEXT NULL,
@@ -226,10 +203,6 @@ CREATE TABLE IF NOT EXISTS `meeting_series` (
     INDEX `idx_meeting_series_group` (`group_id`),
     CONSTRAINT `fk_meeting_series_group`
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
-    CONSTRAINT `fk_meeting_series_administrator`
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
     CONSTRAINT `fk_meeting_series_original_meeting`

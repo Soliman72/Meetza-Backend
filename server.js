@@ -155,9 +155,6 @@ app.use("/api/chat", chatRouter);
 app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
 
-app.get("/shahd", (req, res) => {
-  res.send("اهلا يا شهد يا رخمهههه!!!");
-});
 
 // Get local IP address for network access
 // Prefer Wi-Fi/Ethernet over virtual adapters
