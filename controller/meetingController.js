@@ -30,7 +30,7 @@ async function attachAdminsToMeetings(meetings) {
   }
   const placeholders = groupIds.map(() => "?").join(",");
   const [admins] = await db.promise().query(
-    `SELECT ga.group_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
+    `SELECT ga.group_id, ga.user_id AS group_admin_id, ga.role, ga.assigned_by, ga.created_at,
             u.name, u.email, u.user_photo
      FROM group_admin ga
      JOIN user u ON u.id = ga.user_id
@@ -487,7 +487,7 @@ exports.getAllMeetings = async (req, res) => {
         ? { whereClause: "", params: [] }
         : {
             whereClause:
-              "WHERE EXISTS (SELECT 1 FROM group_admin ga WHERE ga.group_id = meeting.group_id AND (ga.user_id = ?)",
+              "WHERE EXISTS (SELECT 1 FROM group_admin ga WHERE ga.group_id = meeting.group_id)",
             params: [userId],
           };
     let query = "SELECT * FROM meeting";
@@ -1194,7 +1194,7 @@ exports.joinMeeting = async (req, res) => {
     const [meetingRows] = await db
       .promise()
       .query(
-        "SELECT m.* ga.user_id AS group_admin_id FROM meeting JOIN group_admin ga ON ga.group_id = m.group_id AND ga.user_id = ? WHERE m.id = ?",
+        "SELECT m.*, ga.user_id AS group_admin_id FROM meeting m JOIN group_admin ga ON ga.group_id = m.group_id AND ga.user_id = ? WHERE m.id = ?",
         [userId, meetingId],
       );
     if (meetingRows.length === 0) {
