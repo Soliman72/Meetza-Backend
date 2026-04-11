@@ -7,6 +7,7 @@ const baseSelect = `
     gm.group_id,
     gm.sender_id,
     gm.message,
+    gm.parent_message_id,
     gm.created_at,
     u.name AS sender_name,
     u.email AS sender_email,
@@ -28,16 +29,94 @@ const fetchMessageById = async (id) => {
     .promise()
     .query("SELECT * FROM group_message_media WHERE message_id = ?", [id]);
 
+  // Fetch reactions
+  const reactions = await fetchReactionsForMessages([id]);
+
+  // Fetch parent message preview if it's a reply
+  let parentMessage = null;
+  if (message.parent_message_id) {
+    const [parentRows] = await db.promise().query(
+      `SELECT gm.id, gm.message, gm.parent_message_id, u.name AS sender_name, u.user_photo AS sender_photo
+       FROM group_message gm
+       JOIN user u ON u.id = gm.sender_id
+       WHERE gm.id = ?`,
+      [message.parent_message_id]
+    );
+    parentMessage = parentRows[0] || null;
+  }
+
   return {
     ...message,
     media: mediaRows || [],
+    reactions: reactions[id] || [],
+    parent_message: parentMessage,
   };
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a map of { [messageId]: reactionGroups[] } for the given message IDs.
+ * reactionGroups: { emoji, count, users: [userId, ...] }
+ */
+const fetchReactionsForMessages = async (messageIds) => {
+  if (!messageIds || messageIds.length === 0) return {};
+
+  const [rows] = await db.promise().query(
+    `SELECT message_id, emoji, user_id
+     FROM message_reaction
+     WHERE message_id IN (?)`,
+    [messageIds]
+  );
+
+  // Group by messageId → emoji → users
+  const map = {};
+  for (const row of rows) {
+    if (!map[row.message_id]) map[row.message_id] = {};
+    if (!map[row.message_id][row.emoji]) map[row.message_id][row.emoji] = [];
+    map[row.message_id][row.emoji].push(row.user_id);
+  }
+
+  // Convert inner map to array form
+  const result = {};
+  for (const msgId of Object.keys(map)) {
+    result[msgId] = Object.entries(map[msgId]).map(([emoji, users]) => ({
+      emoji,
+      count: users.length,
+      users,
+    }));
+  }
+  return result;
+};
+
+/**
+ * Returns a map of { [messageId]: parentMessagePreview } for messages that have
+ * a parent_message_id set.
+ */
+const fetchParentMessages = async (rows) => {
+  const parentIds = [...new Set(
+    rows.map((r) => r.parent_message_id).filter(Boolean)
+  )];
+  if (parentIds.length === 0) return {};
+
+  const [parentRows] = await db.promise().query(
+    `SELECT gm.id, gm.message, gm.parent_message_id, u.name AS sender_name, u.user_photo AS sender_photo
+     FROM group_message gm
+     JOIN user u ON u.id = gm.sender_id
+     WHERE gm.id IN (?)`,
+    [parentIds]
+  );
+
+  return parentRows.reduce((acc, p) => {
+    acc[p.id] = p;
+    return acc;
+  }, {});
 };
 
 // Save read status for all group members when a message is sent
 const saveMessageReadStatus = async (messageId, groupId, senderId) => {
   try {
-    // Get all participants of the group (primary administrator + group_admins + members)
+    // Get all participants of the group (group_admins + members)
     const [participants] = await db.promise().query(
       `
         SELECT DISTINCT user_id
@@ -45,11 +124,9 @@ const saveMessageReadStatus = async (messageId, groupId, senderId) => {
           SELECT member_id AS user_id FROM group_membership WHERE group_id = ?
           UNION
           SELECT user_id FROM group_admin WHERE group_id = ?
-          UNION
-          SELECT administrator_id AS user_id FROM \`group\` WHERE id = ?
         ) AS all_participants
       `,
-      [groupId, groupId, groupId]
+      [groupId, groupId]
     );
 
     if (!participants || participants.length === 0) {
@@ -82,17 +159,16 @@ const saveMessageReadStatus = async (messageId, groupId, senderId) => {
 };
 
 
-const saveMessage = async (groupId, senderId, message, media = null) => {
+const saveMessage = async (groupId, senderId, message, media = null, parentMessageId = null) => {
   const trimmed = (message || "").trim();
 
   const id = uuidv4();
 
-  // Try to insert with media column, fallback if column doesn't exist
   await db
     .promise()
     .query(
-      "INSERT INTO group_message (id, group_id, sender_id, message, created_at) VALUES (?, ?, ?, ?, ?)",
-      [id, groupId, senderId, trimmed, new Date()]
+      "INSERT INTO group_message (id, group_id, sender_id, message, parent_message_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [id, groupId, senderId, trimmed, parentMessageId || null, new Date()]
     );
 
   if (media) {
@@ -100,7 +176,7 @@ const saveMessage = async (groupId, senderId, message, media = null) => {
       await db
         .promise()
         .query(
-          "INSERT INTO group_message_media (id, group_id, sender_id, media_url, media_type , file_name ,message_id) VALUES (?, ?, ?, ?, ?, ? , ?)",
+          "INSERT INTO group_message_media (id, group_id, sender_id, media_url, media_type, file_name, message_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
             item.id,
             item.group_id,
@@ -174,11 +250,19 @@ const getMessages = async (groupId, { limit = 50, before, userId } = {}) => {
     }, {});
   }
 
+  // Fetch reactions and parent messages in bulk
+  const reactionsByMessageId = await fetchReactionsForMessages(messageIds);
+  const parentMessageMap = await fetchParentMessages(rows);
+
   const messages = rows.map((message) => {
     const status = readStatusesByMessageId[message.id];
     return {
       ...message,
       media: mediaByMessageId[message.id] || [],
+      reactions: reactionsByMessageId[message.id] || [],
+      parent_message: message.parent_message_id
+        ? (parentMessageMap[message.parent_message_id] || null)
+        : null,
       is_read: status ? status.is_read === 1 : false,
       read_at: status ? status.read_at : null,
     };
@@ -342,10 +426,18 @@ const getReadMessages = async (
     return acc;
   }, {});
 
+  // Fetch reactions and parent messages in bulk
+  const reactionsByMessageId = await fetchReactionsForMessages(messageIds);
+  const parentMessageMap = await fetchParentMessages(rows);
+
   const messages = rows.map((message) => {
     return {
       ...message,
       media: mediaByMessageId[message.id] || [],
+      reactions: reactionsByMessageId[message.id] || [],
+      parent_message: message.parent_message_id
+        ? (parentMessageMap[message.parent_message_id] || null)
+        : null,
       is_read: true,
       read_at: readStatusesByMessageId[message.id]?.read_at || null,
     };
@@ -424,11 +516,19 @@ const getUnreadMessages = async (
     return acc;
   }, {});
 
+  // Fetch reactions and parent messages in bulk
+  const reactionsByMessageId = await fetchReactionsForMessages(messageIds);
+  const parentMessageMap = await fetchParentMessages(rows);
+
   const messages = rows.map((message) => {
     const status = readStatusesByMessageId[message.id];
     return {
       ...message,
       media: mediaByMessageId[message.id] || [],
+      reactions: reactionsByMessageId[message.id] || [],
+      parent_message: message.parent_message_id
+        ? (parentMessageMap[message.parent_message_id] || null)
+        : null,
       is_read: status ? status.is_read === 1 : false,
       read_at: status ? status.read_at : null,
     };
@@ -462,6 +562,48 @@ const getUnreadCount = async (groupId, userId) => {
   return rows[0]?.unread_count || 0;
 };
 
+// ─── Reactions ────────────────────────────────────────────────────────────────
+
+/**
+ * Toggle a reaction: if the user already reacted with this emoji on this
+ * message, remove it; otherwise add it.
+ * Returns the updated reactions array for the message.
+ */
+const toggleReaction = async (messageId, userId, emoji) => {
+  // Check if reaction already exists
+  const [existing] = await db.promise().query(
+    "SELECT id FROM message_reaction WHERE message_id = ? AND user_id = ? AND emoji = ?",
+    [messageId, userId, emoji]
+  );
+
+  if (existing.length > 0) {
+    // Remove reaction (toggle off)
+    await db.promise().query(
+      "DELETE FROM message_reaction WHERE message_id = ? AND user_id = ? AND emoji = ?",
+      [messageId, userId, emoji]
+    );
+  } else {
+    // Add reaction (toggle on)
+    const id = uuidv4();
+    await db.promise().query(
+      "INSERT INTO message_reaction (id, message_id, user_id, emoji) VALUES (?, ?, ?, ?)",
+      [id, messageId, userId, emoji]
+    );
+  }
+
+  // Return updated reactions for this message
+  const reactionsMap = await fetchReactionsForMessages([messageId]);
+  return reactionsMap[messageId] || [];
+};
+
+/**
+ * Get all reactions for a single message.
+ */
+const getReactions = async (messageId) => {
+  const reactionsMap = await fetchReactionsForMessages([messageId]);
+  return reactionsMap[messageId] || [];
+};
+
 module.exports = {
   saveMessage,
   getMessages,
@@ -472,4 +614,6 @@ module.exports = {
   getReadMessages,
   getUnreadMessages,
   getUnreadCount,
+  toggleReaction,
+  getReactions,
 };

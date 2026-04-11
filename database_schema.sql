@@ -395,10 +395,12 @@ CREATE TABLE IF NOT EXISTS `group_message` (
     `group_id` VARCHAR(36) NOT NULL,
     `sender_id` VARCHAR(36) NOT NULL,
     `message` TEXT NULL,
+    `parent_message_id` VARCHAR(36) NULL DEFAULT NULL COMMENT 'NULL = top-level; set = reply to another message',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_group_id` (`group_id`),
     INDEX `idx_sender_id` (`sender_id`),
     INDEX `idx_created_at` (`created_at`),
+    INDEX `idx_parent_message_id` (`parent_message_id`),
     CONSTRAINT `fk_group_message_group` 
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
         ON DELETE CASCADE 
@@ -406,6 +408,10 @@ CREATE TABLE IF NOT EXISTS `group_message` (
     CONSTRAINT `fk_group_message_sender` 
         FOREIGN KEY (`sender_id`) REFERENCES `user`(`id`) 
         ON DELETE CASCADE 
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_group_message_parent`
+        FOREIGN KEY (`parent_message_id`) REFERENCES `group_message`(`id`)
+        ON DELETE SET NULL
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -543,3 +549,25 @@ CREATE TABLE IF NOT EXISTS `meeting_admin` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =============================================
+-- 21. MESSAGE REACTION TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `message_reaction` (
+    `id`         VARCHAR(36) NOT NULL,
+    `message_id` VARCHAR(36) NOT NULL,
+    `user_id`    VARCHAR(36) NOT NULL,
+    `emoji`      VARCHAR(20) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `unique_message_user_emoji` (`message_id`, `user_id`, `emoji`),
+    INDEX `idx_reaction_message_id` (`message_id`),
+    INDEX `idx_reaction_user_id`    (`user_id`),
+    CONSTRAINT `fk_reaction_message`
+        FOREIGN KEY (`message_id`) REFERENCES `group_message`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_reaction_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

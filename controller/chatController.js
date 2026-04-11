@@ -11,6 +11,8 @@ const {
   getReadMessages,
   getUnreadMessages,
   getUnreadCount,
+  toggleReaction,
+  getReactions,
 } = require("../services/chatMessageService");
 const { ensureGroupAccess, GroupAccessError } = require("../utils/groupAccess");
 const {
@@ -300,7 +302,7 @@ exports.sendMessage = (req, res) => {
     try {
       const userId = req.user?.id;
       const { groupId } = req.params;
-      const { message } = req.body;
+      const { message, parentMessageId } = req.body;
 
       if (!groupId) {
         return res.status(400).json({
@@ -407,6 +409,7 @@ exports.sendMessage = (req, res) => {
         userId,
         messageText || "",
         uploadedMedia,
+        parentMessageId || null,
       );
 
       // Broadcast the message with media
@@ -440,7 +443,7 @@ exports.deleteMessage = async (req, res) => {
     // Check if the user is authorized to delete the message
     // Administrators (Owners/Admins) can delete any message in the group
     // Members can only delete their own messages
-    
+
     let whereClause = "";
     const params = [messageId, groupId];
 
@@ -897,3 +900,52 @@ const determineResourceCategory = (fileType = "") => {
   if (fileType.includes("link")) return "links";
   return "other";
 };
+
+// ─── React to message ────────────────────────────────────────────────────────────
+
+// POST /groups/:groupId/messages/:messageId/react
+exports.toggleReaction = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { groupId, messageId } = req.params;
+    const { emoji } = req.body;
+
+    if (!groupId || !messageId) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId and messageId are required",
+      });
+    }
+
+    if (!emoji || typeof emoji !== "string" || emoji.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "emoji is required",
+      });
+    }
+
+    const cleanEmoji = emoji.trim().slice(0, 20);
+
+    await ensureGroupAccess(userId, groupId);
+
+    const reactions = await toggleReaction(messageId, userId, cleanEmoji);
+
+    // Broadcast real-time update to the group
+    if (ioInstance) {
+      ioInstance.to(`group:${groupId}`).emit("messageReactionUpdated", {
+        groupId,
+        messageId,
+        reactions,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: { messageId, reactions },
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+

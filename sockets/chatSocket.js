@@ -6,6 +6,7 @@ const {
   markMessageAsUnread,
   markMessagesAsRead,
   getUnreadCount,
+  toggleReaction,
 } = require("../services/chatMessageService");
 const { ensureGroupAccess } = require("../utils/groupAccess");
 
@@ -81,7 +82,7 @@ const registerChatSocket = (io) => {
 
     socket.on("sendMessage", async (payload = {}, ack) => {
       try {
-        const { groupId, message } = payload;
+        const { groupId, message, parentMessageId } = payload;
         if (!groupId) {
           throw new Error("groupId is required");
         }
@@ -90,7 +91,9 @@ const registerChatSocket = (io) => {
         const savedMessage = await saveMessage(
           groupId,
           socket.user.id,
-          message
+          message,
+          null, // no media via socket
+          parentMessageId || null
         );
         io.to(`group:${groupId}`).emit("message", savedMessage);
 
@@ -222,6 +225,36 @@ const registerChatSocket = (io) => {
 
         if (typeof ack === "function") {
           ack({ ok: true, unreadCount: count });
+        }
+      } catch (error) {
+        if (typeof ack === "function") {
+          ack({ ok: false, message: error.message });
+        }
+      }
+    });
+
+    // React to a message (toggle)
+    socket.on("reactToMessage", async (payload = {}, ack) => {
+      try {
+        const { groupId, messageId, emoji } = payload;
+        if (!groupId || !messageId || !emoji) {
+          throw new Error("groupId, messageId, and emoji are required");
+        }
+
+        await ensureGroupAccess(socket.user.id, groupId);
+
+        const cleanEmoji = String(emoji).trim().slice(0, 20);
+        const reactions = await toggleReaction(messageId, socket.user.id, cleanEmoji);
+
+        // Broadcast updated reactions to all clients in the group
+        io.to(`group:${groupId}`).emit("messageReactionUpdated", {
+          groupId,
+          messageId,
+          reactions,
+        });
+
+        if (typeof ack === "function") {
+          ack({ ok: true, data: { messageId, reactions } });
         }
       } catch (error) {
         if (typeof ack === "function") {

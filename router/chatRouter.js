@@ -71,6 +71,15 @@ router.get(
   chatController.getUnreadCount
 );
 
+// Message Reactions
+router.post(
+  "/groups/:groupId/messages/:messageId/react",
+  verifyToken,
+  chatController.toggleReaction
+);
+
+
+
 // Group meetings for calendar (visible to all members/admins of the group)
 router.get(
   "/groups/:groupId/meetings",
