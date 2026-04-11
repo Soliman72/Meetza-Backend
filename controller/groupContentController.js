@@ -59,46 +59,61 @@ exports.createGroupContent = async (content_body, req) => {
 exports.getAllGroupContents = async (req, res) => {
   try {
     const { name } = req.query;
-    let query =
-      "SELECT group_content.*, user.id AS administrator_id, user.name, user.email FROM group_content JOIN `group` ON group_content.group_id = `group`.id JOIN user ON `group`.administrator_id = user.id";
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    let query = `
+      SELECT gc.*, u.id AS owner_id, u.name AS owner_name, u.email AS owner_email 
+      FROM group_content gc 
+      JOIN \`group\` g ON gc.group_id = g.id 
+      JOIN group_admin ga ON ga.group_id = g.id AND ga.role = 'OWNER'
+      JOIN user u ON ga.user_id = u.id
+    `;
     let params = [];
+    let whereClauses = [];
 
-    // Apply ownership filter for regular admins
-    const ownershipFilter = getOwnershipFilter(
-      req,
-      "`group`.administrator_id "
-    );
+    // Apply access filter
+    if (userRole === "Administrator") {
+      query += " JOIN group_admin perm ON perm.group_id = g.id AND perm.user_id = ?";
+      params.push(userId);
+    } else if (userRole === "Member") {
+      query += " JOIN group_membership gm ON gm.group_id = g.id AND gm.member_id = ?";
+      params.push(userId);
+    }
+    // Super_Admin sees everything
 
-    if (ownershipFilter.whereClause) {
-      query += " " + ownershipFilter.whereClause;
-      params.push(...ownershipFilter.params);
+    if (name) {
+      whereClauses.push("gc.content_name LIKE ?");
+      params.push(`%${name}%`);
     }
 
-    if (ownershipFilter.whereClause && name) {
-      query += " AND group_content.content_name LIKE ?";
-      params.push(`%${name}%`);
-    } else if (name) {
-      query += " WHERE group_content.content_name LIKE ?";
-      params.push(`%${name}%`);
+    if (whereClauses.length > 0) {
+      query += " WHERE " + whereClauses.join(" AND ");
     }
 
     const [results] = await db.promise().query(query, params);
 
-    // Fetch resources for each group content
-    const groupContentsWithResources = await Promise.all(
-      results.map(async (groupContent) => {
-        const resourcesQuery =
-          "SELECT id, file_url, file_name, file_type, file_size, created_at FROM group_content_resource WHERE group_content_id = ? ORDER BY created_at ASC";
-        const [resources] = await db
-          .promise()
-          .query(resourcesQuery, [groupContent.id]);
+    if (results.length === 0) {
+      return res.status(200).json({ success: true, data: [] });
+    }
 
-        return {
-          ...groupContent,
-          resources: resources,
-        };
-      })
+    // N+1 Optimization: Bulk fetch resources
+    const contentIds = results.map((c) => c.id);
+    const [allResources] = await db.promise().query(
+      "SELECT id, group_content_id, file_url, file_name, file_type, file_size, created_at FROM group_content_resource WHERE group_content_id IN (?) ORDER BY created_at ASC",
+      [contentIds]
     );
+
+    const resourcesByContentId = allResources.reduce((acc, res) => {
+      if (!acc[res.group_content_id]) acc[res.group_content_id] = [];
+      acc[res.group_content_id].push(res);
+      return acc;
+    }, {});
+
+    const groupContentsWithResources = results.map((groupContent) => ({
+      ...groupContent,
+      resources: resourcesByContentId[groupContent.id] || [],
+    }));
 
     return res.status(200).json({ success: true, data: groupContentsWithResources });
   } catch (err) {
@@ -115,7 +130,7 @@ exports.getGroupContentById = async (req, res) => {
       return res.status(400).json({ success: false, message: "Content id is required" });
     }
 
-    // Get group content
+    // Get group content with group_id for access check
     const query = "SELECT * FROM group_content WHERE id = ?";
     const [results] = await db.promise().query(query, [id]);
 
@@ -124,6 +139,30 @@ exports.getGroupContentById = async (req, res) => {
         success: false,
         message: "Group content not found",
       });
+    }
+
+    const groupContentRecord = results[0];
+    const groupId = groupContentRecord.group_id;
+
+    // Access check: User must be Super Admin, a Group Admin, or a Group Member
+    if (req.user.role !== "Super_Admin") {
+      const [hasAccess] = await db.promise().query(
+        `
+        SELECT 1 FROM (
+          SELECT user_id FROM group_admin WHERE group_id = ? AND user_id = ?
+          UNION
+          SELECT member_id AS user_id FROM group_membership WHERE group_id = ? AND member_id = ?
+        ) AS access LIMIT 1
+        `,
+        [groupId, req.user.id, groupId, req.user.id]
+      );
+
+      if (hasAccess.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: "You do not have access to this group's content",
+        });
+      }
     }
 
     // Get associated resources
@@ -160,6 +199,20 @@ exports.updateGroupContentById = async (req, res) => {
         success: false,
         message: "Group content not found",
       });
+    }
+
+    // Check permissions: only admins can update
+    if (req.user.role !== "Super_Admin") {
+      const [adminCheck] = await db.promise().query(
+        "SELECT 1 FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
+        [groupContent[0].group_id, req.user.id]
+      );
+      if (adminCheck.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: "Only group administrators can update content",
+        });
+      }
     }
 
     const query =
@@ -222,20 +275,17 @@ exports.addFilesToGroupContent = (req, res) => {
         });
       }
 
-      // Check if user has permission (ownership check)
-      const ownershipFilter = getOwnershipFilter(
-        req,
-        "`group`.administrator_id"
-      );
-      if (ownershipFilter.whereClause) {
-        const [userContent] = await db
-          .promise()
-          .query(
-            `SELECT * FROM group_content JOIN \`group\` ON group_content.group_id = \`group\`.id ${ownershipFilter.whereClause} AND group_content.id = ? `,
-            [...ownershipFilter.params, id]
-          );
-        if (userContent.length === 0) {
-          return res.status(403).json({ success: false, message: "You don't have permission to add files to this group content" });
+      // Check if user has permission (administrator check)
+      if (req.user.role !== "Super_Admin") {
+        const [adminCheck] = await db.promise().query(
+          "SELECT 1 FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
+          [groupContent[0].group_id, req.user.id]
+        );
+        if (adminCheck.length === 0) {
+          return res.status(403).json({
+            success: false,
+            message: "Only group administrators can add files to this content",
+          });
         }
       }
       
@@ -381,7 +431,7 @@ exports.addFilesToGroupContent = (req, res) => {
       const [groupRows] = await db
         .promise()
         .query(
-          "SELECT group_name, administrator_id FROM `group` WHERE id = ?",
+          "SELECT g.group_name, ga.user_id AS administrator_id FROM `group` g JOIN group_admin ga ON ga.group_id = g.id AND ga.role = 'OWNER' WHERE g.id = ?",
           [group_id]
         );
       const groupName =
@@ -444,20 +494,16 @@ exports.deleteFileFromGroupContent = async (req, res) => {
       });
     }
 
-    // Check if user has permission (ownership check)
-    const ownershipFilter = getOwnershipFilter(req, "`group`.administrator_id");
-    if (ownershipFilter.whereClause) {
-      const [userContent] = await db
-        .promise()
-        .query(
-          `SELECT * FROM group_content JOIN \`group\` ON group_content.group_id = \`group\`.\id ${ownershipFilter.whereClause} AND group_content.id = ? `,
-          [...ownershipFilter.params, id]
-        );
-      if (userContent.length === 0) {
+    // Check if user has permission (administrator check)
+    if (req.user.role !== "Super_Admin") {
+      const [adminCheck] = await db.promise().query(
+        "SELECT 1 FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
+        [groupContent[0].group_id, req.user.id]
+      );
+      if (adminCheck.length === 0) {
         return res.status(403).json({
           success: false,
-          message:
-            "You don't have permission to delete files from this group content",
+          message: "Only group administrators can delete files from this content",
         });
       }
     }

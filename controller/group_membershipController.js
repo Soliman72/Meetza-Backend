@@ -78,12 +78,15 @@ exports.getAllGroupMemberships = async (req, res) => {
     `;
     let params = [];
 
-    // Apply ownership filter for regular admins
-    const ownershipFilter = getOwnershipFilter(req, "g.administrator_id");
-    if (ownershipFilter.whereClause) {
-      query += " " + ownershipFilter.whereClause;
-      params.push(...ownershipFilter.params);
+    // Apply access filter
+    if (req.user.role === "Administrator") {
+      query += " JOIN group_admin perm ON perm.group_id = g.id AND perm.user_id = ?";
+      params.push(req.user.id);
+    } else if (req.user.role === "Member") {
+      query += " JOIN group_membership gm_perm ON gm_perm.group_id = g.id AND gm_perm.member_id = ?";
+      params.push(req.user.id);
     }
+    // Super_Admin sees all
 
     const [rows] = await db.promise().query(query, params);
 

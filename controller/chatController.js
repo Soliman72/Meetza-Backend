@@ -32,9 +32,13 @@ const broadcastMessage = (message) => {
 
 const handleError = (res, err) => {
   if (err instanceof GroupAccessError) {
-    return res.status(err.statusCode).json({ success: false, message: err.message });
+    return res
+      .status(err.statusCode)
+      .json({ success: false, message: err.message });
   }
-  return res.status(500).json({ success: false, message: err.message || "Unexpected error" });
+  return res
+    .status(500)
+    .json({ success: false, message: err.message || "Unexpected error" });
 };
 
 exports.registerChatIo = registerChatIo;
@@ -66,7 +70,6 @@ exports.getMyGroups = async (req, res) => {
           g.group_name,
           g.description,
           g.group_photo,
-          g.position_id,
           gc.id AS group_content_id,
           COALESCE(stats.member_count, 0) + 1 AS member_count,
           'Super_Admin' AS membership_role,
@@ -107,12 +110,10 @@ exports.getMyGroups = async (req, res) => {
           g.group_name,
           g.description,
           g.group_photo,
-          g.position_id,
           gc.id AS group_content_id,
           COALESCE(stats.member_count, 0) + 1 AS member_count,
           CASE
             WHEN ga.user_id IS NOT NULL THEN 'Administrator'
-            WHEN g.administrator_id = ? THEN 'Administrator'
             WHEN gm.member_id IS NOT NULL THEN 'Member'
             ELSE NULL
           END AS membership_role,
@@ -146,11 +147,11 @@ exports.getMyGroups = async (req, res) => {
           GROUP BY group_id
         ) stats ON stats.group_id = g.id
         LEFT JOIN group_content gc ON gc.group_id = g.id
-        WHERE ga.user_id IS NOT NULL OR g.administrator_id = ? OR gm.member_id IS NOT NULL
+        WHERE ga.user_id IS NOT NULL OR gm.member_id IS NOT NULL
         ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
       `;
 
-      queryParams = [userId, userId, userId, userId];
+      queryParams = [userId, userId];
     }
 
     const [rows] = await db.promise().query(queryStr, queryParams);
@@ -182,12 +183,10 @@ exports.getUnreadGroups = async (req, res) => {
         g.group_name,
         g.description,
         g.group_photo,
-        g.position_id,
         gc.id AS group_content_id,
         COALESCE(stats.member_count, 0) + 1 AS member_count,
         CASE
           WHEN ga.user_id IS NOT NULL THEN 'Administrator'
-          WHEN g.administrator_id = ? THEN 'Administrator'
           WHEN gm.member_id IS NOT NULL THEN 'Member'
           ELSE NULL
         END AS membership_role,
@@ -235,11 +234,11 @@ exports.getUnreadGroups = async (req, res) => {
       ) unread_stats ON unread_stats.group_id = g.id
       LEFT JOIN group_content gc ON gc.group_id = g.id
       WHERE unread_stats.unread_count > 0
-        AND (ga.user_id IS NOT NULL OR g.administrator_id = ? OR gm.member_id IS NOT NULL)
+        AND (ga.user_id IS NOT NULL OR gm.member_id IS NOT NULL)
 
       ORDER BY msg.created_at IS NULL, msg.created_at DESC, g.group_name ASC
       `,
-      [userId, userId, userId, userId, userId]
+      [userId, userId, userId],
     );
 
     return res.json({ success: true, data: rows });
@@ -326,12 +325,13 @@ exports.sendMessage = (req, res) => {
       // Handle media uploads first if any
       const uploadedMedia = [];
 
-
       // if text is link then check if it is valid url and push it to uploadedMedia
-      if (validator.isURL(messageText, {
-        require_protocol: true,
-        protocols: ["http", "https"],
-      })) {
+      if (
+        validator.isURL(messageText, {
+          require_protocol: true,
+          protocols: ["http", "https"],
+        })
+      ) {
         // if it is valid url then push it to uploadedMedia
         uploadedMedia.push({
           id: uuidv4(),
@@ -379,13 +379,13 @@ exports.sendMessage = (req, res) => {
             mediaUrl = await uploadToCloudinaryResources(
               file,
               "group_message_media",
-              resourceType
+              resourceType,
             );
           } else {
             mediaUrl = await uploadToCloudinaryResources(
               file,
               "group_message_media",
-              resourceType
+              resourceType,
             );
           }
 
@@ -406,7 +406,7 @@ exports.sendMessage = (req, res) => {
         groupId,
         userId,
         messageText || "",
-        uploadedMedia
+        uploadedMedia,
       );
 
       // Broadcast the message with media
@@ -434,47 +434,28 @@ exports.deleteMessage = async (req, res) => {
       });
     }
 
-    await ensureGroupAccess(userId, groupId);
+    const groupAccess = await ensureGroupAccess(userId, groupId);
+    const membershipRole = groupAccess.membership_role;
 
-    if (req.user.role === "Administrator") {
-      const [messageRows] = await db
-        .promise()
-        .query(
-          "SELECT id, message FROM group_message WHERE id = ? AND group_id = ?",
-          [messageId, groupId]
-        );
-      if (messageRows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Message not found or you are not the sender",
-        });
-      }
-    } else if (req.user.role === "Member") {
-      const [messageRows] = await db
-        .promise()
-        .query(
-          "SELECT id, message FROM group_message WHERE id = ? AND sender_id = ? AND group_id = ?",
-          [messageId, userId, groupId]
-        );
-      if (messageRows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Message not found or you are not the sender",
-        });
-      }
-    }
-
-    // Delete the message (media is stored in the same row, so it will be deleted automatically)
-    // check member of admin
+    // Check if the user is authorized to delete the message
+    // Administrators (Owners/Admins) can delete any message in the group
+    // Members can only delete their own messages
+    
     let whereClause = "";
-    const params = [];
-    if (req.user.role === "Administrator") {
+    const params = [messageId, groupId];
+
+    if (membershipRole === "Administrator" || membershipRole === "Super_Admin") {
       whereClause = "WHERE id = ? AND group_id = ?";
-      params.push(messageId, groupId);
-    } else if (req.user.role === "Member") {
-      whereClause = "WHERE id = ? AND sender_id = ? AND group_id = ?";
-      params.push(messageId, userId, groupId);
+    } else if (membershipRole === "Member") {
+      whereClause = "WHERE id = ? AND group_id = ? AND sender_id = ?";
+      params.push(userId);
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to delete messages in this group",
+      });
     }
+
     const [result] = await db
       .promise()
       .query(`DELETE FROM group_message ${whereClause}`, params);
@@ -482,7 +463,7 @@ exports.deleteMessage = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
-        message: "Message not found or you are not the sender",
+        message: "Message not found or you are not authorized to delete it",
       });
     }
 
@@ -514,7 +495,7 @@ exports.updateMessage = async (req, res) => {
       .promise()
       .query(
         "UPDATE group_message SET message = ? WHERE id = ? AND sender_id = ? AND group_id = ?",
-        [message, messageId, userId, groupId]
+        [message, messageId, userId, groupId],
       );
 
     if (result.affectedRows === 0) {
@@ -571,7 +552,13 @@ exports.getGroupInfo = async (req, res) => {
         LEFT JOIN group_admin ga_role ON ga_role.group_id = ? AND ga_role.user_id = u.id
         ORDER BY role DESC, u.name ASC
       `,
-      [group.administrator_id, groupId, groupId, group.administrator_id, groupId]
+      [
+        group.administrator_id,
+        groupId,
+        groupId,
+        group.administrator_id,
+        groupId,
+      ],
     );
 
     let content = null;
@@ -580,7 +567,7 @@ exports.getGroupInfo = async (req, res) => {
         .promise()
         .query(
           "SELECT id, content_name, content_description FROM group_content WHERE group_id = ?",
-          [groupId]
+          [groupId],
         );
       if (contentRows.length) {
         const [resources] = await db.promise().query(
@@ -596,7 +583,7 @@ exports.getGroupInfo = async (req, res) => {
               WHERE group_content_id = ?
               ORDER BY created_at DESC
             `,
-          [contentRows[0].id]
+          [contentRows[0].id],
         );
 
         content = {
@@ -676,7 +663,7 @@ exports.getGroupMeetings = async (req, res) => {
           ${whereClause}
           ORDER BY start_time ASC
         `,
-      params
+      params,
     );
 
     return res.json({

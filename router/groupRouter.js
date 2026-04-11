@@ -224,7 +224,50 @@ router.delete(
   groupController.deleteGroup,
 );
 
-
+/**
+ * @swagger
+ * /api/group/{id}/admins:
+ *   post:
+ *     summary: Add administrators to a group
+ *     description: >
+ *       Add one or more administrators by email. Requires group admin permission.
+ *     tags: [Groups]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Group ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: A single email to add.
+ *               emails:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: An array of emails to add in bulk.
+ *               role:
+ *                 type: string
+ *                 enum: [OWNER, ADMIN]
+ *                 default: ADMIN
+ *     responses:
+ *       200:
+ *         description: All group admins added successfully.
+ *       207:
+ *         description: Some admins could not be added.
+ *       400:
+ *         description: Missing input.
+ *       403:
+ *         description: Forbidden.
+ */
 router.post(
   "/:id/admins",
   verifyToken,
@@ -232,8 +275,47 @@ router.post(
   groupController.addGroupAdmin,
 );
 
+/**
+ * @swagger
+ * /api/group/{id}/admins:
+ *   delete:
+ *     summary: Remove administrators from a group
+ *     description: >
+ *       Remove one or more administrators by email. Requires group admin permission.
+ *       Cannot remove the last owner of a group.
+ *     tags: [Groups]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Group ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: A single email to remove.
+ *               emails:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: An array of emails to remove in bulk.
+ *     responses:
+ *       200:
+ *         description: Operation completed. Data field contains individual results.
+ *       400:
+ *         description: Missing input or no admins were removed.
+ *       403:
+ *         description: Forbidden.
+ */
 router.delete(
-  "/:id/admins/:email",
+  "/:id/admins",
   verifyToken,
   checkAdminPermission,
   groupController.removeGroupAdmin,

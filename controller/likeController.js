@@ -28,8 +28,13 @@ exports.createLike = async (req, res) => {
     }
 
     // Check if video exists + get group owner for notification
-    const videoQuery =
-      'SELECT v.id, v.title, v.group_id, g.group_name, g.administrator_id AS group_admin_id FROM video v JOIN `group` g ON g.id = v.group_id WHERE v.id = ?';
+    const videoQuery = `
+      SELECT v.id, v.title, v.group_id, g.group_name, ga.user_id AS group_admin_id 
+      FROM video v 
+      JOIN \`group\` g ON g.id = v.group_id 
+      LEFT JOIN group_admin ga ON ga.group_id = g.id AND ga.role = 'OWNER'
+      WHERE v.id = ?
+    `;
     const [videoRows] = await db.promise().query(videoQuery, [video_id]);
     if (videoRows.length === 0) {
       return res.status(404).json({

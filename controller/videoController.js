@@ -22,7 +22,10 @@ function getVideoVisibility(req, tableAlias = "v") {
     return { whereClause: "", params: [] };
   }
   if (req.user?.role === "Administrator" || req.administratorId) {
-    return { whereClause: `${v}.administrator_id = ?`, params: [userId] };
+    return {
+      whereClause: `(${v}.administrator_id = ? OR ${v}.group_id IN (SELECT group_id FROM group_admin WHERE user_id = ?))`,
+      params: [userId, userId],
+    };
   }
   if (req.user?.role === "Member") {
     return {
@@ -165,14 +168,14 @@ exports.createVideo = (req, res) => {
       // Duration from frontend is in seconds; DB column is TIME. Convert so MySQL stores correctly (e.g. 130 -> 00:02:10).
       const finalDuration = Math.max(0, parseInt(duration, 10) || 0);
 
-      const [rows] = await db
+      const [ownerRows] = await db
         .promise()
-        .query("SELECT administrator_id FROM `group` WHERE id = ?", [group_id]);
-      const adminId = rows[0]?.administrator_id;
+        .query("SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1", [group_id]);
+      const adminId = ownerRows[0]?.user_id;
       if (!adminId) {
         return res
           .status(400)
-          .json({ success: false, message: "Group not found" });
+          .json({ success: false, message: "Group owner not found" });
       }
 
       const slug = await createUniqueVideoSlug(title, db);
@@ -598,12 +601,12 @@ exports.getRelatedVideos = async (req, res) => {
         [...baseParams, groupId, currentVideoId, ...visibility.params],
       );
 
-    // 2) Videos by same admin from other groups
+    // 2) Videos by the same group's admins from other groups
     const [relatedSameAdmin] = await db
       .promise()
       .query(
-        `${relatedBaseSelect} WHERE v.administrator_id = ? AND v.id != ? AND v.group_id != ?${relatedTail}${relatedOrder}`,
-        [...baseParams, adminId, currentVideoId, groupId, ...visibility.params],
+        `${relatedBaseSelect} WHERE v.group_id != ? AND v.group_id IN (SELECT group_id FROM group_admin WHERE user_id IN (SELECT user_id FROM group_admin WHERE group_id = ?)) AND v.id != ? ${relatedTail}${relatedOrder}`,
+        [...baseParams, groupId, groupId, currentVideoId, ...visibility.params],
       );
 
     // 3) Other videos from groups the user is in (excluding same group and same admin)

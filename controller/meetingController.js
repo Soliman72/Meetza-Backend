@@ -156,18 +156,17 @@ exports.createMeeting = async (req, res) => {
       }
 
       const group = groupResults[0];
-      const administrator_id = req.user?.id ?? req.administratorId;
-      if (!administrator_id) {
+      const requesterId = req.user?.id ?? req.administratorId;
+      if (!requesterId) {
         return res.status(401).json({
           success: false,
-          message: "Unauthorized: administrator_id is required",
+          message: "Unauthorized: user id is required",
         });
       }
 
-      if (
-        !req.isSuperAdmin &&
-        !(await isGroupAdmin(administrator_id, group_id))
-      ) {
+      const isRequesterAdmin = await isGroupAdmin(requesterId, group_id);
+
+      if (!req.isSuperAdmin && !isRequesterAdmin) {
         return res.status(403).json({
           success: false,
           message:
@@ -313,11 +312,18 @@ exports.createMeeting = async (req, res) => {
 
       if (isWeekly) {
         const durationMs = end.getTime() - start.getTime();
+        // Fetch group owner for recurrence template
+        const [ownerResults] = await db.promise().query(
+          "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
+          [group_id]
+        );
+        const ownerId = ownerResults.length > 0 ? ownerResults[0].user_id : requesterId;
+
         try {
           await activateWeeklySeries({
             seriesId,
             groupId: group_id,
-            administratorId: group.administrator_id,
+            administratorId: ownerId,
             originalMeetingId: id,
             templateTitle: title,
             templatePosterUrl: posterUrl,
@@ -352,7 +358,7 @@ exports.createMeeting = async (req, res) => {
         await Promise.all(
           members.map((m) =>
             createNotification({
-              senderId: administrator_id,
+              senderId: requesterId,
               memberId: m.member_id,
               title: notificationTitle,
               message: notificationMessage,
@@ -487,7 +493,7 @@ exports.getAllMeetings = async (req, res) => {
         ? { whereClause: "", params: [] }
         : {
             whereClause:
-              "WHERE EXISTS (SELECT 1 FROM group_admin ga WHERE ga.group_id = meeting.group_id)",
+              "WHERE EXISTS (SELECT 1 FROM group_admin ga WHERE ga.group_id = meeting.group_id AND ga.user_id = ?)",
             params: [userId],
           };
     let query = "SELECT * FROM meeting";
@@ -777,14 +783,21 @@ exports.updateMeetingById = async (req, res) => {
         if (isWeeklyChanged) {
           try {
             if (isWeeklyNewVal) {
-              if (!originalSeriesId) {
-                const durationMs = newEnd.getTime() - newStart.getTime();
-                await activateWeeklySeries({
-                  seriesId: meeting.series_id,
-                  groupId: group_id || meeting.group_id,
-                  administratorId: meeting.administrator_id,
-                  originalMeetingId: id,
-                  templateTitle: title ?? meeting.title,
+            if (isWeeklyNewVal && !originalSeriesId) {
+              const durationMs = newEnd.getTime() - newStart.getTime();
+              // Get Owner for series template
+              const [ownerRows] = await db.promise().query(
+                "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
+                [group_id || meeting.group_id]
+              );
+              const ownerId = ownerRows.length > 0 ? ownerRows[0].user_id : req.user.id;
+
+              await activateWeeklySeries({
+                seriesId: meeting.series_id,
+                groupId: group_id || meeting.group_id,
+                administratorId: ownerId,
+                originalMeetingId: id,
+                templateTitle: title ?? meeting.title,
                   templatePosterUrl: posterUrl ?? meeting.poster_url,
                   templateDescription: description ?? meeting.description,
                   templateRecording: recording ?? meeting.recording,
@@ -866,10 +879,16 @@ exports.updateMeetingById = async (req, res) => {
           const notificationTitle = "Meeting updated";
           const notificationMessage = `The meeting "${effectiveTitle}" has been updated. New schedule: ${effectiveStart} to ${effectiveEnd}.`;
 
+          // Get a valid sender ID for the notification (Group Owner)
+          const [admins] = await db
+            .promise()
+            .query("SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1", [effectiveGroupId]);
+          const senderId = admins.length > 0 ? admins[0].user_id : req.user.id;
+
           await Promise.all(
             members.map((m) =>
               createNotification({
-                senderId: meeting.administrator_id,
+                senderId: senderId,
                 memberId: m.member_id,
                 title: notificationTitle,
                 message: notificationMessage,
@@ -1216,10 +1235,11 @@ exports.joinMeeting = async (req, res) => {
         message: "Only members of this meeting's group can join the meeting",
       });
     } else if (req.user.role == "Administrator") {
-      if (userId != meeting.administrator_id) {
+      const isMeetingAdminUser = await isMeetingAdmin(userId, meetingId);
+      if (!isMeetingAdminUser) {
         return res.status(403).json({
           success: false,
-          message: "You are not the Administrator of this meeting!",
+          message: "You are not an Administrator of this meeting's group!",
         });
       }
     }

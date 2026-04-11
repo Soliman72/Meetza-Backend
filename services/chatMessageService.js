@@ -37,65 +37,44 @@ const fetchMessageById = async (id) => {
 // Save read status for all group members when a message is sent
 const saveMessageReadStatus = async (messageId, groupId, senderId) => {
   try {
-    // Get all members of the group (administrator + members)
-    const [members] = await db.promise().query(
+    // Get all participants of the group (primary administrator + group_admins + members)
+    const [participants] = await db.promise().query(
       `
         SELECT DISTINCT user_id
         FROM (
           SELECT member_id AS user_id FROM group_membership WHERE group_id = ?
-        ) AS all_members
+          UNION
+          SELECT user_id FROM group_admin WHERE group_id = ?
+          UNION
+          SELECT administrator_id AS user_id FROM \`group\` WHERE id = ?
+        ) AS all_participants
       `,
-      [groupId]
+      [groupId, groupId, groupId]
     );
 
-    if (!members || members.length === 0) {
-      console.warn(`No members found for group ${groupId}`);
+    if (!participants || participants.length === 0) {
+      console.warn(`No participants found for group ${groupId}`);
       return;
     }
 
     const now = new Date();
-    const readStatusRecords = [];
+    
+    // Create status records for each participant
+    const values = participants.map((p) => [
+      uuidv4(),
+      messageId,
+      p.user_id,
+      p.user_id === senderId ? 1 : 0,
+      p.user_id === senderId ? now : null
+    ]);
 
-    // Create read status records for each member
-    for (const member of members) {
-      const userId = member.user_id;
-      const isRead = userId === senderId ? 1 : 0; // Sender has read status = 1, others = 0
-      const readAt = userId === senderId ? now : null;
-
-      const statusId = uuidv4();
-      readStatusRecords.push({
-        id: statusId,
-        message_id: messageId,
-        user_id: userId,
-        is_read: isRead,
-        read_at: readAt,
-        created_at: now,
-      });
-    }
-
-    // Insert all read status records one by one (sequential)
-    for (const record of readStatusRecords) {
-      try {
-        await db.promise().query(
-          `
-          INSERT INTO message_read_status 
-          (id, message_id, user_id, is_read, read_at) 
-          VALUES (? , ? , ? , ? , ?)
-        `,
-          [
-            record.id,
-            record.message_id,
-            record.user_id,
-            record.is_read,
-            record.read_at,
-          ]
-        );
-        // Log the result of the DB query (e.g., number of affected rows)
-        console.log("Record inserted:", record);
-      } catch (error) {
-        console.error("Error inserting record:", record, error);
-      }
-    }
+    // Bulk insert read status records
+    await db.promise().query(
+      `INSERT INTO message_read_status (id, message_id, user_id, is_read, read_at) VALUES ?`,
+      [values]
+    );
+    
+    console.log(`Read status records created for ${values.length} participants.`);
   } catch (error) {
     console.error("Error saving message read status:", error);
     // Don't throw error - message is already saved, read status is optional
@@ -167,38 +146,43 @@ const getMessages = async (groupId, { limit = 50, before, userId } = {}) => {
     params
   );
 
-  const messages = await Promise.all(
-    rows.map(async (message) => {
-      const [mediaRows] = await db
-        .promise()
-        .query("SELECT * FROM group_message_media WHERE message_id = ?", [
-          message.id,
-        ]);
+  if (rows.length === 0) return [];
 
-      // Get read status for the user if userId is provided
-      let isRead = false;
-      let readAt = null;
-      if (userId) {
-        const [readStatus] = await db
-          .promise()
-          .query(
-            "SELECT is_read, read_at FROM message_read_status WHERE message_id = ? AND user_id = ?",
-            [message.id, userId]
-          );
-        if (readStatus.length > 0) {
-          isRead = readStatus[0].is_read === 1;
-          readAt = readStatus[0].read_at;
-        }
-      }
+  const messageIds = rows.map((m) => m.id);
 
-      return {
-        ...message,
-        media: mediaRows || [],
-        is_read: isRead,
-        read_at: readAt,
-      };
-    })
-  );
+  // Fetch all media for these messages in a single query
+  const [allMedia] = await db
+    .promise()
+    .query("SELECT * FROM group_message_media WHERE message_id IN (?)", [messageIds]);
+
+  const mediaByMessageId = allMedia.reduce((acc, media) => {
+    if (!acc[media.message_id]) acc[media.message_id] = [];
+    acc[media.message_id].push(media);
+    return acc;
+  }, {});
+
+  // Fetch all read statuses for these messages if userId is provided
+  let readStatusesByMessageId = {};
+  if (userId) {
+    const [allReadStatus] = await db.promise().query(
+      "SELECT message_id, is_read, read_at FROM message_read_status WHERE user_id = ? AND message_id IN (?)",
+      [userId, messageIds]
+    );
+    readStatusesByMessageId = allReadStatus.reduce((acc, status) => {
+      acc[status.message_id] = status;
+      return acc;
+    }, {});
+  }
+
+  const messages = rows.map((message) => {
+    const status = readStatusesByMessageId[message.id];
+    return {
+      ...message,
+      media: mediaByMessageId[message.id] || [],
+      is_read: status ? status.is_read === 1 : false,
+      read_at: status ? status.read_at : null,
+    };
+  });
 
   return messages.reverse();
 };
@@ -333,29 +317,39 @@ const getReadMessages = async (
     params
   );
 
-  const messages = await Promise.all(
-    rows.map(async (message) => {
-      const [mediaRows] = await db
-        .promise()
-        .query("SELECT * FROM group_message_media WHERE message_id = ?", [
-          message.id,
-        ]);
+  if (rows.length === 0) return [];
 
-      const [readStatus] = await db
-        .promise()
-        .query(
-          "SELECT read_at FROM message_read_status WHERE message_id = ? AND user_id = ?",
-          [message.id, userId]
-        );
+  const messageIds = rows.map((m) => m.id);
 
-      return {
-        ...message,
-        media: mediaRows || [],
-        is_read: true,
-        read_at: readStatus[0]?.read_at || null,
-      };
-    })
+  // Fetch all media in bulk
+  const [allMedia] = await db
+    .promise()
+    .query("SELECT * FROM group_message_media WHERE message_id IN (?)", [messageIds]);
+
+  const mediaByMessageId = allMedia.reduce((acc, media) => {
+    if (!acc[media.message_id]) acc[media.message_id] = [];
+    acc[media.message_id].push(media);
+    return acc;
+  }, {});
+
+  // Fetch read status for this specific user in bulk
+  const [allReadStatus] = await db.promise().query(
+    "SELECT message_id, read_at FROM message_read_status WHERE user_id = ? AND message_id IN (?)",
+    [userId, messageIds]
   );
+  const readStatusesByMessageId = allReadStatus.reduce((acc, status) => {
+    acc[status.message_id] = status;
+    return acc;
+  }, {});
+
+  const messages = rows.map((message) => {
+    return {
+      ...message,
+      media: mediaByMessageId[message.id] || [],
+      is_read: true,
+      read_at: readStatusesByMessageId[message.id]?.read_at || null,
+    };
+  });
 
   return messages.reverse();
 };
@@ -405,29 +399,40 @@ const getUnreadMessages = async (
     params
   );
 
-  const messages = await Promise.all(
-    rows.map(async (message) => {
-      const [mediaRows] = await db
-        .promise()
-        .query("SELECT * FROM group_message_media WHERE message_id = ?", [
-          message.id,
-        ]);
+  if (rows.length === 0) return [];
 
-      const [readStatus] = await db
-        .promise()
-        .query(
-          "SELECT is_read, read_at FROM message_read_status WHERE message_id = ? AND user_id = ?",
-          [message.id, userId]
-        );
+  const messageIds = rows.map((m) => m.id);
 
-      return {
-        ...message,
-        media: mediaRows || [],
-        is_read: readStatus.length > 0 ? readStatus[0].is_read === 1 : false,
-        read_at: readStatus[0]?.read_at || null,
-      };
-    })
+  // Fetch all media in bulk
+  const [allMedia] = await db
+    .promise()
+    .query("SELECT * FROM group_message_media WHERE message_id IN (?)", [messageIds]);
+
+  const mediaByMessageId = allMedia.reduce((acc, media) => {
+    if (!acc[media.message_id]) acc[media.message_id] = [];
+    acc[media.message_id].push(media);
+    return acc;
+  }, {});
+
+  // Fetch read status in bulk
+  const [allReadStatus] = await db.promise().query(
+    "SELECT message_id, is_read, read_at FROM message_read_status WHERE user_id = ? AND message_id IN (?)",
+    [userId, messageIds]
   );
+  const readStatusesByMessageId = allReadStatus.reduce((acc, status) => {
+    acc[status.message_id] = status;
+    return acc;
+  }, {});
+
+  const messages = rows.map((message) => {
+    const status = readStatusesByMessageId[message.id];
+    return {
+      ...message,
+      media: mediaByMessageId[message.id] || [],
+      is_read: status ? status.is_read === 1 : false,
+      read_at: status ? status.read_at : null,
+    };
+  });
 
   return messages.reverse();
 };

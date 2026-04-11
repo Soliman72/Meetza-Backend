@@ -77,31 +77,45 @@ exports.createGroup = async (req, res) => {
             message: "semester must be Fall, Spring, or Summer",
           });
         }
-        let admin_id;
+        // Resolve administrators to be assigned
+        let adminIds = [];
         if (req.user.role === "Super_Admin") {
-          admin_id = administrator_id;
-          if (!administrator_id) {
+          if (administrator_ids && Array.isArray(administrator_ids)) {
+            adminIds = administrator_ids;
+          } else if (administrator_id) {
+            adminIds = [administrator_id];
+          }
+
+          if (adminIds.length === 0) {
             return res.status(400).json({
               success: false,
-              message: "administrator_id is required",
+              message: "at least one administrator_id is required",
             });
           }
         } else if (req.user.role === "Administrator") {
-          admin_id = req.user.id;
+          adminIds = [req.user.id];
+          if (administrator_ids && Array.isArray(administrator_ids)) {
+            adminIds = [...new Set([...adminIds, ...administrator_ids])];
+          } else if (administrator_id) {
+            adminIds = [...new Set([...adminIds, administrator_id])];
+          }
         } else {
           return res.status(400).json({
             success: false,
             message: "Invalid role",
           });
         }
-        if (admin_id) {
-          const [adminRows] = await db
+
+        // Validate all admin IDs exist
+        if (adminIds.length > 0) {
+          const [validAdmins] = await db
             .promise()
-            .query("SELECT * FROM administrator WHERE user_id = ?", [admin_id]);
-          if (adminRows.length === 0) {
+            .query("SELECT user_id FROM administrator WHERE user_id IN (?)", [adminIds]);
+          
+          if (validAdmins.length !== adminIds.length) {
             return res.status(400).json({
               success: false,
-              message: "Invalid admin_id: not found",
+              message: "One or more administrator IDs are invalid or not found",
             });
           }
         }
@@ -137,12 +151,15 @@ exports.createGroup = async (req, res) => {
             semester,
           ]);
 
-        await assignGroupAdmin({
-          groupId: id,
-          userId: admin_id,
-          role: "OWNER",
-          assignedBy: req.user.id,
-        });
+        // Assign administrators
+        for (let i = 0; i < adminIds.length; i++) {
+          await assignGroupAdmin({
+            groupId: id,
+            userId: adminIds[i],
+            role: i === 0 ? "OWNER" : "ADMIN", // First ID is OWNER, others are ADMIN
+            assignedBy: req.user.id,
+          });
+        }
 
         // Create group content if group_content_name is provided
         const content_body = {
@@ -432,20 +449,25 @@ exports.deleteGroup = async (req, res) => {
 exports.addGroupAdmin = async (req, res) => {
   try {
     const { id: groupId } = req.params;
-    const { email, role = "ADMIN" } = req.body;
-    if (!email) {
+    const { email, emails, role = "ADMIN" } = req.body;
+    
+    // Support both single email and array of emails
+    const targetEmails = emails && Array.isArray(emails) ? emails : email ? [email] : [];
+
+    if (targetEmails.length === 0) {
       return res
         .status(400)
-        .json({ success: false, message: "email is required" });
+        .json({ success: false, message: "At least one email is required" });
     }
+
     if (!["OWNER", "ADMIN"].includes(role)) {
       return res
         .status(400)
         .json({ success: false, message: "role must be OWNER or ADMIN" });
     }
+
     if (!req.isSuperAdmin) {
       const allowed = await isGroupAdmin(req.user.id, groupId);
-
       if (!allowed) {
         return res.status(403).json({
           success: false,
@@ -463,70 +485,59 @@ exports.addGroupAdmin = async (req, res) => {
         .json({ success: false, message: "Group not found" });
     }
 
-    const [targetUserRows] = await db
-      .promise()
-      .query("SELECT id, email, role FROM user WHERE email = ? LIMIT 1", [email]);
-    if (targetUserRows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "email must belong to an existing user",
-      });
-    }
-    if (targetUserRows[0].role !== "Administrator") {
-      return res.status(400).json({
-        success: false,
-        message: "The user must have an Administrator role to be added as a group admin",
-      });
-    }
-    const targetUserId = targetUserRows[0].id;
-    const [assignedByRows] = await db
-      .promise()
-      .query("SELECT id FROM user WHERE id = ? LIMIT 1", [req.user.id]);
-    if (assignedByRows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: "Authenticated requester is invalid",
-      });
-    }
-
-    await assignGroupAdmin({
-      groupId,
-      userId: targetUserId,
-      role,
-      assignedBy: req.user.id,
-    });
+    const results = [];
     const [meetings] = await db
       .promise()
       .query("SELECT id FROM meeting WHERE group_id = ?", [groupId]);
-    await Promise.all(
-      meetings.map((meeting) =>
-        assignMeetingAdmin({
-          meetingId: meeting.id,
+
+    for (const emailAddr of targetEmails) {
+      try {
+        const [targetUserRows] = await db
+          .promise()
+          .query("SELECT id, role FROM user WHERE email = ? LIMIT 1", [emailAddr]);
+        
+        if (targetUserRows.length === 0) {
+          results.push({ email: emailAddr, success: false, message: "User not found" });
+          continue;
+        }
+
+        if (targetUserRows[0].role !== "Administrator") {
+          results.push({ email: emailAddr, success: false, message: "User is not an Administrator" });
+          continue;
+        }
+
+        const targetUserId = targetUserRows[0].id;
+
+        await assignGroupAdmin({
+          groupId,
           userId: targetUserId,
           role,
           assignedBy: req.user.id,
-        }),
-      ),
-    );
-    // check if this group has any meetings
-    const [newMeetings] = await db
-      .promise()
-      .query("SELECT id FROM meeting WHERE group_id = ?", [groupId]);
-    if (newMeetings.length > 0) {
-      await Promise.all(
-        newMeetings.map((meeting) =>
-          assignMeetingAdmin({
-            meetingId: meeting.id,
-            userId: targetUserId,
-            role,
-            assignedBy: req.user.id,
-          }),
-        ),
-      );
+        });
+
+        // Sync with meetings
+        await Promise.all(
+          meetings.map((meeting) =>
+            assignMeetingAdmin({
+              meetingId: meeting.id,
+              userId: targetUserId,
+              role,
+              assignedBy: req.user.id,
+            }),
+          ),
+        );
+
+        results.push({ email: emailAddr, success: true });
+      } catch (innerErr) {
+        results.push({ email: emailAddr, success: false, message: innerErr.message });
+      }
     }
-    return res.status(200).json({
-      success: true,
-      message: "Group admin upserted successfully by email",
+
+    const allSuccessful = results.every(r => r.success);
+    return res.status(allSuccessful ? 200 : 207).json({
+      success: allSuccessful,
+      message: allSuccessful ? "All group admins added successfully" : "Some admins could not be added",
+      data: results,
     });
   } catch (err) {
     return res
@@ -537,22 +548,17 @@ exports.addGroupAdmin = async (req, res) => {
 
 exports.removeGroupAdmin = async (req, res) => {
   try {
-    const { id: groupId, email } = req.params;
-    const targetEmail = email || req.body?.email || req.query?.email;
-    if (!targetEmail) {
+    const { id: groupId } = req.params;
+    const { email, emails } = req.body;
+    
+    const targetEmails = emails && Array.isArray(emails) ? emails : email ? [email] : [];
+
+    if (targetEmails.length === 0) {
       return res
         .status(400)
-        .json({ success: false, message: "email is required" });
+        .json({ success: false, message: "At least one email is required" });
     }
-    const [removerRows] = await db
-      .promise()
-      .query("SELECT user_id FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1", [groupId, req.user.id]);
-    if (removerRows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: "Only group owners can remove admins",
-      });
-    }
+
     if (!req.isSuperAdmin) {
       const allowed = await isGroupAdmin(req.user.id, groupId);
       if (!allowed) {
@@ -563,50 +569,65 @@ exports.removeGroupAdmin = async (req, res) => {
       }
     }
 
-    const [owners] = await db
-      .promise()
-      .query(
-        "SELECT id FROM group_admin WHERE group_id = ? AND role = 'OWNER'",
-        [groupId],
-      );
-    const [targetByUser] = await db.promise().query(
-      `SELECT ga.id, ga.user_id, ga.role, u.email
-         FROM group_admin ga
-         JOIN user u ON u.id = ga.user_id
-         WHERE ga.group_id = ? AND u.email = ? LIMIT 1`,
-      [groupId, targetEmail],
-    );
-    let targetRecord = targetByUser[0];
-    if (!targetRecord) {
-      return res.status(404).json({
-        success: false,
-        message: "Group admin not found for provided email",
-      });
-    }
-    if (targetRecord.role === "OWNER" && owners.length <= 1) {
-      return res.status(409).json({
-        success: false,
-        message: "Cannot remove the last group owner",
-      });
+    const results = [];
+
+    for (const emailAddr of targetEmails) {
+      try {
+        const [targetByUser] = await db.promise().query(
+          `SELECT ga.user_id, ga.role, u.email
+             FROM group_admin ga
+             JOIN user u ON u.id = ga.user_id
+             WHERE ga.group_id = ? AND u.email = ? LIMIT 1`,
+          [groupId, emailAddr],
+        );
+
+        if (targetByUser.length === 0) {
+          results.push({ email: emailAddr, success: false, message: "Admin not found for this group" });
+          continue;
+        }
+
+        const targetRecord = targetByUser[0];
+
+        if (targetRecord.role === "OWNER") {
+          const [owners] = await db
+            .promise()
+            .query(
+              "SELECT id FROM group_admin WHERE group_id = ? AND role = 'OWNER'",
+              [groupId],
+            );
+          
+          if (owners.length <= 1) {
+            results.push({ email: emailAddr, success: false, message: "Cannot remove the last group owner" });
+            continue;
+          }
+        }
+
+        await db
+          .promise()
+          .query("DELETE FROM group_admin WHERE group_id = ? AND user_id = ?", [
+            groupId,
+            targetRecord.user_id,
+          ]);
+        
+        // Revoke meeting admin rights
+        await db.promise().query(
+          `DELETE ma FROM meeting_admin ma
+           JOIN meeting m ON m.id = ma.meeting_id
+           WHERE m.group_id = ? AND ma.user_id = ?`,
+          [groupId, targetRecord.user_id],
+        );
+
+        results.push({ email: emailAddr, success: true });
+      } catch (innerErr) {
+        results.push({ email: emailAddr, success: false, message: innerErr.message });
+      }
     }
 
-    await db
-      .promise()
-      .query("DELETE FROM group_admin WHERE group_id = ? AND user_id = ?", [
-        groupId,
-        targetRecord.user_id,
-      ]);
-    // Cascade: losing group admin removes meeting admin rights in all meetings of the group.
-    await db.promise().query(
-      `DELETE ma FROM meeting_admin ma
-       JOIN meeting m ON m.id = ma.meeting_id
-       WHERE m.group_id = ? AND ma.user_id = ?`,
-      [groupId, targetRecord.user_id],
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: "Group admin removed and meeting admin rights revoked",
+    const anySuccessful = results.some(r => r.success);
+    return res.status(anySuccessful ? 200 : 400).json({
+      success: anySuccessful,
+      message: anySuccessful ? "Operation completed" : "No admins were removed",
+      data: results,
     });
   } catch (err) {
     return res
