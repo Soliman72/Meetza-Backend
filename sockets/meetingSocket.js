@@ -30,21 +30,38 @@ const authenticateSocket = async (socket, next) => {
   }
 };
 
-/** Check if user can access the meeting (group admin or group member) */
+/** Check if user can access the meeting (meeting admin, group admin, group member, or super admin) */
 const canAccessMeeting = async (userId, meetingId) => {
   const [rows] = await db.promise().query(
-    `SELECT m.id, m.group_id, m.administrator_id
+    `SELECT m.id, m.group_id
      FROM meeting m
      WHERE m.id = ?`,
     [meetingId],
   );
   if (!rows.length) return { ok: false, message: "Meeting not found" };
   const meeting = rows[0];
-  if (meeting.administrator_id === userId) return { ok: true, meeting };
+  // Check super admin
   const [userRows] = await db
     .promise()
     .query("SELECT role FROM user WHERE id = ? LIMIT 1", [userId]);
   if (userRows[0]?.role === "Super_Admin") return { ok: true, meeting };
+  // Check meeting admin table
+  const [meetingAdminRows] = await db
+    .promise()
+    .query(
+      "SELECT id FROM meeting_admin WHERE meeting_id = ? AND user_id = ? LIMIT 1",
+      [meetingId, userId],
+    );
+  if (meetingAdminRows.length > 0) return { ok: true, meeting };
+  // Check group admin table
+  const [groupAdminRows] = await db
+    .promise()
+    .query(
+      "SELECT id FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
+      [meeting.group_id, userId],
+    );
+  if (groupAdminRows.length > 0) return { ok: true, meeting };
+  // Check group membership
   const [membership] = await db
     .promise()
     .query(
@@ -73,9 +90,26 @@ const canAdminMuteInMeeting = async (userId, meetingId) => {
     .promise()
     .query("SELECT role FROM user WHERE id = ? LIMIT 1", [userId]);
   if (userRows[0]?.role === "Super_Admin") return true;
-  const access = await canAccessMeeting(userId, meetingId);
-  if (!access.ok) return false;
-  return access.meeting.administrator_id === userId;
+  // Check meeting_admin table
+  const [meetingAdminRows] = await db
+    .promise()
+    .query(
+      "SELECT id FROM meeting_admin WHERE meeting_id = ? AND user_id = ? LIMIT 1",
+      [meetingId, userId],
+    );
+  if (meetingAdminRows.length > 0) return true;
+  // Fallback: check group_admin
+  const [meetingRows] = await db
+    .promise()
+    .query("SELECT group_id FROM meeting WHERE id = ? LIMIT 1", [meetingId]);
+  if (!meetingRows.length) return false;
+  const [groupAdminRows] = await db
+    .promise()
+    .query(
+      "SELECT id FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
+      [meetingRows[0].group_id, userId],
+    );
+  return groupAdminRows.length > 0;
 };
 
 const MEETING_ROOM_PREFIX = "meeting:";

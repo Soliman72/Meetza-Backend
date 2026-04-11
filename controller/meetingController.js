@@ -17,14 +17,13 @@ const {
   isMeetingAdmin,
   assignMeetingAdmin,
 } = require("../utils/resourceAdminAccess");
-const {
-  ensureGroupAccess,
-  GroupAccessError,
-} = require("../utils/groupAccess");
+const { ensureGroupAccess, GroupAccessError } = require("../utils/groupAccess");
 
 async function attachAdminsToMeetings(meetings) {
   if (!Array.isArray(meetings) || meetings.length === 0) return meetings;
-  const groupIds = [...new Set(meetings.map((m) => m.group_id).filter(Boolean))];
+  const groupIds = [
+    ...new Set(meetings.map((m) => m.group_id).filter(Boolean)),
+  ];
   if (groupIds.length === 0) {
     return meetings.map((meeting) => ({ ...meeting, admins: [] }));
   }
@@ -295,10 +294,9 @@ exports.createMeeting = async (req, res) => {
 
       const [groupAdmins] = await db
         .promise()
-        .query(
-          "SELECT user_id, role FROM group_admin WHERE group_id = ?",
-          [group_id],
-        );
+        .query("SELECT user_id, role FROM group_admin WHERE group_id = ?", [
+          group_id,
+        ]);
       await Promise.all(
         groupAdmins.map((admin) =>
           assignMeetingAdmin({
@@ -313,11 +311,14 @@ exports.createMeeting = async (req, res) => {
       if (isWeekly) {
         const durationMs = end.getTime() - start.getTime();
         // Fetch group owner for recurrence template
-        const [ownerResults] = await db.promise().query(
-          "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
-          [group_id]
-        );
-        const ownerId = ownerResults.length > 0 ? ownerResults[0].user_id : requesterId;
+        const [ownerResults] = await db
+          .promise()
+          .query(
+            "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
+            [group_id],
+          );
+        const ownerId =
+          ownerResults.length > 0 ? ownerResults[0].user_id : requesterId;
 
         try {
           await activateWeeklySeries({
@@ -582,7 +583,9 @@ exports.getMeetingById = async (req, res) => {
 
     if (isSuperAdmin || isMeetingAdminUser) {
       const meetingsWithAdmins = await attachAdminsToMeetings([meeting]);
-      return res.status(200).json({ success: true, data: meetingsWithAdmins[0] });
+      return res
+        .status(200)
+        .json({ success: true, data: meetingsWithAdmins[0] });
     }
 
     const [membership] = await db
@@ -593,7 +596,9 @@ exports.getMeetingById = async (req, res) => {
       );
     if (membership.length > 0) {
       const meetingsWithAdmins = await attachAdminsToMeetings([meeting]);
-      return res.status(200).json({ success: true, data: meetingsWithAdmins[0] });
+      return res
+        .status(200)
+        .json({ success: true, data: meetingsWithAdmins[0] });
     }
 
     return res.status(403).json({
@@ -783,21 +788,24 @@ exports.updateMeetingById = async (req, res) => {
         if (isWeeklyChanged) {
           try {
             if (isWeeklyNewVal) {
-            if (isWeeklyNewVal && !originalSeriesId) {
-              const durationMs = newEnd.getTime() - newStart.getTime();
-              // Get Owner for series template
-              const [ownerRows] = await db.promise().query(
-                "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
-                [group_id || meeting.group_id]
-              );
-              const ownerId = ownerRows.length > 0 ? ownerRows[0].user_id : req.user.id;
+              if (isWeeklyNewVal && !originalSeriesId) {
+                const durationMs = newEnd.getTime() - newStart.getTime();
+                // Get Owner for series template
+                const [ownerRows] = await db
+                  .promise()
+                  .query(
+                    "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
+                    [group_id || meeting.group_id],
+                  );
+                const ownerId =
+                  ownerRows.length > 0 ? ownerRows[0].user_id : req.user.id;
 
-              await activateWeeklySeries({
-                seriesId: meeting.series_id,
-                groupId: group_id || meeting.group_id,
-                administratorId: ownerId,
-                originalMeetingId: id,
-                templateTitle: title ?? meeting.title,
+                await activateWeeklySeries({
+                  seriesId: meeting.series_id,
+                  groupId: group_id || meeting.group_id,
+                  administratorId: ownerId,
+                  originalMeetingId: id,
+                  templateTitle: title ?? meeting.title,
                   templatePosterUrl: posterUrl ?? meeting.poster_url,
                   templateDescription: description ?? meeting.description,
                   templateRecording: recording ?? meeting.recording,
@@ -882,7 +890,10 @@ exports.updateMeetingById = async (req, res) => {
           // Get a valid sender ID for the notification (Group Owner)
           const [admins] = await db
             .promise()
-            .query("SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1", [effectiveGroupId]);
+            .query(
+              "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
+              [effectiveGroupId],
+            );
           const senderId = admins.length > 0 ? admins[0].user_id : req.user.id;
 
           await Promise.all(
@@ -1163,7 +1174,9 @@ exports.deleteMeetingById = async (req, res) => {
 
       const [admins] = await db
         .promise()
-        .query("SELECT user_id FROM group_admin WHERE group_id = ? LIMIT 1", [meeting.group_id]);
+        .query("SELECT user_id FROM group_admin WHERE group_id = ? LIMIT 1", [
+          meeting.group_id,
+        ]);
       const adminId = admins[0].user_id;
       await Promise.all(
         members.map((m) =>
@@ -1213,8 +1226,8 @@ exports.joinMeeting = async (req, res) => {
     const [meetingRows] = await db
       .promise()
       .query(
-        "SELECT m.*, ga.user_id AS group_admin_id FROM meeting m JOIN group_admin ga ON ga.group_id = m.group_id AND ga.user_id = ? WHERE m.id = ?",
-        [userId, meetingId],
+        "SELECT * FROM meeting WHERE id = ?",
+        [meetingId],
       );
     if (meetingRows.length === 0) {
       return res
