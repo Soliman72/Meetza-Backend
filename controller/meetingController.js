@@ -24,28 +24,60 @@ async function attachAdminsToMeetings(meetings) {
   const groupIds = [
     ...new Set(meetings.map((m) => m.group_id).filter(Boolean)),
   ];
-  if (groupIds.length === 0) {
-    return meetings.map((meeting) => ({ ...meeting, admins: [] }));
+  const meetingIds = [...new Set(meetings.map((m) => m.id).filter(Boolean))];
+
+  let adminsByGroup = {};
+  if (groupIds.length > 0) {
+    const placeholders = groupIds.map(() => "?").join(",");
+    const [admins] = await db.promise().query(
+      `SELECT ga.group_id, ga.user_id AS group_admin_id, ga.role, ga.assigned_by, ga.created_at,
+              u.name, u.email, u.user_photo
+       FROM group_admin ga
+       JOIN user u ON u.id = ga.user_id
+       WHERE ga.group_id IN (${placeholders})
+       ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
+      groupIds,
+    );
+    adminsByGroup = admins.reduce((acc, row) => {
+      if (!acc[row.group_id]) acc[row.group_id] = [];
+      acc[row.group_id].push(row);
+      return acc;
+    }, {});
   }
-  const placeholders = groupIds.map(() => "?").join(",");
-  const [admins] = await db.promise().query(
-    `SELECT ga.group_id, ga.user_id AS group_admin_id, ga.role, ga.assigned_by, ga.created_at,
-            u.name, u.email, u.user_photo
-     FROM group_admin ga
-     JOIN user u ON u.id = ga.user_id
-     WHERE ga.group_id IN (${placeholders})
-     ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
-    groupIds,
-  );
-  const adminsByGroup = admins.reduce((acc, row) => {
-    if (!acc[row.group_id]) acc[row.group_id] = [];
-    acc[row.group_id].push(row);
-    return acc;
-  }, {});
-  return meetings.map((meeting) => ({
-    ...meeting,
-    admins: adminsByGroup[meeting.group_id] || [],
-  }));
+
+  let meetingAdminByMeetingId = {};
+  if (meetingIds.length > 0) {
+    const mph = meetingIds.map(() => "?").join(",");
+    const [maRows] = await db.promise().query(
+      `SELECT meeting_id, user_id FROM meeting_admin WHERE meeting_id IN (${mph})`,
+      meetingIds,
+    );
+    meetingAdminByMeetingId = (maRows || []).reduce((acc, row) => {
+      if (!acc[row.meeting_id]) acc[row.meeting_id] = [];
+      acc[row.meeting_id].push(row.user_id);
+      return acc;
+    }, {});
+  }
+
+  return meetings.map((meeting) => {
+    const groupAdmins = adminsByGroup[meeting.group_id] || [];
+    const maUsers = meetingAdminByMeetingId[meeting.id] || [];
+    const seen = new Set(groupAdmins.map((r) => String(r.group_admin_id)));
+    const merged = [...groupAdmins];
+    for (const uid of maUsers) {
+      const s = String(uid);
+      if (seen.has(s)) continue;
+      seen.add(s);
+      merged.push({
+        group_admin_id: uid,
+        role: "MEETING_ADMIN",
+      });
+    }
+    return {
+      ...meeting,
+      admins: merged,
+    };
+  });
 }
 
 function parseWeeklyFlag(raw) {
