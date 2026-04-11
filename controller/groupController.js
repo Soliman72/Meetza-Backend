@@ -35,6 +35,49 @@ async function attachAdminsToGroups(groups) {
   }));
 }
 
+/**
+ * Extracts an array from request body supporting standard arrays, 
+ * JSON strings, comma-separated strings, and indexed form-data keys (e.g., key[0], key[1]).
+ */
+function extractArray(body, key) {
+  if (!body) return [];
+  let result = [];
+
+  // 1. Handle direct key (could be array or string)
+  if (body[key]) {
+    const val = body[key];
+    if (Array.isArray(val)) {
+      result = result.concat(val);
+    } else if (typeof val === "string") {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) result = result.concat(parsed);
+        else result.push(val);
+      } catch (e) {
+        // Fallback to comma-separated
+        result = result.concat(val.split(",").map((s) => s.trim()).filter((s) => !!s));
+      }
+    } else {
+      result.push(val);
+    }
+  }
+
+  // 2. Handle indexed keys like key[0], key[1] or key[]
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`^${escapedKey}\\[\\d*\\]$`);
+
+  Object.keys(body).forEach((k) => {
+    if (regex.test(k)) {
+      const val = body[k];
+      if (val !== undefined && val !== null) {
+        result.push(val);
+      }
+    }
+  });
+
+  return [...new Set(result.map((i) => i.toString().trim()))];
+}
+
 // Create
 exports.createGroup = async (req, res) => {
   upload.fields([{ name: "group_photo", maxCount: 1 }])(
@@ -77,32 +120,31 @@ exports.createGroup = async (req, res) => {
             message: "semester must be Fall, Spring, or Summer",
           });
         }
+        // Use the new extractArray utility to handle administrator_ids from various formats
+        let inputIds = extractArray(req.body, "administrator_ids");
+
+        // Also add the singular administrator_id if provided
+        if (administrator_id) {
+          inputIds.push(administrator_id.toString().trim());
+        }
+
         // Resolve administrators to be assigned
         let adminIds = [];
         if (req.user.role === "Super_Admin") {
-          if (administrator_ids && Array.isArray(administrator_ids)) {
-            adminIds = administrator_ids;
-          } else if (administrator_id) {
-            adminIds = [administrator_id];
-          }
-
+          adminIds = [...new Set(inputIds)];
           if (adminIds.length === 0) {
             return res.status(400).json({
               success: false,
-              message: "at least one administrator_id is required",
+              message: "at least one administrator_id or administrator_ids is required",
             });
           }
         } else if (req.user.role === "Administrator") {
-          adminIds = [req.user.id];
-          if (administrator_ids && Array.isArray(administrator_ids)) {
-            adminIds = [...new Set([...adminIds, ...administrator_ids])];
-          } else if (administrator_id) {
-            adminIds = [...new Set([...adminIds, administrator_id])];
-          }
+          // Administrators are always added as an owner/admin of their own groups
+          adminIds = [...new Set([req.user.id, ...inputIds])];
         } else {
-          return res.status(400).json({
+          return res.status(403).json({
             success: false,
-            message: "Invalid role",
+            message: "Only Administrators or Super_Admins can create groups",
           });
         }
 
@@ -111,7 +153,7 @@ exports.createGroup = async (req, res) => {
           const [validAdmins] = await db
             .promise()
             .query("SELECT user_id FROM administrator WHERE user_id IN (?)", [adminIds]);
-          
+
           if (validAdmins.length !== adminIds.length) {
             return res.status(400).json({
               success: false,
@@ -450,9 +492,11 @@ exports.addGroupAdmin = async (req, res) => {
   try {
     const { id: groupId } = req.params;
     const { email, emails, role = "ADMIN" } = req.body;
-    
-    // Support both single email and array of emails
-    const targetEmails = emails && Array.isArray(emails) ? emails : email ? [email] : [];
+
+    // Support both single email and array of emails (potentially from indexed form-data keys or formatted strings)
+    let targetEmails = extractArray(req.body, "emails");
+    if (email) targetEmails.push(email.toString().trim());
+    targetEmails = [...new Set(targetEmails)];
 
     if (targetEmails.length === 0) {
       return res
@@ -495,7 +539,7 @@ exports.addGroupAdmin = async (req, res) => {
         const [targetUserRows] = await db
           .promise()
           .query("SELECT id, role FROM user WHERE email = ? LIMIT 1", [emailAddr]);
-        
+
         if (targetUserRows.length === 0) {
           results.push({ email: emailAddr, success: false, message: "User not found" });
           continue;
@@ -550,8 +594,11 @@ exports.removeGroupAdmin = async (req, res) => {
   try {
     const { id: groupId } = req.params;
     const { email, emails } = req.body;
-    
-    const targetEmails = emails && Array.isArray(emails) ? emails : email ? [email] : [];
+
+    // Support both single email and array of emails (potentially from indexed form-data keys or formatted strings)
+    let targetEmails = extractArray(req.body, "emails");
+    if (email) targetEmails.push(email.toString().trim());
+    targetEmails = [...new Set(targetEmails)];
 
     if (targetEmails.length === 0) {
       return res
@@ -595,7 +642,7 @@ exports.removeGroupAdmin = async (req, res) => {
               "SELECT id FROM group_admin WHERE group_id = ? AND role = 'OWNER'",
               [groupId],
             );
-          
+
           if (owners.length <= 1) {
             results.push({ email: emailAddr, success: false, message: "Cannot remove the last group owner" });
             continue;
@@ -608,7 +655,7 @@ exports.removeGroupAdmin = async (req, res) => {
             groupId,
             targetRecord.user_id,
           ]);
-        
+
         // Revoke meeting admin rights
         await db.promise().query(
           `DELETE ma FROM meeting_admin ma
