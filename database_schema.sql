@@ -559,7 +559,7 @@ CREATE TABLE IF NOT EXISTS `message_reaction` (
     `emoji`      VARCHAR(20) NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `unique_message_user_emoji` (`message_id`, `user_id`, `emoji`),
+    UNIQUE KEY `unique_message_user` (`message_id`, `user_id`),
     INDEX `idx_reaction_message_id` (`message_id`),
     INDEX `idx_reaction_user_id`    (`user_id`),
     CONSTRAINT `fk_reaction_message`
