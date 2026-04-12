@@ -31,6 +31,7 @@ const { initNotificationSocket } = require("./services/notificationService");
 const registerNotificationSocket = require("./sockets/notificationSocket");
 const notificationRouter = require("./router/notificationRouter");
 const contactRouter = require("./router/contactRouter");
+const homeRouter = require("./router/homeRouter");
 const os = require("os");
 const fs = require("fs");
 
@@ -154,6 +155,7 @@ app.use("/api/saved_video", saved_videoRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
+app.use("/api/home", homeRouter);
 
 
 // Get local IP address for network access

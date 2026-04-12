@@ -562,6 +562,51 @@ const getUnreadCount = async (groupId, userId) => {
   return rows[0]?.unread_count || 0;
 };
 
+/**
+ * SQL + param factory for total unread messages (home dashboard).
+ * Matches getUnreadCount logic; Super_Admin: all groups; others: admin or membership groups only.
+ */
+const buildUnreadTotalQuery = (role) => {
+  const unreadCondition = `
+    gm.sender_id != ?
+    AND (
+      NOT EXISTS (
+        SELECT 1 FROM message_read_status mrs
+        WHERE mrs.message_id = gm.id AND mrs.user_id = ?
+      )
+      OR EXISTS (
+        SELECT 1 FROM message_read_status mrs
+        WHERE mrs.message_id = gm.id AND mrs.user_id = ? AND mrs.is_read = 0
+      )
+    )
+  `;
+  if (role === "Super_Admin") {
+    return {
+      sql: `SELECT COUNT(*) AS c FROM group_message gm WHERE ${unreadCondition}`,
+      params: (userId) => [userId, userId, userId],
+    };
+  }
+  return {
+    sql: `
+      SELECT COUNT(*) AS c
+      FROM group_message gm
+      WHERE ${unreadCondition}
+        AND gm.group_id IN (
+          SELECT g.id FROM \`group\` g
+          WHERE EXISTS (
+            SELECT 1 FROM group_admin ga
+            WHERE ga.group_id = g.id AND ga.user_id = ?
+          )
+          OR EXISTS (
+            SELECT 1 FROM group_membership gm2
+            WHERE gm2.group_id = g.id AND gm2.member_id = ?
+          )
+        )
+    `,
+    params: (userId) => [userId, userId, userId, userId, userId],
+  };
+};
+
 // ─── Reactions ────────────────────────────────────────────────────────────────
 
 /**
@@ -614,6 +659,7 @@ module.exports = {
   getReadMessages,
   getUnreadMessages,
   getUnreadCount,
+  buildUnreadTotalQuery,
   toggleReaction,
   getReactions,
 };
