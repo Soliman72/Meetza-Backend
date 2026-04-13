@@ -224,6 +224,9 @@ router.delete(
   groupController.deleteGroup,
 );
 
+// Leave a group (member/admin). If last admin, requires assigning a new admin first.
+router.post("/:id/leave", verifyToken, groupController.leaveGroup);
+
 /**
  * @swagger
  * /api/group/{id}/admins:

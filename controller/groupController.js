@@ -8,6 +8,7 @@ const {
   assignGroupAdmin,
   assignMeetingAdmin,
 } = require("../utils/resourceAdminAccess");
+const { ensureGroupAccess, GroupAccessError } = require("../utils/groupAccess");
 
 async function attachAdminsToGroups(groups) {
   if (!Array.isArray(groups) || groups.length === 0) return groups;
@@ -680,5 +681,186 @@ exports.removeGroupAdmin = async (req, res) => {
     return res
       .status(500)
       .json({ success: false, message: "Database error", error: err.message });
+  }
+};
+
+// Leave group (member or admin). If the caller is the last admin, they must assign a new admin before leaving.
+// POST /api/group/:id/leave  body: { new_admin_id?: string, new_admin_role?: 'OWNER'|'ADMIN' }
+exports.leaveGroup = async (req, res) => {
+  const groupId = req.params.id;
+  const userId = req.user?.id;
+  if (!userId || !groupId) {
+    return res.status(400).json({
+      success: false,
+      message: "group id is required and user must be authenticated",
+    });
+  }
+
+  const { new_admin_id, new_admin_role } = req.body || {};
+
+  const conn = await db.promise().getConnection();
+  try {
+    // Ensure user has access to the group (admin or member). Gives clearer errors.
+    try {
+      await ensureGroupAccess(userId, groupId);
+    } catch (e) {
+      if (e instanceof GroupAccessError) {
+        return res
+          .status(e.statusCode)
+          .json({ success: false, message: e.message });
+      }
+      throw e;
+    }
+
+    // Determine if user is a group admin
+    const [myAdminRows] = await conn.query(
+      "SELECT role FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
+      [groupId, userId],
+    );
+    const isAdmin = myAdminRows.length > 0;
+    const myAdminRole = isAdmin ? myAdminRows[0].role : null;
+
+    // If admin, enforce last-admin rule
+    if (isAdmin) {
+      const [otherAdminsCountRows] = await conn.query(
+        "SELECT COUNT(*) AS c FROM group_admin WHERE group_id = ? AND user_id <> ?",
+        [groupId, userId],
+      );
+      const otherAdmins = Number(otherAdminsCountRows[0]?.c) || 0;
+
+      if (otherAdmins === 0) {
+        if (!new_admin_id) {
+          // Send candidates list for modal (all administrators except me)
+          const [candidates] = await conn.query(
+            `SELECT u.id, u.name, u.user_photo
+             FROM administrator a
+             JOIN user u ON u.id = a.user_id
+             WHERE u.id <> ?
+             ORDER BY u.name ASC
+             LIMIT 50`,
+            [userId],
+          );
+
+          return res.status(409).json({
+            success: false,
+            code: "LAST_ADMIN_ASSIGN_REQUIRED",
+            message:
+              "You are the last admin in this group. Assign a new admin before leaving.",
+            data: {
+              group_id: groupId,
+              current_admin_role: myAdminRole,
+              candidates,
+            },
+          });
+        }
+
+        // Validate target admin exists and is Administrator
+        const [validAdmin] = await conn.query(
+          "SELECT user_id FROM administrator WHERE user_id = ? LIMIT 1",
+          [new_admin_id],
+        );
+        if (validAdmin.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "new_admin_id must be an Administrator user",
+          });
+        }
+
+        const roleToAssign =
+          new_admin_role && ["OWNER", "ADMIN"].includes(new_admin_role)
+            ? new_admin_role
+            : myAdminRole === "OWNER"
+              ? "OWNER"
+              : "ADMIN";
+
+        await conn.beginTransaction();
+
+        // Assign new admin
+        await conn.query(
+          `INSERT INTO group_admin (id, group_id, user_id, role, assigned_by)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE role = VALUES(role), assigned_by = VALUES(assigned_by)`,
+          [uuidv4(), groupId, new_admin_id, roleToAssign, userId],
+        );
+
+        // Sync meeting admin rights for all meetings in this group
+        const [meetingIds] = await conn.query(
+          "SELECT id FROM meeting WHERE group_id = ?",
+          [groupId],
+        );
+        for (const m of meetingIds) {
+          await conn.query(
+            `INSERT INTO meeting_admin (id, meeting_id, user_id, role, assigned_by)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE role = VALUES(role), assigned_by = VALUES(assigned_by)`,
+            [uuidv4(), m.id, new_admin_id, roleToAssign, userId],
+          );
+        }
+
+        // Remove current admin
+        await conn.query("DELETE FROM group_admin WHERE group_id = ? AND user_id = ?", [
+          groupId,
+          userId,
+        ]);
+        await conn.query(
+          `DELETE ma FROM meeting_admin ma
+           JOIN meeting m ON m.id = ma.meeting_id
+           WHERE m.group_id = ? AND ma.user_id = ?`,
+          [groupId, userId],
+        );
+
+        // Remove membership if exists (some setups might add admins as members too)
+        await conn.query(
+          "DELETE FROM group_membership WHERE group_id = ? AND member_id = ?",
+          [groupId, userId],
+        );
+
+        await conn.commit();
+
+        return res.status(200).json({
+          success: true,
+          message: "Left group successfully",
+          data: {
+            group_id: groupId,
+            assigned_new_admin: { id: new_admin_id, role: roleToAssign },
+          },
+        });
+      }
+    }
+
+    // Normal leave (not last admin): remove membership and/or admin record
+    await conn.beginTransaction();
+    await conn.query("DELETE FROM group_membership WHERE group_id = ? AND member_id = ?", [
+      groupId,
+      userId,
+    ]);
+    await conn.query("DELETE FROM group_admin WHERE group_id = ? AND user_id = ?", [
+      groupId,
+      userId,
+    ]);
+    await conn.query(
+      `DELETE ma FROM meeting_admin ma
+       JOIN meeting m ON m.id = ma.meeting_id
+       WHERE m.group_id = ? AND ma.user_id = ?`,
+      [groupId, userId],
+    );
+    await conn.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "Left group successfully",
+      data: { group_id: groupId },
+    });
+  } catch (err) {
+    try {
+      await conn.rollback();
+    } catch (_e) {}
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
+  } finally {
+    conn.release();
   }
 };
