@@ -363,6 +363,27 @@ CREATE TABLE IF NOT EXISTS `saved_video` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
+-- 13a. VIDEO WATCH PROGRESS (per user; home "Watching" / "Completed")
+-- =============================================
+CREATE TABLE IF NOT EXISTS `video_watch_progress` (
+    `user_id` VARCHAR(36) NOT NULL,
+    `video_id` VARCHAR(36) NOT NULL,
+    `progress_seconds` INT UNSIGNED NOT NULL DEFAULT 0,
+    `completed` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = user finished or marked complete',
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`user_id`, `video_id`),
+    INDEX `idx_video_watch_progress_video` (`video_id`),
+    CONSTRAINT `fk_video_watch_progress_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_video_watch_progress_video`
+        FOREIGN KEY (`video_id`) REFERENCES `video`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
 -- 14. NOTIFICATIONS TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `notifications` (
