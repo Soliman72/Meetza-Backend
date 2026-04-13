@@ -730,12 +730,13 @@ exports.leaveGroup = async (req, res) => {
 
       if (otherAdmins === 0) {
         if (!new_admin_id) {
-          // Send candidates list for modal (all administrators except me)
-          const [candidates] = await conn.query(
+          // Only platform Administrators (same rule as addGroupAdmin), excluding self
+          const [admins] = await conn.query(
             `SELECT u.id, u.name, u.user_photo
              FROM administrator a
-             JOIN user u ON u.id = a.user_id
+             INNER JOIN user u ON u.id = a.user_id
              WHERE u.id <> ?
+               AND u.role = 'Administrator'
              ORDER BY u.name ASC
              LIMIT 50`,
             [userId],
@@ -749,14 +750,18 @@ exports.leaveGroup = async (req, res) => {
             data: {
               group_id: groupId,
               current_admin_role: myAdminRole,
-              candidates,
+              admins,
             },
           });
         }
 
-        // Validate target admin exists and is Administrator
+        // Must be in administrator table AND user.role = Administrator (not Super_Admin / Member)
         const [validAdmin] = await conn.query(
-          "SELECT user_id FROM administrator WHERE user_id = ? LIMIT 1",
+          `SELECT a.user_id
+           FROM administrator a
+           INNER JOIN user u ON u.id = a.user_id
+           WHERE a.user_id = ? AND u.role = 'Administrator'
+           LIMIT 1`,
           [new_admin_id],
         );
         if (validAdmin.length === 0) {
