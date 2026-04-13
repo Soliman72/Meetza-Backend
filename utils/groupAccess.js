@@ -101,6 +101,7 @@ const ensureGroupAccess = async (userId, groupId) => {
         sender_id,
         media_url,
         media_type,
+        file_name,
         created_at
       FROM group_message_media
       WHERE group_id = ?

@@ -611,24 +611,32 @@ const buildUnreadTotalQuery = (role) => {
 
 /**
  * Toggle a reaction: if the user already reacted with this emoji on this
- * message, remove it; otherwise add it.
+ * message, remove it; if reacted with a different emoji, update it; otherwise add it.
  * Returns the updated reactions array for the message.
  */
 const toggleReaction = async (messageId, userId, emoji) => {
-  // Check if reaction already exists
+  // Check if any reaction already exists for this user and message
   const [existing] = await db.promise().query(
-    "SELECT id FROM message_reaction WHERE message_id = ? AND user_id = ? AND emoji = ?",
-    [messageId, userId, emoji]
+    "SELECT id, emoji FROM message_reaction WHERE message_id = ? AND user_id = ?",
+    [messageId, userId]
   );
 
   if (existing.length > 0) {
-    // Remove reaction (toggle off)
-    await db.promise().query(
-      "DELETE FROM message_reaction WHERE message_id = ? AND user_id = ? AND emoji = ?",
-      [messageId, userId, emoji]
-    );
+    if (existing[0].emoji === emoji) {
+      // Remove reaction if it's the exact same emoji (toggle off)
+      await db.promise().query(
+        "DELETE FROM message_reaction WHERE id = ?",
+        [existing[0].id]
+      );
+    } else {
+      // Update reaction to the new emoji
+      await db.promise().query(
+        "UPDATE message_reaction SET emoji = ? WHERE id = ?",
+        [emoji, existing[0].id]
+      );
+    }
   } else {
-    // Add reaction (toggle on)
+    // Add new reaction
     const id = uuidv4();
     await db.promise().query(
       "INSERT INTO message_reaction (id, message_id, user_id, emoji) VALUES (?, ?, ?, ?)",
