@@ -253,8 +253,9 @@ async function getMostInterestedVideos(req, limit) {
 
 /**
  * Leaders (name, photo, position) for home "People" section.
- * Source of truth: groups -> position -> administrator user.
- * Super_Admin: leaders for all groups. Administrator: leaders for groups they admin. Member: leaders for groups they belong to.
+ * Super_Admin: all platform administrators.
+ * Administrator: every group_admin (OWNER or ADMIN) in groups they admin, excluding self.
+ * Member: every group_admin (OWNER or ADMIN) in groups they belong to.
  */
 async function getHomeLeaders(req, limit) {
   const userId = req.user.id;
@@ -265,46 +266,65 @@ async function getHomeLeaders(req, limit) {
     ? Math.min(Math.max(Math.trunc(n), 1), LEADERS_MAX_LIMIT)
     : LEADERS_DEFAULT_LIMIT;
 
-  let accessWhere = "";
+  let sql;
   const params = [];
 
   if (role === "Super_Admin") {
-    // no filter
+    sql = `
+      SELECT DISTINCT
+        u.id AS leader_id,
+        u.name,
+        u.user_photo,
+        p.id AS position_id,
+        p.title AS position_title
+      FROM administrator a
+      INNER JOIN user u ON u.id = a.user_id AND u.role = 'Administrator'
+      LEFT JOIN position p ON p.administrator_id = a.user_id
+      ORDER BY u.name ASC
+      LIMIT ?
+    `;
+    params.push(cap);
   } else if (role === "Administrator") {
-    accessWhere = `
-      WHERE EXISTS (
-        SELECT 1 FROM group_admin ga
-        WHERE ga.group_id = g.id AND ga.user_id = ?
+    sql = `
+      SELECT DISTINCT
+        u.id AS leader_id,
+        u.name,
+        u.user_photo,
+        p.id AS position_id,
+        p.title AS position_title
+      FROM group_admin ga
+      INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator'
+      LEFT JOIN position p ON p.administrator_id = ga.user_id
+      WHERE ga.group_id IN (
+        SELECT group_id FROM group_admin WHERE user_id = ?
       )
+        AND ga.role IN ('OWNER', 'ADMIN')
+        AND ga.user_id <> ?
+      ORDER BY u.name ASC
+      LIMIT ?
     `;
-    params.push(userId);
+    params.push(userId, userId, cap);
   } else {
-    // Member (default)
-    accessWhere = `
-      WHERE EXISTS (
-        SELECT 1 FROM group_membership gm
-        WHERE gm.group_id = g.id AND gm.member_id = ?
+    sql = `
+      SELECT DISTINCT
+        u.id AS leader_id,
+        u.name,
+        u.user_photo,
+        p.id AS position_id,
+        p.title AS position_title
+      FROM group_admin ga
+      INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator'
+      LEFT JOIN position p ON p.administrator_id = ga.user_id
+      WHERE ga.group_id IN (
+        SELECT group_id FROM group_membership WHERE member_id = ?
       )
+        AND ga.role IN ('OWNER', 'ADMIN')
+      ORDER BY u.name ASC
+      LIMIT ?
     `;
-    params.push(userId);
+    params.push(userId, cap);
   }
 
-  const sql = `
-    SELECT DISTINCT
-      u.id AS leader_id,
-      u.name,
-      u.user_photo,
-      p.id AS position_id,
-      p.title AS position_title
-    FROM \`group\` g\
-    INNER JOIN group_admin ga ON ga.group_id = g.id
-    INNER JOIN user u ON u.id = ga.user_id
-    INNER JOIN position p ON p.administrator_id = ga.user_id
-    ${accessWhere}
-    ORDER BY u.name ASC
-    LIMIT ?
-  `;
-  params.push(cap);
   const [rows] = await db.promise().query(sql, params);
   return (rows || []).map((r) => ({
     id: r.leader_id,
