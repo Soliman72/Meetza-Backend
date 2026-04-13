@@ -53,3 +53,46 @@ exports.getHomeUpcomingMeetings = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/home/most-interested-videos?limit=10
+ */
+exports.getHomeMostInterestedVideos = async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized: user not found" });
+      }
+  
+      const data = await homeService.getMostInterestedVideos(req, req.query.limit);
+      return res.status(200).json({ success: true, data });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+  };
+
+/**
+ * GET /api/home/leaders?limit=10
+ */
+exports.getHomeLeaders = async (req, res) => {
+  try {
+    if (!req.user?.id) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Unauthorized: user not found" });
+    }
+    const data = await homeService.getHomeLeaders(req, req.query.limit);
+    return res.status(200).json({ success: true, data });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
+  }
+};

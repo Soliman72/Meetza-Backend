@@ -10,4 +10,12 @@ router.get(
   homeController.getHomeUpcomingMeetings,
 );
 
+router.get(
+  "/most-interested-videos",
+  verifyToken,
+  homeController.getHomeMostInterestedVideos,
+);
+
+router.get("/leaders", verifyToken, homeController.getHomeLeaders);
+
 module.exports = router;

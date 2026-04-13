@@ -8,6 +8,9 @@ const UPCOMING_MAX_LIMIT = 50;
 const MOST_INTERESTED_DEFAULT_LIMIT = 10;
 const MOST_INTERESTED_MAX_LIMIT = 30;
 
+const LEADERS_DEFAULT_LIMIT = 10;
+const LEADERS_MAX_LIMIT = 30;
+
 /**
  * Dashboard counts: videos, meetings, groups, chat unread, saved.
  */
@@ -245,13 +248,83 @@ async function getMostInterestedVideos(req, limit) {
   });
 }
 
+/**
+ * Leaders (name, photo, position) for home "People" section.
+ * Source of truth: groups -> position -> administrator user.
+ * Super_Admin: leaders for all groups. Administrator: leaders for groups they admin. Member: leaders for groups they belong to.
+ */
+async function getHomeLeaders(req, limit) {
+  const userId = req.user.id;
+  const role = req.user.role;
+
+  const n = Number(limit);
+  const cap = Number.isFinite(n)
+    ? Math.min(Math.max(Math.trunc(n), 1), LEADERS_MAX_LIMIT)
+    : LEADERS_DEFAULT_LIMIT;
+
+  let accessWhere = "";
+  const params = [];
+
+  if (role === "Super_Admin") {
+    // no filter
+  } else if (role === "Administrator") {
+    accessWhere = `
+      WHERE EXISTS (
+        SELECT 1 FROM group_admin ga
+        WHERE ga.group_id = g.id AND ga.user_id = ?
+      )
+    `;
+    params.push(userId);
+  } else {
+    // Member (default)
+    accessWhere = `
+      WHERE EXISTS (
+        SELECT 1 FROM group_membership gm
+        WHERE gm.group_id = g.id AND gm.member_id = ?
+      )
+    `;
+    params.push(userId);
+  }
+
+  const sql = `
+    SELECT DISTINCT
+      u.id AS leader_id,
+      u.name,
+      u.user_photo,
+      p.id AS position_id,
+      p.title AS position_title
+    FROM \`group\` g\
+    INNER JOIN group_admin ga ON ga.group_id = g.id
+    INNER JOIN user u ON u.id = ga.user_id
+    INNER JOIN position p ON p.administrator_id = ga.user_id
+    ${accessWhere}
+    ORDER BY u.name ASC
+    LIMIT ?
+  `;
+  params.push(cap);
+  console.log("sql", sql);
+  console.log("params", params);
+
+  
+  const [rows] = await db.promise().query(sql, params);
+  return (rows || []).map((r) => ({
+    id: r.leader_id,
+    name: r.name,
+    user_photo: r.user_photo,
+    position: { id: r.position_id, title: r.position_title },
+  }));
+}
+
 module.exports = {
   getHomeStatsData,
   getUpcomingMeetings,
   getMostInterestedVideos,
+  getHomeLeaders,
   isHomeMeetingsRole,
   UPCOMING_DEFAULT_LIMIT,
   UPCOMING_MAX_LIMIT,
   MOST_INTERESTED_DEFAULT_LIMIT,
   MOST_INTERESTED_MAX_LIMIT,
+  LEADERS_DEFAULT_LIMIT,
+  LEADERS_MAX_LIMIT,
 };
