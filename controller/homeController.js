@@ -96,3 +96,24 @@ exports.getHomeLeaders = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/home/saved-videos?limit=10
+ */
+exports.getHomeSavedVideos = async (req, res) => {
+  try {
+    if (!req.user?.id) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Unauthorized: user not found" });
+    }
+    const data = await homeService.getHomeSavedVideos(req, req.query.limit);
+    return res.status(200).json({ success: true, data });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
+  }
+};

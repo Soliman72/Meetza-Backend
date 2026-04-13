@@ -18,4 +18,6 @@ router.get(
 
 router.get("/leaders", verifyToken, homeController.getHomeLeaders);
 
+router.get("/saved-videos", verifyToken, homeController.getHomeSavedVideos);
+
 module.exports = router;

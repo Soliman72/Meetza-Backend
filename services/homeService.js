@@ -11,6 +11,9 @@ const MOST_INTERESTED_MAX_LIMIT = 30;
 const LEADERS_DEFAULT_LIMIT = 10;
 const LEADERS_MAX_LIMIT = 30;
 
+const SAVED_VIDEOS_DEFAULT_LIMIT = 10;
+const SAVED_VIDEOS_MAX_LIMIT = 30;
+
 /**
  * Dashboard counts: videos, meetings, groups, chat unread, saved.
  */
@@ -302,10 +305,6 @@ async function getHomeLeaders(req, limit) {
     LIMIT ?
   `;
   params.push(cap);
-  console.log("sql", sql);
-  console.log("params", params);
-
-  
   const [rows] = await db.promise().query(sql, params);
   return (rows || []).map((r) => ({
     id: r.leader_id,
@@ -315,11 +314,82 @@ async function getHomeLeaders(req, limit) {
   }));
 }
 
+/**
+ * Saved videos for home section (with watching/completed state + progress bar).
+ */
+async function getHomeSavedVideos(req, limit) {
+  const userId = req.user.id;
+  const n = Number(limit);
+  const cap = Number.isFinite(n)
+    ? Math.min(Math.max(Math.trunc(n), 1), SAVED_VIDEOS_MAX_LIMIT)
+    : SAVED_VIDEOS_DEFAULT_LIMIT;
+
+  const visibility = getVideoVisibility(req, "v");
+  const conditions = ["sv.member_id = ?"];
+  const params = [userId, userId]; // first for vwp join, second for sv filter
+
+  if (visibility.whereClause) {
+    conditions.push(visibility.whereClause);
+    params.push(...visibility.params);
+  }
+
+  const sql = `
+    SELECT
+      v.id,
+      v.title,
+      v.slug,
+      v.poster_url,
+      v.duration,
+      v.group_id,
+      g.group_name,
+      sv.timestamp AS saved_at,
+      vwp.progress_seconds,
+      vwp.completed,
+      CASE
+        WHEN vwp.completed = 1 THEN 'completed'
+        WHEN COALESCE(vwp.progress_seconds, 0) > 0 THEN 'watching'
+        ELSE NULL
+      END AS watch_status,
+      CASE
+        WHEN vwp.completed = 1 THEN 100
+        WHEN TIME_TO_SEC(v.duration) > 0 AND COALESCE(vwp.progress_seconds, 0) > 0
+          THEN LEAST(100, ROUND(100 * vwp.progress_seconds / TIME_TO_SEC(v.duration)))
+        ELSE NULL
+      END AS progress_percentage
+    FROM saved_video sv
+    INNER JOIN video v ON v.id = sv.video_id
+    LEFT JOIN \`group\` g ON g.id = v.group_id
+    LEFT JOIN video_watch_progress vwp
+      ON vwp.video_id = v.id AND vwp.user_id = ?
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY sv.timestamp DESC
+    LIMIT ?
+  `;
+
+  params.push(cap);
+  const [rows] = await db.promise().query(sql, params);
+  return (rows || []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    slug: r.slug ?? null,
+    poster_url: r.poster_url,
+    thumbnail_url: r.poster_url,
+    duration: r.duration,
+    group_id: r.group_id,
+    group_name: r.group_name,
+    saved_at: r.saved_at,
+    watch_status: r.watch_status,
+    progress_percentage:
+      r.progress_percentage == null ? null : Number(r.progress_percentage),
+  }));
+}
+
 module.exports = {
   getHomeStatsData,
   getUpcomingMeetings,
   getMostInterestedVideos,
   getHomeLeaders,
+  getHomeSavedVideos,
   isHomeMeetingsRole,
   UPCOMING_DEFAULT_LIMIT,
   UPCOMING_MAX_LIMIT,
@@ -327,4 +397,6 @@ module.exports = {
   MOST_INTERESTED_MAX_LIMIT,
   LEADERS_DEFAULT_LIMIT,
   LEADERS_MAX_LIMIT,
+  SAVED_VIDEOS_DEFAULT_LIMIT,
+  SAVED_VIDEOS_MAX_LIMIT,
 };
