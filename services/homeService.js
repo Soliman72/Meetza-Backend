@@ -1,5 +1,9 @@
 const db = require("../config/db");
 const { getVideoVisibility } = require("../utils/videoVisibility");
+const {
+  WATCH_PROGRESS_SELECT,
+  mapWatchProgressFromRow,
+} = require("../utils/videoWatchProgressFields");
 const { buildUnreadTotalQuery } = require("./chatMessageService");
 
 const UPCOMING_DEFAULT_LIMIT = 5;
@@ -201,19 +205,7 @@ async function getMostInterestedVideos(req, limit) {
         (SELECT COUNT(*) FROM comment c2 WHERE c2.video_id = v.id) +
         (SELECT COUNT(*) FROM saved_video sv2 WHERE sv2.video_id = v.id)
       ) AS interest_score,
-      vwp.progress_seconds,
-      vwp.completed,
-      CASE
-        WHEN vwp.completed = 1 THEN 'completed'
-        WHEN COALESCE(vwp.progress_seconds, 0) > 0 THEN 'watching'
-        ELSE NULL
-      END AS watch_status,
-      CASE
-        WHEN vwp.completed = 1 THEN 100
-        WHEN TIME_TO_SEC(v.duration) > 0 AND COALESCE(vwp.progress_seconds, 0) > 0
-          THEN LEAST(100, ROUND(100 * vwp.progress_seconds / TIME_TO_SEC(v.duration)))
-        ELSE NULL
-      END AS progress_percentage
+      ${WATCH_PROGRESS_SELECT}
     FROM video v
     LEFT JOIN \`group\` g ON g.id = v.group_id
     LEFT JOIN video_watch_progress vwp
@@ -228,13 +220,14 @@ async function getMostInterestedVideos(req, limit) {
 
   return (rows || []).map((row) => {
     const {
-      progress_seconds: _ps,
-      completed: _c,
+      watch_progress_seconds: _wps,
+      watch_completed: _wc,
+      watch_status: _ws,
+      watch_progress_percentage: pp,
       likes_count: lc,
       comments_count: cc,
       saved_count: sc,
       interest_score: is,
-      progress_percentage: pp,
       ...rest
     } = row;
     return {
@@ -247,6 +240,7 @@ async function getMostInterestedVideos(req, limit) {
       watch_status: row.watch_status,
       progress_percentage:
         pp == null ? null : Math.min(100, Math.max(0, Number(pp))),
+      watch_progress: mapWatchProgressFromRow(row),
     };
   });
 }
@@ -363,19 +357,7 @@ async function getHomeSavedVideos(req, limit) {
       v.group_id,
       g.group_name,
       sv.timestamp AS saved_at,
-      vwp.progress_seconds,
-      vwp.completed,
-      CASE
-        WHEN vwp.completed = 1 THEN 'completed'
-        WHEN COALESCE(vwp.progress_seconds, 0) > 0 THEN 'watching'
-        ELSE NULL
-      END AS watch_status,
-      CASE
-        WHEN vwp.completed = 1 THEN 100
-        WHEN TIME_TO_SEC(v.duration) > 0 AND COALESCE(vwp.progress_seconds, 0) > 0
-          THEN LEAST(100, ROUND(100 * vwp.progress_seconds / TIME_TO_SEC(v.duration)))
-        ELSE NULL
-      END AS progress_percentage
+      ${WATCH_PROGRESS_SELECT}
     FROM saved_video sv
     INNER JOIN video v ON v.id = sv.video_id
     LEFT JOIN \`group\` g ON g.id = v.group_id
@@ -400,7 +382,10 @@ async function getHomeSavedVideos(req, limit) {
     saved_at: r.saved_at,
     watch_status: r.watch_status,
     progress_percentage:
-      r.progress_percentage == null ? null : Number(r.progress_percentage),
+      r.watch_progress_percentage == null
+        ? null
+        : Number(r.watch_progress_percentage),
+    watch_progress: mapWatchProgressFromRow(r),
   }));
 }
 

@@ -1,4 +1,17 @@
 const db = require("../config/db");
+const {
+  WATCH_PROGRESS_SELECT,
+  mapWatchProgressFromRow,
+} = require("../utils/videoWatchProgressFields");
+
+const TOPICS_SUBSELECTS = `(
+        SELECT vts.topics FROM video_transcript_summary vts
+        WHERE vts.video_id = v.id AND vts.language = 'ar' ORDER BY vts.updated_at DESC LIMIT 1
+      ) AS topics_ar,
+      (
+        SELECT vts.topics FROM video_transcript_summary vts
+        WHERE vts.video_id = v.id AND vts.language = 'en' ORDER BY vts.updated_at DESC LIMIT 1
+      ) AS topics_en`;
 
 function normalizeTopics(value) {
   if (value == null) return null;
@@ -12,6 +25,27 @@ function normalizeTopics(value) {
     }
   }
   return value;
+}
+
+function mapSavedVideoRow(row, withWatch) {
+  const watch_progress = withWatch ? mapWatchProgressFromRow(row) : null;
+  const {
+    topics_ar,
+    topics_en,
+    watch_progress_seconds: _wps,
+    watch_completed: _wc,
+    watch_status: _ws,
+    watch_progress_percentage: _wpp,
+    ...rest
+  } = row;
+  return {
+    ...rest,
+    topics: {
+      ar: normalizeTopics(topics_ar),
+      en: normalizeTopics(topics_en),
+    },
+    watch_progress,
+  };
 }
 
 function buildVideoSearchCondition(searchTerm, videoAlias = "v") {
@@ -85,12 +119,16 @@ exports.getSavedVideosByUserId = async (req, res) => {
         .status(401)
         .json({ success: false, message: "Unauthorized: user not found" });
     }
-    // Return the same fields as `video` plus extra info from `saved_video` (timestamp)
-    let query =
-      "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo, (SELECT vts.topics FROM video_transcript_summary vts WHERE vts.video_id = v.id AND vts.language = 'ar' ORDER BY vts.updated_at DESC LIMIT 1) AS topics_ar, (SELECT vts.topics FROM video_transcript_summary vts WHERE vts.video_id = v.id AND vts.language = 'en' ORDER BY vts.updated_at DESC LIMIT 1) AS topics_en FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id";
+    // Same shape as video list + `watch_progress` for the current user
+    let query = `SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo, ${TOPICS_SUBSELECTS},
+      ${WATCH_PROGRESS_SELECT}
+    FROM saved_video sv
+    LEFT JOIN video v ON sv.video_id = v.id
+    JOIN user u ON v.administrator_id = u.id
+    LEFT JOIN video_watch_progress vwp ON vwp.video_id = v.id AND vwp.user_id = ?`;
 
     const conditions = ["sv.member_id = ?"];
-    const params = [user_id];
+    const params = [user_id, user_id];
     const searchFilter = buildVideoSearchCondition(searchTerm, "v");
     if (searchFilter.clause) {
       conditions.push(searchFilter.clause);
@@ -98,13 +136,7 @@ exports.getSavedVideosByUserId = async (req, res) => {
     }
     query += ` WHERE ${conditions.join(" AND ")} ORDER BY sv.timestamp DESC`;
     const [rows] = await db.promise().query(query, params);
-    const data = (rows || []).map(({ topics_ar, topics_en, ...row }) => ({
-      ...row,
-      topics: {
-        ar: normalizeTopics(topics_ar),
-        en: normalizeTopics(topics_en),
-      },
-    }));
+    const data = (rows || []).map((row) => mapSavedVideoRow(row, true));
     res.status(200).json({ success: true, data });
   } catch (err) {
     res
@@ -123,23 +155,29 @@ exports.getSavedVideoById = async (req, res) => {
         .json({ success: false, message: "id is required" });
     }
     const user_id = req.user?.id;
+    if (!user_id) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Unauthorized: user not found" });
+    }
     // Count saved videos
     const sqlCount =
       "SELECT COUNT(*) as count FROM saved_video WHERE video_id = ?";
     const [countRows] = await db.promise().query(sqlCount, [video_id]);
     const savedVideoCount = countRows[0].count;
-    const query =
-      "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo, (SELECT vts.topics FROM video_transcript_summary vts WHERE vts.video_id = v.id AND vts.language = 'ar' ORDER BY vts.updated_at DESC LIMIT 1) AS topics_ar, (SELECT vts.topics FROM video_transcript_summary vts WHERE vts.video_id = v.id AND vts.language = 'en' ORDER BY vts.updated_at DESC LIMIT 1) AS topics_en FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id WHERE sv.video_id = ? AND sv.member_id = ? ORDER BY sv.timestamp DESC";
-    const [rows] = await db.promise().query(query, [video_id, user_id]);
-    const saved_video = (rows || []).map(
-      ({ topics_ar, topics_en, ...row }) => ({
-        ...row,
-        topics: {
-          ar: normalizeTopics(topics_ar),
-          en: normalizeTopics(topics_en),
-        },
-      }),
-    );
+    const query = `SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo, ${TOPICS_SUBSELECTS},
+      ${WATCH_PROGRESS_SELECT}
+    FROM saved_video sv
+    LEFT JOIN video v ON sv.video_id = v.id
+    JOIN user u ON v.administrator_id = u.id
+    LEFT JOIN video_watch_progress vwp ON vwp.video_id = v.id AND vwp.user_id = ?
+    WHERE sv.video_id = ? AND sv.member_id = ? ORDER BY sv.timestamp DESC`;
+    const [rows] = await db.promise().query(query, [
+      user_id,
+      video_id,
+      user_id,
+    ]);
+    const saved_video = (rows || []).map((row) => mapSavedVideoRow(row, true));
     res
       .status(200)
       .json({ success: true, data: { savedVideoCount, saved_video } });
@@ -155,10 +193,20 @@ exports.getAllSavedVideos = async (req, res) => {
   try {
     const { group_id, q } = req.query;
     const searchTerm = q;
-    let query =
-      "SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo, (SELECT vts.topics FROM video_transcript_summary vts WHERE vts.video_id = v.id AND vts.language = 'ar' ORDER BY vts.updated_at DESC LIMIT 1) AS topics_ar, (SELECT vts.topics FROM video_transcript_summary vts WHERE vts.video_id = v.id AND vts.language = 'en' ORDER BY vts.updated_at DESC LIMIT 1) AS topics_en FROM saved_video sv LEFT JOIN video v ON sv.video_id = v.id JOIN user u ON v.administrator_id = u.id";
+    const viewerId = req.user?.id;
+    let query = `SELECT v.*, sv.timestamp AS saved_at, u.name AS admin_name, u.user_photo AS admin_photo, ${TOPICS_SUBSELECTS}${
+      viewerId ? `, ${WATCH_PROGRESS_SELECT}` : ""
+    }
+    FROM saved_video sv
+    LEFT JOIN video v ON sv.video_id = v.id
+    JOIN user u ON v.administrator_id = u.id${
+      viewerId
+        ? ` LEFT JOIN video_watch_progress vwp ON vwp.video_id = v.id AND vwp.user_id = ?`
+        : ""
+    }`;
     const conditions = [];
     const params = [];
+    if (viewerId) params.push(viewerId);
     if (group_id) {
       conditions.push("v.group_id = ?");
       params.push(group_id);
@@ -173,13 +221,7 @@ exports.getAllSavedVideos = async (req, res) => {
     }
     query += " ORDER BY sv.timestamp DESC";
     const [rows] = await db.promise().query(query, params);
-    const data = (rows || []).map(({ topics_ar, topics_en, ...row }) => ({
-      ...row,
-      topics: {
-        ar: normalizeTopics(topics_ar),
-        en: normalizeTopics(topics_en),
-      },
-    }));
+    const data = (rows || []).map((row) => mapSavedVideoRow(row, !!viewerId));
     res.status(200).json({ success: true, data });
   } catch (err) {
     res

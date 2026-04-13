@@ -7,6 +7,10 @@ const { resolveVideoId } = require("../utils/resolveVideoId");
 const axios = require("axios");
 const FormData = require("form-data");
 const { getVideoVisibility } = require("../utils/videoVisibility");
+const {
+  WATCH_PROGRESS_SELECT,
+  mapWatchProgressFromRow,
+} = require("../utils/videoWatchProgressFields");
 
 function getRequestedLocalization(req) {
   const requestedLocalization = (req.header("X-Localization") || "ar")
@@ -226,6 +230,7 @@ exports.getAllVideos = async (req, res) => {
           LIMIT 1
         ) AS topics_en${userId
         ? `,
+        ${WATCH_PROGRESS_SELECT},
         EXISTS(
           SELECT 1 FROM \`like\` l2
           WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
@@ -239,10 +244,11 @@ exports.getAllVideos = async (req, res) => {
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
+      ${userId ? `LEFT JOIN video_watch_progress vwp ON vwp.video_id = v.id AND vwp.user_id = ?` : ""}
     `;
 
     if (userId) {
-      params.push(userId, userId);
+      params.push(userId, userId, userId);
     }
 
     if (visibility.whereClause) {
@@ -264,6 +270,7 @@ exports.getAllVideos = async (req, res) => {
 
     const [rows] = await db.promise().query(query, params);
     const data = (rows || []).map((row) => {
+      const watch_progress = userId ? mapWatchProgressFromRow(row) : null;
       const {
         admin_name,
         admin_photo,
@@ -274,6 +281,10 @@ exports.getAllVideos = async (req, res) => {
         topics_en,
         user_like,
         user_dislike,
+        watch_progress_seconds: _wps,
+        watch_completed: _wc,
+        watch_status: _ws,
+        watch_progress_percentage: _wpp,
         ...video
       } = row;
       return {
@@ -288,6 +299,7 @@ exports.getAllVideos = async (req, res) => {
         },
         user_like: !!user_like,
         user_dislike: !!user_dislike,
+        watch_progress,
       };
     });
     return res.status(200).json({ success: true, data });
@@ -338,6 +350,7 @@ exports.getVideoById = async (req, res) => {
           LIMIT 1
         ) AS topics_en${userId
         ? `,
+        ${WATCH_PROGRESS_SELECT},
         EXISTS(
           SELECT 1 FROM \`like\` l2
           WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
@@ -351,11 +364,12 @@ exports.getVideoById = async (req, res) => {
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
+      ${userId ? `LEFT JOIN video_watch_progress vwp ON vwp.video_id = v.id AND vwp.user_id = ?` : ""}
       WHERE v.id = ?${visibility.whereClause ? " AND " + visibility.whereClause : ""}
     `;
 
     const params = [];
-    if (userId) params.push(userId, userId);
+    if (userId) params.push(userId, userId, userId);
     params.push(resolvedVideoId);
     if (visibility.whereClause) params.push(...visibility.params);
 
@@ -392,6 +406,7 @@ exports.getVideoById = async (req, res) => {
     };
     const user_like = !!row.user_like;
     const user_dislike = !!row.user_dislike;
+    const watch_progress = userId ? mapWatchProgressFromRow(row) : null;
 
     const videoId = row.id;
     const [commentsRows] = await db.promise().query(
@@ -424,6 +439,7 @@ exports.getVideoById = async (req, res) => {
         topics,
         user_like,
         user_dislike,
+        watch_progress,
         description: video.description,
         comments,
         commentCount: comments.length,
@@ -500,6 +516,7 @@ exports.getRelatedVideos = async (req, res) => {
                LIMIT 1
              ) AS topics_en${userId
         ? `,
+             ${WATCH_PROGRESS_SELECT},
              EXISTS(
                SELECT 1 FROM \`like\` l2
                WHERE l2.video_id = v.id AND l2.member_id = ? AND l2.like_type = 1
@@ -513,12 +530,14 @@ exports.getRelatedVideos = async (req, res) => {
       FROM video v
       LEFT JOIN \`group\` g ON g.id = v.group_id
       LEFT JOIN user u ON u.id = v.administrator_id
+      ${userId ? `LEFT JOIN video_watch_progress vwp ON vwp.video_id = v.id AND vwp.user_id = ?` : ""}
     `;
 
     const relatedOrder = " ORDER BY v.created_at DESC LIMIT 8";
 
     const formatRelated = (rows) =>
       (rows || []).map((r) => {
+        const watch_progress = userId ? mapWatchProgressFromRow(r) : null;
         const {
           admin_name: an,
           admin_photo: ap,
@@ -526,6 +545,10 @@ exports.getRelatedVideos = async (req, res) => {
           topics_en,
           user_like,
           user_dislike,
+          watch_progress_seconds: _wps,
+          watch_completed: _wc,
+          watch_status: _ws,
+          watch_progress_percentage: _wpp,
           ...v
         } = r;
         return {
@@ -540,11 +563,12 @@ exports.getRelatedVideos = async (req, res) => {
           },
           user_like: !!user_like,
           user_dislike: !!user_dislike,
+          watch_progress,
         };
       });
 
     const baseParams = [];
-    if (userId) baseParams.push(userId, userId);
+    if (userId) baseParams.push(userId, userId, userId);
 
     // If group_id sent in query: return only videos in that group (excluding current video)
     const filterGroupId = queryGroupId || groupId;
