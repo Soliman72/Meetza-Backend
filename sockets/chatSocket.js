@@ -244,17 +244,21 @@ const registerChatSocket = (io) => {
         await ensureGroupAccess(socket.user.id, groupId);
 
         const cleanEmoji = String(emoji).trim().slice(0, 20);
-        const reactions = await toggleReaction(messageId, socket.user.id, cleanEmoji);
+        const { reactions, action } = await toggleReaction(messageId, socket.user.id, cleanEmoji);
 
         // Broadcast updated reactions to all clients in the group
         io.to(`group:${groupId}`).emit("messageReactionUpdated", {
           groupId,
           messageId,
           reactions,
+          action,
+          userId: socket.user.id,
+          user: socket.user,
+          emoji: cleanEmoji
         });
 
         if (typeof ack === "function") {
-          ack({ ok: true, data: { messageId, reactions } });
+          ack({ ok: true, data: { messageId, reactions, action, user: socket.user } });
         }
       } catch (error) {
         if (typeof ack === "function") {

@@ -615,6 +615,7 @@ const buildUnreadTotalQuery = (role) => {
  * Returns the updated reactions array for the message.
  */
 const toggleReaction = async (messageId, userId, emoji) => {
+  let action = "";
   // Check if any reaction already exists for this user and message
   const [existing] = await db.promise().query(
     "SELECT id, emoji FROM message_reaction WHERE message_id = ? AND user_id = ?",
@@ -628,12 +629,14 @@ const toggleReaction = async (messageId, userId, emoji) => {
         "DELETE FROM message_reaction WHERE id = ?",
         [existing[0].id]
       );
+      action = "removed";
     } else {
       // Update reaction to the new emoji
       await db.promise().query(
         "UPDATE message_reaction SET emoji = ? WHERE id = ?",
         [emoji, existing[0].id]
       );
+      action = "updated";
     }
   } else {
     // Add new reaction
@@ -642,11 +645,15 @@ const toggleReaction = async (messageId, userId, emoji) => {
       "INSERT INTO message_reaction (id, message_id, user_id, emoji) VALUES (?, ?, ?, ?)",
       [id, messageId, userId, emoji]
     );
+    action = "added";
   }
 
-  // Return updated reactions for this message
+  // Return updated reactions for this message along with the action performed
   const reactionsMap = await fetchReactionsForMessages([messageId]);
-  return reactionsMap[messageId] || [];
+  return {
+    reactions: reactionsMap[messageId] || [],
+    action,
+  };
 };
 
 /**

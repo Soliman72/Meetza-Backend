@@ -928,7 +928,13 @@ exports.toggleReaction = async (req, res) => {
 
     await ensureGroupAccess(userId, groupId);
 
-    const reactions = await toggleReaction(messageId, userId, cleanEmoji);
+    const { reactions, action } = await toggleReaction(messageId, userId, cleanEmoji);
+
+    // Fetch the user details to pass to the frontend
+    const [userRows] = await db
+      .promise()
+      .query("SELECT id, name, user_photo, email FROM user WHERE id = ?", [userId]);
+    const userReacted = userRows[0] || null;
 
     // Broadcast real-time update to the group
     if (ioInstance) {
@@ -936,12 +942,16 @@ exports.toggleReaction = async (req, res) => {
         groupId,
         messageId,
         reactions,
+        action,
+        userId,
+        user: userReacted,
+        emoji: cleanEmoji
       });
     }
 
     return res.json({
       success: true,
-      data: { messageId, reactions },
+      data: { messageId, reactions, action, user: userReacted },
     });
   } catch (error) {
     return handleError(res, error);
