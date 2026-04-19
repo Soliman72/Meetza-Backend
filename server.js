@@ -33,6 +33,8 @@ const notificationRouter = require("./router/notificationRouter");
 const contactRouter = require("./router/contactRouter");
 const homeRouter = require("./router/homeRouter");
 const videoWatchProgressRouter = require("./router/videoWatchProgressRouter");
+const reportRouter = require("./router/reportRouter");
+
 const os = require("os");
 const fs = require("fs");
 
@@ -158,6 +160,8 @@ app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
 app.use("/api/home", homeRouter);
 app.use("/api/video-watch-progress", videoWatchProgressRouter);
+app.use("/api/reports", reportRouter);
+
 
 
 // Get local IP address for network access
