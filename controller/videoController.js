@@ -11,48 +11,11 @@ const {
   WATCH_PROGRESS_SELECT,
   mapWatchProgressFromRow,
 } = require("../utils/videoWatchProgressFields");
-
-function getRequestedLocalization(req) {
-  const requestedLocalization = (req.header("X-Localization") || "ar")
-    .toString()
-    .toLowerCase()
-    .trim();
-  return requestedLocalization === "en" || requestedLocalization === "ar"
-    ? requestedLocalization
-    : "ar";
-}
-
-function normalizeTopics(value) {
-  if (value == null) return null;
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : value;
-    } catch (_e) {
-      return value;
-    }
-  }
-  return value;
-}
-
-function buildVideoSearchCondition(searchTerm, videoAlias = "v") {
-  const term = (searchTerm || "").toString().trim();
-  if (!term) return { clause: "", params: [] };
-  const likeTerm = `%${term}%`;
-  return {
-    clause: `(
-      ${videoAlias}.title LIKE ?
-      OR EXISTS (
-        SELECT 1
-        FROM video_transcript_summary vts
-        WHERE vts.video_id = ${videoAlias}.id
-          AND (vts.transcript LIKE ? OR vts.topics LIKE ?)
-      )
-    )`,
-    params: [likeTerm, likeTerm, likeTerm],
-  };
-}
+const {
+  getRequestedLocalization,
+  normalizeTopics,
+  buildVideoSearchCondition,
+} = require("../services/videoSearchService");
 
 // Create a video with file upload
 exports.createVideo = (req, res) => {

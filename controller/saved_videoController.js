@@ -1,8 +1,9 @@
 const db = require("../config/db");
+const { WATCH_PROGRESS_SELECT } = require("../utils/videoWatchProgressFields");
 const {
-  WATCH_PROGRESS_SELECT,
-  mapWatchProgressFromRow,
-} = require("../utils/videoWatchProgressFields");
+  buildVideoSearchCondition,
+  mapSavedVideoRow,
+} = require("../services/videoSearchService");
 
 const TOPICS_SUBSELECTS = `(
         SELECT vts.topics FROM video_transcript_summary vts
@@ -12,59 +13,6 @@ const TOPICS_SUBSELECTS = `(
         SELECT vts.topics FROM video_transcript_summary vts
         WHERE vts.video_id = v.id AND vts.language = 'en' ORDER BY vts.updated_at DESC LIMIT 1
       ) AS topics_en`;
-
-function normalizeTopics(value) {
-  if (value == null) return null;
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : value;
-    } catch (_e) {
-      return value;
-    }
-  }
-  return value;
-}
-
-function mapSavedVideoRow(row, withWatch) {
-  const watch_progress = withWatch ? mapWatchProgressFromRow(row) : null;
-  const {
-    topics_ar,
-    topics_en,
-    watch_progress_seconds: _wps,
-    watch_completed: _wc,
-    watch_status: _ws,
-    watch_progress_percentage: _wpp,
-    ...rest
-  } = row;
-  return {
-    ...rest,
-    topics: {
-      ar: normalizeTopics(topics_ar),
-      en: normalizeTopics(topics_en),
-    },
-    watch_progress,
-  };
-}
-
-function buildVideoSearchCondition(searchTerm, videoAlias = "v") {
-  const term = (searchTerm || "").toString().trim();
-  if (!term) return { clause: "", params: [] };
-  const likeTerm = `%${term}%`;
-  return {
-    clause: `(
-      ${videoAlias}.title LIKE ?
-      OR EXISTS (
-        SELECT 1
-        FROM video_transcript_summary vts
-        WHERE vts.video_id = ${videoAlias}.id
-          AND (vts.transcript LIKE ? OR vts.topics LIKE ?)
-      )
-    )`,
-    params: [likeTerm, likeTerm, likeTerm],
-  };
-}
 
 // Create
 exports.createSavedVideo = async (req, res) => {

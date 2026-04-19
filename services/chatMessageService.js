@@ -664,6 +664,21 @@ const getReactions = async (messageId) => {
   return reactionsMap[messageId] || [];
 };
 
+function determineResourceCategory(fileType = "") {
+  if (!fileType) return "other";
+  if (fileType.startsWith("image/")) return "photos";
+  if (fileType.startsWith("video/")) return "videos";
+  if (fileType.includes("pdf") || fileType.includes("document"))
+    return "documents";
+  if (fileType.includes("presentation") || fileType.includes("ms-powerpoint"))
+    return "documents";
+  if (fileType.includes("spreadsheet") || fileType.includes("excel"))
+    return "documents";
+  if (fileType.includes("audio/")) return "audio";
+  if (fileType.includes("link")) return "links";
+  return "other";
+}
+
 module.exports = {
   saveMessage,
   getMessages,
@@ -677,4 +692,5 @@ module.exports = {
   buildUnreadTotalQuery,
   toggleReaction,
   getReactions,
+  determineResourceCategory,
 };

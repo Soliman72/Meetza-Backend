@@ -13,35 +13,20 @@ const {
   getUnreadCount,
   toggleReaction,
   getReactions,
+  determineResourceCategory,
 } = require("../services/chatMessageService");
-const { ensureGroupAccess, GroupAccessError } = require("../utils/groupAccess");
+const { ensureGroupAccess } = require("../utils/groupAccess");
 const {
   upload,
   uploadToCloudinary,
   uploadToCloudinaryResources,
 } = require("../utils/uploadFile");
-
-let ioInstance = null;
-
-const registerChatIo = (io) => {
-  ioInstance = io;
-};
-
-const broadcastMessage = (message) => {
-  if (!ioInstance || !message) return;
-  ioInstance.to(`group:${message.group_id}`).emit("message", message);
-};
-
-const handleError = (res, err) => {
-  if (err instanceof GroupAccessError) {
-    return res
-      .status(err.statusCode)
-      .json({ success: false, message: err.message });
-  }
-  return res
-    .status(500)
-    .json({ success: false, message: err.message || "Unexpected error" });
-};
+const {
+  registerChatIo,
+  broadcastMessage,
+  getChatIo,
+} = require("../services/chatSocketService");
+const { respondGroupAccessOrServerError } = require("../services/groupAccessHttpService");
 
 exports.registerChatIo = registerChatIo;
 
@@ -163,7 +148,7 @@ exports.getMyGroups = async (req, res) => {
       data: rows,
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -245,7 +230,7 @@ exports.getUnreadGroups = async (req, res) => {
 
     return res.json({ success: true, data: rows });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -282,7 +267,7 @@ exports.getGroupMessages = async (req, res) => {
       data: messages,
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -420,7 +405,7 @@ exports.sendMessage = (req, res) => {
         data: savedMessage,
       });
     } catch (error) {
-      return handleError(res, error);
+      return respondGroupAccessOrServerError(res, error);
     }
   });
 };
@@ -475,7 +460,7 @@ exports.deleteMessage = async (req, res) => {
       message: "Message deleted successfully",
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -517,7 +502,7 @@ exports.updateMessage = async (req, res) => {
       message: "Message updated successfully",
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -608,7 +593,7 @@ exports.getGroupInfo = async (req, res) => {
       },
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -674,7 +659,7 @@ exports.getGroupMeetings = async (req, res) => {
       data: meetings,
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -694,14 +679,14 @@ exports.markMessageAsRead = async (req, res) => {
     await ensureGroupAccess(userId, groupId);
     await markMessageAsRead(messageId, userId);
 
-    // Emit socket event to notify others in the group
-    if (ioInstance) {
+    const io = getChatIo();
+    if (io) {
       const [userRows] = await db
         .promise()
         .query("SELECT name FROM user WHERE id = ?", [userId]);
       const userName = userRows[0]?.name || "User";
 
-      ioInstance.to(`group:${groupId}`).emit("messageRead", {
+      io.to(`group:${groupId}`).emit("messageRead", {
         messageId,
         userId,
         userName,
@@ -714,7 +699,7 @@ exports.markMessageAsRead = async (req, res) => {
       message: "Message marked as read",
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -734,14 +719,14 @@ exports.markMessageAsUnread = async (req, res) => {
     await ensureGroupAccess(userId, groupId);
     await markMessageAsUnread(messageId, userId);
 
-    // Emit socket event to notify others in the group
-    if (ioInstance) {
+    const io = getChatIo();
+    if (io) {
       const [userRows] = await db
         .promise()
         .query("SELECT name FROM user WHERE id = ?", [userId]);
       const userName = userRows[0]?.name || "User";
 
-      ioInstance.to(`group:${groupId}`).emit("messageUnread", {
+      io.to(`group:${groupId}`).emit("messageUnread", {
         messageId,
         userId,
         userName,
@@ -753,7 +738,7 @@ exports.markMessageAsUnread = async (req, res) => {
       message: "Message marked as unread",
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -782,14 +767,14 @@ exports.markAllMessagesAsRead = async (req, res) => {
       await markMessagesAsRead(messageIds, userId);
     }
 
-    // Emit socket event to notify others in the group
-    if (ioInstance) {
+    const io = getChatIo();
+    if (io) {
       const [userRows] = await db
         .promise()
         .query("SELECT name FROM user WHERE id = ?", [userId]);
       const userName = userRows[0]?.name || "User";
 
-      ioInstance.to(`group:${groupId}`).emit("allMessagesRead", {
+      io.to(`group:${groupId}`).emit("allMessagesRead", {
         userId,
         userName,
         messageCount: messageIds.length,
@@ -802,7 +787,7 @@ exports.markAllMessagesAsRead = async (req, res) => {
       message: `${messageIds.length} messages marked as read`,
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -828,7 +813,7 @@ exports.getReadMessages = async (req, res) => {
       data: messages,
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -857,7 +842,7 @@ exports.getUnreadMessages = async (req, res) => {
       data: messages,
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
@@ -882,23 +867,8 @@ exports.getUnreadCount = async (req, res) => {
       data: { unread_count: count },
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
-};
-
-const determineResourceCategory = (fileType = "") => {
-  if (!fileType) return "other";
-  if (fileType.startsWith("image/")) return "photos";
-  if (fileType.startsWith("video/")) return "videos";
-  if (fileType.includes("pdf") || fileType.includes("document"))
-    return "documents";
-  if (fileType.includes("presentation") || fileType.includes("ms-powerpoint"))
-    return "documents";
-  if (fileType.includes("spreadsheet") || fileType.includes("excel"))
-    return "documents";
-  if (fileType.includes("audio/")) return "audio";
-  if (fileType.includes("link")) return "links";
-  return "other";
 };
 
 // ─── React to message ────────────────────────────────────────────────────────────
@@ -936,9 +906,9 @@ exports.toggleReaction = async (req, res) => {
       .query("SELECT id, name, user_photo, email FROM user WHERE id = ?", [userId]);
     const userReacted = userRows[0] || null;
 
-    // Broadcast real-time update to the group
-    if (ioInstance) {
-      ioInstance.to(`group:${groupId}`).emit("messageReactionUpdated", {
+    const io = getChatIo();
+    if (io) {
+      io.to(`group:${groupId}`).emit("messageReactionUpdated", {
         groupId,
         messageId,
         reactions,
@@ -954,7 +924,7 @@ exports.toggleReaction = async (req, res) => {
       data: { messageId, reactions, action, user: userReacted },
     });
   } catch (error) {
-    return handleError(res, error);
+    return respondGroupAccessOrServerError(res, error);
   }
 };
 
