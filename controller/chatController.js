@@ -5,6 +5,7 @@ const validator = require("validator");
 const {
   saveMessage,
   getMessages,
+  searchMessages,
   markMessageAsRead,
   markMessageAsUnread,
   markMessagesAsRead,
@@ -248,15 +249,17 @@ exports.getGroupMessages = async (req, res) => {
       });
     }
 
-    // get messages with search is not supported yet
-    // why?
-    // because it requires full text search implementation which is not yet done
-
-    if (searchMessage) {
-      return res.status(400).json({
-        success: false,
-        message: "searchMessage parameter is not supported",
-      });
+    if (searchMessage !== undefined) {
+      const trimmed = (searchMessage || "").trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, message: "searchMessage cannot be empty" });
+      }
+      if (trimmed.length > 200) {
+        return res.status(400).json({ success: false, message: "searchMessage must be 200 characters or less" });
+      }
+      await ensureGroupAccess(userId, groupId);
+      const messages = await searchMessages(groupId, trimmed, { limit, userId });
+      return res.json({ success: true, data: messages });
     }
 
     await ensureGroupAccess(userId, groupId);

@@ -271,6 +271,66 @@ const getMessages = async (groupId, { limit = 50, before, userId } = {}) => {
   return messages.reverse();
 };
 
+/**
+ * Search messages within a specific group by message text.
+ */
+const searchMessages = async (groupId, query, { limit = 50, userId } = {}) => {
+  const safeLimit = Math.min(Number(limit) || 50, 200);
+  const searchParam = query.trim();
+
+  const [rows] = await db.promise().query(
+    `${baseSelect}
+     WHERE gm.group_id = ?
+       AND gm.message LIKE CONCAT('%', ?, '%')
+     ORDER BY gm.created_at ASC
+     LIMIT ?`,
+    [groupId, searchParam, safeLimit]
+  );
+
+  if (rows.length === 0) return [];
+
+  const messageIds = rows.map((m) => m.id);
+
+  const [allMedia] = await db.promise().query(
+    "SELECT * FROM group_message_media WHERE message_id IN (?)",
+    [messageIds]
+  );
+  const mediaByMessageId = allMedia.reduce((acc, media) => {
+    if (!acc[media.message_id]) acc[media.message_id] = [];
+    acc[media.message_id].push(media);
+    return acc;
+  }, {});
+
+  let readStatusesByMessageId = {};
+  if (userId) {
+    const [allReadStatus] = await db.promise().query(
+      "SELECT message_id, is_read, read_at FROM message_read_status WHERE user_id = ? AND message_id IN (?)",
+      [userId, messageIds]
+    );
+    readStatusesByMessageId = allReadStatus.reduce((acc, s) => {
+      acc[s.message_id] = s;
+      return acc;
+    }, {});
+  }
+
+  const reactionsByMessageId = await fetchReactionsForMessages(messageIds);
+  const parentMessageMap = await fetchParentMessages(rows);
+
+  return rows.map((message) => {
+    const status = readStatusesByMessageId[message.id];
+    return {
+      ...message,
+      media: mediaByMessageId[message.id] || [],
+      reactions: reactionsByMessageId[message.id] || [],
+      parent_message: message.parent_message_id
+        ? (parentMessageMap[message.parent_message_id] || null)
+        : null,
+      is_read: status ? status.is_read === 1 : false,
+      read_at: status ? status.read_at : null,
+    };
+  });
+};
+
 // Mark message as read for a user
 const markMessageAsRead = async (messageId, userId) => {
   try {
@@ -682,6 +742,7 @@ function determineResourceCategory(fileType = "") {
 module.exports = {
   saveMessage,
   getMessages,
+  searchMessages,
   fetchMessageById,
   markMessageAsRead,
   markMessageAsUnread,
