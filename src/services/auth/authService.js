@@ -61,9 +61,12 @@ exports.login = async (data) => {
       throw new Error("Please verify your email");
     }
   
-    if (!isAdminAccess(user, from)) {
-      throw new Error("Access denied");
+    if (from){
+      if (!isAdminAccess(user, from)) {
+        throw new Error("Access denied. Administrators only.");
+      }
     }
+    
   
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
