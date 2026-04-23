@@ -297,7 +297,7 @@ The created **video** is stored in the `video` table with `meeting_id` and `grou
 ```javascript
 socket.emit("getMeetingParticipants", { meetingId: "meeting-uuid" }, (ack) => {
   if (ack?.ok) {
-    console.log(ack.participants); // same shape as joinMeetingRoom ack
+    //console.log(ack.participants); // same shape as joinMeetingRoom ack
   }
 });
 ```
