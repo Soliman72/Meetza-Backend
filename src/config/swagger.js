@@ -19,8 +19,8 @@ const options = {
   },
   // Absolute paths to files where APIs are defined
   apis: [
-    path.join(__dirname, "../router/*.js"),
-    path.join(__dirname, "../controller/*.js"),
+    path.join(__dirname, "../routes/*.js"),
+    path.join(__dirname, "../controllers/*.js"),
   ],
 };
 

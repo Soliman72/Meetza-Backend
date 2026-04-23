@@ -2,8 +2,8 @@ const express = require("express");
 const router = express.Router();
 const meetingController = require("../controllers/meetingController");
 const uploadMiddleware = require("../middleware/uploadMiddleware");
-const { verifyToken } = require("../utils/verifyToken");
-const { checkAdminPermission } = require("../utils/checkAdminPermission");
+const { verifyToken } = require("../middleware/verifyToken");
+const { checkAdminPermission } = require("../middleware/checkAdminPermission");
 
 /**
  * @swagger

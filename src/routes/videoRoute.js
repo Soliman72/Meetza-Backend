@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const videoController = require("../controller/videoController");
-const videoWatchProgressRouter = require("./videoWatchProgressRouter");
-const { verifyToken } = require("../utils/verifyToken");
+const videoController = require("../controllers/videoController");
+const videoWatchProgressRouter = require("./videoWatchProgressRoute");
+const { verifyToken } = require("../middleware/verifyToken");
 const { checkAdminPermission } = require("../middleware/checkAdminPermission");
 const uploadMiddleware = require("../middleware/uploadMiddleware");
 

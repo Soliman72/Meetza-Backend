@@ -5,35 +5,34 @@ const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const swaggerUi = require("swagger-ui-express");
-const swaggerSpec = require("./config/swagger");
+const swaggerSpec = require("./src/config/swagger");
 
-const authRouter = require("./router/authRouter");
-const groupContentRouter = require("./router/groupContentRouter");
-const meetingRouter = require("./router/meetingRouter");
-const passport = require("./config/passport");
-const chatRouter = require("./router/chatRouter");
-const chatController = require("./controller/chatController");
-const registerChatSocket = require("./sockets/chatSocket");
+const authRouter = require("./src/routes/authRoute");
+const groupContentRouter = require("./src/routes/groupContentRoute");
+const meetingRouter = require("./src/routes/meetingRoute");
+const passport = require("./src/config/passport");
+const chatRouter = require("./src/routes/chatRoute");
+const chatController = require("./src/controllers/chatController");
+const registerChatSocket = require("./src/sockets/chatSocket");
 
-require("./config/db");
-const socialAuthRouter = require("./router/social_authRouter");
-const memberRouter = require("./router/memberRouter");
-const administratorRouter = require("./router/administratorRouter");
-const userRouter = require("./router/userRouter");
-const videoRouter = require("./router/videoRouter");
-const groupRouter = require("./router/groupRouter"); // Use group router
-const groupMembershipRouter = require("./router/group_membershipRouter");
-const positionRouter = require("./router/positionRouter"); // Use position router
-const commentRouter = require("./router/commentRouter");
-const saved_videoRouter = require("./router/saved_videoRouter");
+require("./src/config/db");
+const socialAuthRouter = require("./src/routes/social_authRoute");
+const memberRouter = require("./src/routes/memberRoute");
+const administratorRouter = require("./src/routes/administratorRoute");
+const userRouter = require("./src/routes/userRoute");
+const videoRouter = require("./src/routes/videoRoute");
+const groupRouter = require("./src/routes/groupRoute");
+const groupMembershipRouter = require("./src/routes/group_memberShipRoute");
+const positionRouter = require("./src/routes/positionRoute");
+const commentRouter = require("./src/routes/commentRoute");
+const saved_videoRouter = require("./src/routes/saved_videoRoute");
 
-const { initNotificationSocket } = require("./services/notificationService");
-const registerNotificationSocket = require("./sockets/notificationSocket");
-const notificationRouter = require("./router/notificationRouter");
-const contactRouter = require("./router/contactRouter");
-const homeRouter = require("./router/homeRouter");
-const videoWatchProgressRouter = require("./router/videoWatchProgressRouter");
-const reportRouter = require("./router/reportRouter");
+const notificationSocket = require("./src/sockets/notificationSocket");
+const registerNotificationSocket = notificationSocket.registerNotificationSocket;
+const notificationRouter = require("./src/routes/notificationRoute");
+const contactRouter = require("./src/routes/contactRoute");
+const homeRouter = require("./src/routes/homeRoute");
+const reportRouter = require("./src/routes/reportRoute");
 
 const os = require("os");
 const fs = require("fs");
@@ -53,15 +52,15 @@ const io = new Server(server, {
 app.set("io", io);
 chatController.registerChatIo(io);
 registerChatSocket(io);
-const registerMeetingSocket = require("./sockets/meetingSocket");
+const registerMeetingSocket = require("./src/sockets/meetingSocket");
 const {
   bootstrapMeetingRecurrenceJobs,
-} = require("./services/meetingRecurrenceScheduler");
+} = require("./src/services/meetingRecurrenceScheduler");
 
 registerMeetingSocket(io);
 
-// Register notification socket
-initNotificationSocket(io);
+// Register notification socket (io for emitters used by notificatioService)
+notificationSocket.setSocket(io);
 registerNotificationSocket(io);
 
 // Serve static files (videos, posters) from the uploads folder
@@ -152,14 +151,13 @@ app.use("/api/group-membership", groupMembershipRouter);
 app.use("/api/group-contents", groupContentRouter);
 app.use("/api/meeting", meetingRouter);
 app.use("/api/video", videoRouter);
-app.use("/api/like", require("./router/likeRouter"));
+app.use("/api/like", require("./src/routes/likeRoute"));
 app.use("/api/comment", commentRouter);
 app.use("/api/saved_video", saved_videoRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
 app.use("/api/home", homeRouter);
-app.use("/api/video-watch-progress", videoWatchProgressRouter);
 app.use("/api/reports", reportRouter);
 
 

@@ -1,8 +1,9 @@
 const repo = require("../repositories/notificationRepository");
-const { buildNotification } = require("./notification/notificationBuilder");
+const { buildNotification } = require("./notificationBuilder");
 const emitter = require("../sockets/notificationSocket");
 const notificationValidator = require("../validators/notificationValidator");
 const userRepository = require("../repositories/userRepository");
+const sendEmail = require("../utils/sendEmail");
 
 const getMemberNotifications = async (memberId) => {
   return await repo.getByMemberId(memberId);

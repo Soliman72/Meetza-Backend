@@ -1,15 +1,24 @@
 const express = require("express");
 const router = express.Router();
-const controller = require("../controllers/groupContentController");
+const groupContentController = require("../controllers/groupContentController");
 const { verifyToken } = require("../middleware/verifyToken");
 const { checkAdminPermission } = require("../middleware/checkAdminPermission");
+
+router.get("/", verifyToken, groupContentController.getAllGroupContents);
+router.get(
+  "/meeting/:meeting_id",
+  verifyToken,
+  groupContentController.getGroupContentResourcesByMeetingId
+);
+router.get("/:id", verifyToken, groupContentController.getGroupContentById);
+router.put("/:id", verifyToken, checkAdminPermission, groupContentController.updateGroupContentById);
+router.post("/:id/files", verifyToken, checkAdminPermission, groupContentController.addFilesToGroupContent);
+router.delete("/:id/files/:resourceId", verifyToken, checkAdminPermission, groupContentController.deleteFileFromGroupContent);
 
 router.post(
   "/",
   verifyToken,
   checkAdminPermission,
-  controller.createGroupContentFromBody
+  groupContentController.createGroupContentFromBody
 );
-router.get("/", verifyToken, controller.getAllGroupContents);
-
 module.exports = router;

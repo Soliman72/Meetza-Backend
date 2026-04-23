@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const controller = require("../controller/social_authController");
-const { verifyToken } = require("../utils/verifyToken");
+const controller = require("../controllers/social_authController");
+const { verifyToken } = require("../middleware/verifyToken");
 
 
 router.get("/", verifyToken, controller.getAllSocialAuths);

@@ -1,3 +1,5 @@
+const authenticateSocket = require("../middleware/soketAuth");
+
 let io;
 
 const setSocket = (socketInstance) => {
