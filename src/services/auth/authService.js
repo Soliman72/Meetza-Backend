@@ -57,11 +57,11 @@ exports.login = async (data) => {
       };
     }
   
-    if (user.email_verification) {
+    if (!user.email_verification) {
       throw new Error("Please verify your email");
     }
   
-    if (isAdminAccess(user, from)) {
+    if (!isAdminAccess(user, from)) {
       throw new Error("Access denied");
     }
   

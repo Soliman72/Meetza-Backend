@@ -64,6 +64,12 @@ const createNotification = async ({
   emitter.emitNotification(notification);
   emitter.emitUnreadCount(memberId, count);
 
+  let senderName = "Someone";
+  if (senderId) {
+    const sender = await userRepository.findById(senderId);
+    if (sender?.name) senderName = sender.name;
+  }
+
   const messageMail =
       message +
       `\nOpen Meetza to check the latest update and stay up to date with your group activity!`;
@@ -155,7 +161,7 @@ const createNotification = async ({
         </body>
         </html>`;
 
-  const [[member]] = await userRepository.getEmailById(memberId);
+  const member = await userRepository.getEmailById(memberId);
   if (member?.email) {
     try{
       await sendEmail({
