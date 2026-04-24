@@ -3,7 +3,9 @@ const groupContentService = require("./groupContentService");
 const extractArray = require("../utils/extractArray");
 const repo = require("../repositories/groupRepository");
 const groupAdminService = require("./groupAdminService");
-const { validateCreateGroup, validateUpdateGroup, validateRemoveAdmin, validateLeaveGroup  } = require("../validators/groupValidator");
+const db = require("../config/db");
+const { ensureGroupAccess } = require("../utils/groupAccess");
+const { validateCreateGroup, validateUpdateGroup, validateRemoveAdmin } = require("../validators/groupValidator");
 const { validateFileType } = require("../validators/validateFiles");
 const { uploadToCloudinary } = require("../middleware/uploadFile");
 const { isGroupAdmin } = require("../services/groupAdminService");
@@ -291,70 +293,152 @@ exports.removeGroupAdmin = async (req) => {
 };
 
 exports.leaveGroup = async (req) => {
-  const groupId = req.params.id;
-  const userId = req.user.id;
-  const { new_admin_id } = req.body;
+  const groupId = req.params?.id;
+  const userId = req.user?.id;
 
-  validateLeaveGroup(req.body);
-
-  const isAdmin = await isGroupAdmin(userId, groupId);
-  const role = await repo.getGroupRoleByUser(userId, groupId);
-  const roleToAssign = role === "OWNER" ? "OWNER" : "ADMIN";
-  let adminToAssignId = new_admin_id;
-  
-  if (isAdmin) {
-    const otherAdmins = await repo.countOtherAdmins(userId, groupId);
-
-    if (otherAdmins === 0) {
-      if(!adminToAssignId) {
-        throw new Error("You are last admin, cannot leave without transfering ownership");
-      }
-    } else {
-      if (!adminToAssignId) {
-        const admin = await repo.getAnyOtherAdmin(userId, groupId);
-        adminToAssignId = admin.user_id;
-        await groupAdminService.assignGroupAdmin({
-          groupId,
-          userId: adminToAssignId,
-          role: roleToAssign,
-          assignedBy: userId,
-        });
-      } else if (adminToAssignId) {
-        const validAdmin = await isGroupAdmin(adminToAssignId, groupId);
-        if(!validAdmin) {
-          throw new Error("User is not an admin");
-        }
-        
-        await groupAdminService.assignGroupAdmin({
-          groupId,
-          userId: adminToAssignId,
-          role: roleToAssign,
-          assignedBy: userId,
-        });
-      }
-    }
-    
-    const meetings = await repo.getGroupMeetingIds(groupId);
-    await meetingAdminService.assignMeetingAdmin({
-      meetings,
-      userId: adminToAssignId,
-      role: roleToAssign,
-      assignedBy: userId,
-    });
-
-    await repo.removeGroupAdmin(groupId, userId);
-    await repo.removeMeetingAdminByUser(groupId, userId);
+  if (!userId || !groupId) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message:
+          "group id is required and user must be authenticated",
+      },
+    };
   }
 
-  await groupMembershipService.removeGroupMembership(userId, groupId);
+  await ensureGroupAccess(userId, groupId);
 
-  return {
-    status: 200,
-    body: {
-      success: true,
-      message: "Left group successfully",
-      assignedAdmin: adminToAssignId,
-      roleToAssign: roleToAssign,
-    },
-  };
+  const { new_admin_id, new_admin_role } = req.body || {};
+  const conn = await db.promise().getConnection();
+
+  try {
+    const myAdminRows = await repo.leaveSelectMyAdminRole(conn, groupId, userId);
+    const isAdmin = myAdminRows.length > 0;
+    const myAdminRole = isAdmin ? myAdminRows[0].role : null;
+
+    if (isAdmin) {
+      const otherAdmins = await repo.leaveCountOtherAdmins(
+        conn,
+        groupId,
+        userId
+      );
+
+      if (otherAdmins === 0) {
+        if (!new_admin_id) {
+          const admins = await repo.leaveListAdministratorCandidates(
+            conn,
+            userId
+          );
+
+          return {
+            status: 409,
+            body: {
+              success: false,
+              code: "LAST_ADMIN_ASSIGN_REQUIRED",
+              message:
+                "You are the last admin in this group. Assign a new admin before leaving.",
+              data: {
+                group_id: groupId,
+                current_admin_role: myAdminRole,
+                admins,
+              },
+            },
+          };
+        }
+
+        const validAdmin = await repo.leaveFindAdministratorByUserId(
+          conn,
+          new_admin_id
+        );
+        if (validAdmin.length === 0) {
+          return {
+            status: 400,
+            body: {
+              success: false,
+              message: "new_admin_id must be an Administrator user",
+            },
+          };
+        }
+
+        const roleToAssign =
+          new_admin_role && ["OWNER", "ADMIN"].includes(new_admin_role)
+            ? new_admin_role
+            : myAdminRole === "OWNER"
+              ? "OWNER"
+              : "ADMIN";
+
+        await conn.beginTransaction();
+
+        await repo.leaveUpsertGroupAdmin(conn, {
+          id: uuidv4(),
+          groupId,
+          userId: new_admin_id,
+          role: roleToAssign,
+          assignedBy: userId,
+        });
+
+        const meetingIds = await repo.leaveSelectMeetingIdsByGroup(
+          conn,
+          groupId
+        );
+        for (const m of meetingIds) {
+          await repo.leaveUpsertMeetingAdmin(conn, {
+            id: uuidv4(),
+            meetingId: m.id,
+            userId: new_admin_id,
+            role: roleToAssign,
+            assignedBy: userId,
+          });
+        }
+
+        await repo.leaveDeleteGroupAdmin(conn, groupId, userId);
+        await repo.leaveDeleteMeetingAdminsForUserInGroup(
+          conn,
+          groupId,
+          userId
+        );
+
+        await repo.leaveDeleteGroupMembership(conn, groupId, userId);
+
+        await conn.commit();
+
+        return {
+          status: 200,
+          body: {
+            success: true,
+            message: "Left group successfully",
+            data: {
+              group_id: groupId,
+              assigned_new_admin: { id: new_admin_id, role: roleToAssign },
+            },
+          },
+        };
+      }
+    }
+
+    await conn.beginTransaction();
+    await repo.leaveDeleteGroupMembership(conn, groupId, userId);
+    await repo.leaveDeleteGroupAdmin(conn, groupId, userId);
+    await repo.leaveDeleteMeetingAdminsForUserInGroup(conn, groupId, userId);
+    await conn.commit();
+
+    return {
+      status: 200,
+      body: {
+        success: true,
+        message: "Left group successfully",
+        data: { group_id: groupId },
+      },
+    };
+  } catch (err) {
+    try {
+      await conn.rollback();
+    } catch (_e) {
+      /* ignore */
+    }
+    throw err;
+  } finally {
+    conn.release();
+  }
 };

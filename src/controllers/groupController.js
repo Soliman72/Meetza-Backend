@@ -1,4 +1,5 @@
 const groupService = require("../services/groupService");
+const { GroupAccessError } = require("../utils/groupAccess");
 
 exports.createGroup = async (req, res) => {
   try {
@@ -84,9 +85,18 @@ exports.removeGroupAdmin = async (req, res) => {
 
 exports.leaveGroup = async (req, res) => {
   try {
-    const result = await groupService.leaveGroup(req);
-    res.status(200).json({ success: true, data: result });
+    const out = await groupService.leaveGroup(req);
+    return res.status(out.status).json(out.body);
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    if (err instanceof GroupAccessError) {
+      return res
+        .status(err.statusCode)
+        .json({ success: false, message: err.message });
+    }
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
   }
 };

@@ -345,3 +345,102 @@ exports.getGroupOwner = async (groupId) => {
   );
   return rows[0];
 };
+
+/* ——— leave group (transactional; pass pool connection from service) ——— */
+
+exports.leaveSelectMyAdminRole = async (conn, groupId, userId) => {
+  const [rows] = await conn.query(
+    "SELECT role FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
+    [groupId, userId]
+  );
+  return rows;
+};
+
+exports.leaveCountOtherAdmins = async (conn, groupId, excludeUserId) => {
+  const [rows] = await conn.query(
+    "SELECT COUNT(*) AS c FROM group_admin WHERE group_id = ? AND user_id <> ?",
+    [groupId, excludeUserId]
+  );
+  return Number(rows[0]?.c) || 0;
+};
+
+exports.leaveListAdministratorCandidates = async (conn, excludeUserId) => {
+  const [rows] = await conn.query(
+    `SELECT u.id, u.name, u.user_photo
+     FROM administrator a
+     INNER JOIN user u ON u.id = a.user_id
+     WHERE u.id <> ?
+       AND u.role = 'Administrator'
+     ORDER BY u.name ASC
+     LIMIT 50`,
+    [excludeUserId]
+  );
+  return rows;
+};
+
+exports.leaveFindAdministratorByUserId = async (conn, userId) => {
+  const [rows] = await conn.query(
+    `SELECT a.user_id
+     FROM administrator a
+     INNER JOIN user u ON u.id = a.user_id
+     WHERE a.user_id = ? AND u.role = 'Administrator'
+     LIMIT 1`,
+    [userId]
+  );
+  return rows;
+};
+
+exports.leaveUpsertGroupAdmin = async (
+  conn,
+  { id, groupId, userId, role, assignedBy }
+) => {
+  await conn.query(
+    `INSERT INTO group_admin (id, group_id, user_id, role, assigned_by)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE role = VALUES(role), assigned_by = VALUES(assigned_by)`,
+    [id, groupId, userId, role, assignedBy]
+  );
+};
+
+exports.leaveSelectMeetingIdsByGroup = async (conn, groupId) => {
+  const [rows] = await conn.query(
+    "SELECT id FROM meeting WHERE group_id = ?",
+    [groupId]
+  );
+  return rows;
+};
+
+exports.leaveUpsertMeetingAdmin = async (
+  conn,
+  { id, meetingId, userId, role, assignedBy }
+) => {
+  await conn.query(
+    `INSERT INTO meeting_admin (id, meeting_id, user_id, role, assigned_by)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE role = VALUES(role), assigned_by = VALUES(assigned_by)`,
+    [id, meetingId, userId, role, assignedBy]
+  );
+};
+
+exports.leaveDeleteGroupAdmin = async (conn, groupId, userId) => {
+  await conn.query(
+    "DELETE FROM group_admin WHERE group_id = ? AND user_id = ?",
+    [groupId, userId]
+  );
+};
+
+exports.leaveDeleteMeetingAdminsForUserInGroup = async (conn, groupId, userId) => {
+  await conn.query(
+    `DELETE ma FROM meeting_admin ma
+     JOIN meeting m ON m.id = ma.meeting_id
+     WHERE m.group_id = ? AND ma.user_id = ?`,
+    [groupId, userId]
+  );
+};
+
+exports.leaveDeleteGroupMembership = async (conn, groupId, memberId) => {
+  await conn.query(
+    "DELETE FROM group_membership WHERE group_id = ? AND member_id = ?",
+    [groupId, memberId]
+  );
+};
