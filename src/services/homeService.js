@@ -134,15 +134,16 @@ async function getHomeLeaders(req) {
   const userId = req.user.id;
   const role = req.user.role;
   const cap = homeValidator.parseLeadersLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
-  let rows;
-  if (role === "Super_Admin") {
-    rows = await homeRepo.findHomeLeadersSuperAdmin(cap);
-  } else if (role === "Administrator") {
-    rows = await homeRepo.findHomeLeadersAdministrator(userId, cap);
-  } else {
-    rows = await homeRepo.findHomeLeadersMember(userId, cap);
-  }
+  const rows = await homeRepo.findHomeLeadersByScope(
+    userId,
+    role,
+    cap,
+    search
+  );
 
   return (rows || []).map((r) => ({
     id: r.leader_id,

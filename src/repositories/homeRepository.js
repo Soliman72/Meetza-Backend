@@ -155,7 +155,12 @@ exports.findMostInterestedVideos = async (whereSql, params) => {
   return queryRows(sql, params);
 };
 
-exports.findHomeLeadersSuperAdmin = async (limit) => {
+exports.findHomeLeadersByScope = async (
+  userId,
+  role,
+  limit,
+  search = ""
+) => {
   const sql = `
       SELECT DISTINCT
         u.id AS leader_id,
@@ -163,56 +168,44 @@ exports.findHomeLeadersSuperAdmin = async (limit) => {
         u.user_photo,
         p.id AS position_id,
         p.title AS position_title
-      FROM administrator a
-      INNER JOIN user u ON u.id = a.user_id AND u.role = 'Administrator'
-      LEFT JOIN position p ON p.administrator_id = a.user_id
-      ORDER BY u.name ASC
-      LIMIT ?
-    `;
-  return queryRows(sql, [limit]);
-};
-
-exports.findHomeLeadersAdministrator = async (userId, limit) => {
-  const sql = `
-      SELECT DISTINCT
-        u.id AS leader_id,
-        u.name,
-        u.user_photo,
-        p.id AS position_id,
-        p.title AS position_title
-      FROM group_admin ga
-      INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator'
-      LEFT JOIN position p ON p.administrator_id = ga.user_id
-      WHERE ga.group_id IN (
+      ${
+        role === "Super_Admin"
+          ? "FROM administrator a INNER JOIN user u ON u.id = a.user_id AND u.role = 'Administrator' LEFT JOIN position p ON p.administrator_id = a.user_id"
+          : "FROM group_admin ga INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator' LEFT JOIN position p ON p.administrator_id = ga.user_id"
+      }
+      WHERE 1 = 1
+      ${
+        role === "Administrator"
+          ? `AND ga.group_id IN (
         SELECT group_id FROM group_admin WHERE user_id = ?
       )
         AND ga.role IN ('OWNER', 'ADMIN')
-        AND ga.user_id <> ?
-      ORDER BY u.name ASC
-      LIMIT ?
-    `;
-  return queryRows(sql, [userId, userId, limit]);
-};
-
-exports.findHomeLeadersMember = async (userId, limit) => {
-  const sql = `
-      SELECT DISTINCT
-        u.id AS leader_id,
-        u.name,
-        u.user_photo,
-        p.id AS position_id,
-        p.title AS position_title
-      FROM group_admin ga
-      INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator'
-      LEFT JOIN position p ON p.administrator_id = ga.user_id
-      WHERE ga.group_id IN (
+        AND ga.user_id <> ?`
+          : ""
+      }
+      ${
+        role === "Member"
+          ? `AND ga.group_id IN (
         SELECT group_id FROM group_membership WHERE member_id = ?
       )
-        AND ga.role IN ('OWNER', 'ADMIN')
+        AND ga.role IN ('OWNER', 'ADMIN')`
+          : ""
+      }
+      ${search ? "AND (u.name LIKE ? OR p.title LIKE ?)" : ""}
       ORDER BY u.name ASC
       LIMIT ?
     `;
-  return queryRows(sql, [userId, limit]);
+  const params = [];
+  if (role === "Administrator") {
+    params.push(userId, userId);
+  } else if (role === "Member") {
+    params.push(userId);
+  }
+  if (search) {
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  params.push(limit);
+  return queryRows(sql, params);
 };
 
 exports.findHomeSavedVideos = async (whereClause, params) => {
