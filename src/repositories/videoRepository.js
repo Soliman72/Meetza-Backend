@@ -196,9 +196,9 @@ const updateVideo = async (videoId, data, req) => {
   if (!fields.length) return 0;
 
   let sql = `
-    UPDATE video
+    UPDATE video v
     SET ${fields.join(", ")}
-    WHERE id = ?
+    WHERE v.id = ?
   `;
 
   params.push(videoId);
