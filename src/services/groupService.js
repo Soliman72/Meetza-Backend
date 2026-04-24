@@ -147,7 +147,8 @@ exports.updateGroup = async (req) => {
     return { message: "Updated" };
   };
 
-exports.deleteGroup = async (id) => {
+exports.deleteGroup = async (req) => {
+  const id = req.params.id;
   const group = await repo.findById(id);
   if (!group) throw new Error("Group not found");
   if (!req.isSuperAdmin) {
