@@ -5,7 +5,12 @@ const repo = require("../repositories/groupRepository");
 const groupAdminService = require("./groupAdminService");
 const db = require("../config/db");
 const { ensureGroupAccess } = require("../utils/groupAccess");
-const { validateCreateGroup, validateUpdateGroup, validateRemoveAdmin } = require("../validators/groupValidator");
+const {
+  validateCreateGroup,
+  validateUpdateGroup,
+  validateAddAdmin,
+  validateRemoveAdmin,
+} = require("../validators/groupValidator");
 const { validateFileType } = require("../validators/validateFiles");
 const { uploadToCloudinary } = require("../middleware/uploadFile");
 const { isGroupAdmin } = require("../services/groupAdminService");
@@ -162,15 +167,15 @@ exports.addGroupAdmin = async (req) => {
   if (email) targetEmails.push(email.trim());
   targetEmails = [...new Set(targetEmails)];
   
-  validateAddAdmin(req.body);
-
+  validateAddAdmin({ groupId, userId: req.user?.id, role });
+  
   await repo.findById(groupId);
 
   if (!req.isSuperAdmin) {
     await isGroupAdmin(req.user.id, groupId);
   }
 
-  const meetings = await repo.getGroupMeetings(groupId);
+  const meetings = await repo.getGroupMeetingIds(groupId);
 
   const results = [];
 
