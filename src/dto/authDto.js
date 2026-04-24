@@ -1,21 +1,9 @@
-/**
- * Auth DTOs – login, register, token responses.
- */
-
 const userDto = require("./userDto");
 
-/**
- * Login success payload
- * @param {string} token - JWT
- * @param {object} user - user row from DB
- */
 const loginResponse = (token) => ({
   token,
 });
 
-/**
- * Register success payload (optional: no token until email verified)
- */
 const registerResponse = (user) => ({
   name: user?.name,
   email: user?.email,
