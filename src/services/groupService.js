@@ -200,12 +200,14 @@ exports.addGroupAdmin = async (req) => {
         assignedBy: req.user.id,
       });
 
-      await meetingAdminService.assignMeetingAdmin({
-        meetings,
-        userId: user.id,
-        role,
-        assignedBy: req.user.id,
-      });
+      for (const meeting of meetings) {
+        await meetingAdminService.assignMeetingAdmin({
+          meetingId: meeting.id,
+          userId: user.id,
+          role,
+          assignedBy: req.user.id,
+        });
+      }
 
       results.push({ email: emailAddr, success: true });
 
