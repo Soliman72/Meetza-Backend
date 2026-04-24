@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require("uuid");
 const authRepository = require("../repositories/authRepository");
 const socialAuthRepository = require("../repositories/socialAuthRepository");
+const domainRepository = require("../repositories/domainRepository");
 
 function redirectWithError(errorCode, errorMessage, res, type = "signin", redirect) {
   const baseUrl = redirect.includes("https://meetza-front-end.vercel.app")
@@ -110,6 +111,23 @@ async function handleGoogleOAuthCallback(err, profile, req, res) {
 
     const role = stateObj.role || "Member";
     const email = profile._json?.email || profile.emails?.[0]?.value;
+
+    if (email) {
+      const domainName = email.split('@')[1];
+      if (domainName) {
+        const domainObj = await domainRepository.findByDomainName(domainName.toLowerCase());
+        if (domainObj && !domainObj.auth_google_enabled) {
+          return redirectWithError(
+            "google_auth_disabled",
+            "Google Sign-In is disabled for your organization. Please use Email/Password.",
+            res,
+            type,
+            redirectUrl
+          );
+        }
+      }
+    }
+
     const providerId = profile.id;
     const name =
       profile.displayName ||

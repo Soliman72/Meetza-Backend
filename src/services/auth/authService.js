@@ -1,4 +1,5 @@
 const authRepo = require("../../repositories/authRepository");
+const domainRepository = require("../../repositories/domainRepository");
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require("uuid");
 const { sendVerificationEmail } = require("../../utils/emailService");
@@ -16,6 +17,14 @@ exports.deleteUserByEmail = async (email) => {
 exports.register = async (data) => {
   authValidator.validateRegister(data);
   const { name, email, password, role } = data;
+
+  const domainName = email.split('@')[1];
+  if (domainName) {
+    const domainObj = await domainRepository.findByDomainName(domainName.toLowerCase());
+    if (domainObj && !domainObj.auth_email_enabled) {
+      throw new Error("Email authentication is disabled for your organization. Please use Google Sign-In.");
+    }
+  }
 
   const exists = await authRepo.findByEmail(email);
   if (exists) throw new Error("Email already exists");
@@ -41,6 +50,14 @@ exports.register = async (data) => {
 exports.login = async (data) => {
     authValidator.validateLogin(data);
     const { email, password, remember_me, from, captchaToken } = data;
+
+    const domainName = email.split('@')[1];
+    if (domainName) {
+      const domainObj = await domainRepository.findByDomainName(domainName.toLowerCase());
+      if (domainObj && !domainObj.auth_email_enabled) {
+        throw new Error("Email authentication is disabled for your organization. Please use Google Sign-In.");
+      }
+    }
 
     const user = await authRepo.findByEmail(email);
     if (!user) {

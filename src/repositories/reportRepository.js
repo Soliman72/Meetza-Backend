@@ -165,7 +165,7 @@ exports.findGroupsDetailed = async (groupIds, start, end) => {
         (SELECT COUNT(*) FROM comment c JOIN video v ON v.id = c.video_id WHERE v.group_id = g.id AND c.timestamp BETWEEN ? AND ?) as totalComments,
         (SELECT COUNT(*) FROM \`like\` l JOIN video v ON v.id = l.video_id WHERE v.group_id = g.id AND l.created_at BETWEEN ? AND ?) as totalLikes
       FROM \`group\` g
-      WHERE g.id IN (${ph}) AND g.created_at BETWEEN ? AND ?
+      WHERE g.id IN (${ph})
     `,
     [
       start,
@@ -181,8 +181,6 @@ exports.findGroupsDetailed = async (groupIds, start, end) => {
       start,
       end,
       ...groupIds,
-      start,
-      end,
     ],
   );
 };

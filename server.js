@@ -34,6 +34,7 @@ const notificationRouter = require("./src/routes/notificationRoute");
 const contactRouter = require("./src/routes/contactRoute");
 const homeRouter = require("./src/routes/homeRoute");
 const reportRouter = require("./src/routes/reportRoute");
+const domainRouter = require("./src/routes/domainRoute");
 
 const os = require("os");
 const fs = require("fs");
@@ -161,6 +162,7 @@ app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
 app.use("/api/home", homeRouter);
 app.use("/api/reports", reportRouter);
+app.use("/api/organization-domain", domainRouter);
 
 
 
