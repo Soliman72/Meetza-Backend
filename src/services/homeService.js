@@ -1,5 +1,6 @@
 const { getVideoVisibility } = require("../utils/videoVisibility");
 const { mapWatchProgressFromRow } = require("../utils/videoWatchProgressFields");
+const { buildVideoSearchCondition } = require("../utils/videoSearch");
 const { buildUnreadTotalQuery } = require("./chatMessageService");
 const homeRepo = require("../repositories/homeRepository");
 const homeValidator = require("../validators/homeValidator");
@@ -78,6 +79,9 @@ async function getMostInterestedVideos(req) {
   homeValidator.requireAuthenticatedUser(req);
   const userId = req.user.id;
   const cap = homeValidator.parseMostInterestedLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
   const vis = getVideoVisibility(req, "v");
   const conditions = [];
@@ -85,6 +89,11 @@ async function getMostInterestedVideos(req) {
   if (vis.whereClause) {
     conditions.push(vis.whereClause);
     params.push(...vis.params);
+  }
+  const searchFilter = buildVideoSearchCondition(search, "v");
+  if (searchFilter.clause) {
+    conditions.push(searchFilter.clause);
+    params.push(...searchFilter.params);
   }
   const whereSql = conditions.length
     ? `WHERE ${conditions.join(" AND ")}`
