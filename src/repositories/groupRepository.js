@@ -245,23 +245,43 @@ exports.getGroupWithAccess = async (userId, groupId) => {
 };
 
 exports.getGroupMedia = async (groupId) => {
-  const [rows] = await db.promise().query(
+  const [rows] = await db.promise().execute(
     `
-    SELECT
-      gm.media_id,
-      m.file_name,
-      m.original_name,
-      m.file_type,
-      m.file_size,
-      m.cloud_public_id,
-      m.url,
-      m.created_at
-    FROM group_media gm
-    JOIN media m ON m.id = gm.media_id
-    WHERE gm.group_id = ?
-    ORDER BY gm.media_id ASC
+    SELECT * FROM (
+      SELECT
+        gcr.id AS media_id,
+        NULL AS message_id,
+        NULL AS sender_id,
+        gcr.file_name,
+        gcr.file_name AS original_name,
+        gcr.file_type,
+        gcr.file_size,
+        NULL AS cloud_public_id,
+        gcr.file_url AS url,
+        gcr.created_at,
+        'content' AS source
+      FROM group_content_resource gcr
+      INNER JOIN group_content gc ON gc.id = gcr.group_content_id
+      WHERE gc.group_id = ?
+      UNION ALL
+      SELECT
+        gm.id AS media_id,
+        gm.message_id,
+        gm.sender_id,
+        gm.file_name,
+        gm.file_name AS original_name,
+        CAST(gm.media_type AS CHAR) AS file_type,
+        NULL AS file_size,
+        NULL AS cloud_public_id,
+        gm.media_url AS url,
+        gm.created_at,
+        'chat' AS source
+      FROM group_message_media gm
+      WHERE gm.group_id = ?
+    ) AS group_media_all
+    ORDER BY created_at ASC
     `,
-    [groupId]
+    [groupId, groupId]
   );
 
   return rows;
