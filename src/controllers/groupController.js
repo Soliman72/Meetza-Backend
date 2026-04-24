@@ -68,7 +68,7 @@ exports.deleteGroup = async (req, res) => {
 exports.addGroupAdmin = async (req, res) => {
   try {
     const result = await groupService.addGroupAdmin(req); 
-    res.status(200).json({ success: true, data: result });
+    res.status(result.status).json(result.body);
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -77,7 +77,7 @@ exports.addGroupAdmin = async (req, res) => {
 exports.removeGroupAdmin = async (req, res) => {
   try {
     const result = await groupService.removeGroupAdmin(req);
-    res.status(200).json({ success: true, data: result });
+    res.status(result.status).json(result.body);
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
