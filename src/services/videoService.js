@@ -31,7 +31,7 @@ exports.createVideo = async (req) => {
     poster_url: posterUrl,
     slug,
     duration,
-    admin_id: owner.user_id,
+    administrator_id: owner.user_id,
     description: req.body.description,
     meeting_id: req.body.meeting_id,
     group_id: req.body.group_id,
