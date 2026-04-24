@@ -41,15 +41,21 @@ exports.validateAdminIds = async (adminIds) => {
 };
 
 exports.getAllGroups = async (req) => {
-  let sql = `SELECT g.* FROM \`group\` g 
-               LEFT JOIN group_admin ga ON ga.group_id = g.id`;
+  let sql = `SELECT 
+               g.*,
+               CASE
+                 WHEN ga.user_id IS NOT NULL OR gm_self.member_id IS NOT NULL THEN 1
+                 ELSE 0
+               END AS is_joined
+             FROM \`group\` g 
+             LEFT JOIN group_admin ga ON ga.group_id = g.id AND ga.user_id = ?
+             LEFT JOIN group_membership gm_self ON gm_self.group_id = g.id AND gm_self.member_id = ?`;
 
-  const params = [];
+  const params = [req.user.id, req.user.id];
   let where = [];
 
   if (req.user.role === "Administrator") {
-    where.push("ga.user_id = ?");
-    params.push(req.user.id);
+    where.push("ga.user_id IS NOT NULL");
   }
 
   if (req.query.name) {
