@@ -197,7 +197,7 @@ exports.removeGroupAdmin = async (groupId, userId) => {
 
 exports.removeMeetingAdminByUser = async (groupId, userId) => {
   const [result] = await db.promise().execute(
-    `DELETE FROM meeting_admin ma
+    `DELETE ma FROM meeting_admin ma
      JOIN meeting m ON m.id = ma.meeting_id
      WHERE m.group_id = ? AND ma.user_id = ?`,
     [groupId, userId]
