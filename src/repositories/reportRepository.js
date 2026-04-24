@@ -13,13 +13,14 @@ async function queryOne(sql, params = []) {
 
 exports.getMinUserCreatedAt = async () => {
   const row = await queryOne(
-    "SELECT MIN(created_at) AS platformStart FROM `user`"
+    "SELECT MIN(created_at) AS platformStart FROM `user`",
   );
   return row?.platformStart || null;
 };
 
 exports.findAccessibleGroups = async (userId, isSuperAdmin) => {
-  let sql = "SELECT g.id, g.group_name, g.created_at FROM `group` g";
+  let sql =
+    "SELECT g.id, g.group_name, g.group_photo, g.created_at FROM `group` g";
   const params = [];
   if (!isSuperAdmin) {
     sql += " JOIN group_admin ga ON ga.group_id = g.id WHERE ga.user_id = ?";
@@ -35,6 +36,7 @@ exports.findMeetingsInPeriod = async (groupIds, start, end) => {
     `
       SELECT 
         m.id, m.title, m.start_time, m.end_time, m.status, m.is_weekly, m.recording,
+        m.poster_url,
         g.group_name,
         TIMESTAMPDIFF(MINUTE, m.start_time, m.end_time) as duration,
         (SELECT COUNT(*) FROM meeting_participant WHERE meeting_id = m.id) as attendeeCount
@@ -43,7 +45,7 @@ exports.findMeetingsInPeriod = async (groupIds, start, end) => {
       WHERE m.group_id IN (${ph}) AND m.created_at BETWEEN ? AND ?
       ORDER BY m.start_time DESC
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
 };
 
@@ -53,7 +55,7 @@ exports.findVideosInPeriod = async (groupIds, start, end) => {
   return queryRows(
     `
       SELECT 
-        v.id, v.title, v.created_at, g.group_name,
+        v.id, v.title, v.created_at, v.poster_url, g.group_name,
         TIME_TO_SEC(v.duration) as duration_seconds,
         (SELECT COUNT(*) FROM comment WHERE video_id = v.id) as commentCount,
         (SELECT COUNT(*) FROM \`like\` WHERE video_id = v.id) as likeCount,
@@ -66,7 +68,7 @@ exports.findVideosInPeriod = async (groupIds, start, end) => {
       WHERE v.group_id IN (${ph}) AND v.created_at BETWEEN ? AND ?
       ORDER BY v.created_at DESC
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
 };
 
@@ -78,7 +80,7 @@ exports.countMembershipsInPeriod = async (groupIds, start, end) => {
       SELECT COUNT(*) as currentMembers FROM group_membership 
       WHERE group_id IN (${ph}) AND created_at BETWEEN ? AND ?
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
   return Number(row?.currentMembers) || 0;
 };
@@ -91,7 +93,7 @@ exports.countMeetingsInPeriod = async (groupIds, start, end) => {
       SELECT COUNT(*) as prevMeetings FROM meeting 
       WHERE group_id IN (${ph}) AND created_at BETWEEN ? AND ?
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
   return Number(row?.prevMeetings) || 0;
 };
@@ -104,32 +106,88 @@ exports.countVideosInPeriod = async (groupIds, start, end) => {
       SELECT COUNT(*) as prevVideos FROM video 
       WHERE group_id IN (${ph}) AND created_at BETWEEN ? AND ?
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
   return Number(row?.prevVideos) || 0;
 };
 
-exports.findGroupsDetailed = async (groupIds) => {
+exports.countGroupsInPeriod = async (groupIds, start, end) => {
+  if (!groupIds.length) return 0;
+  const ph = groupIds.map(() => "?").join(",");
+  const row = await queryOne(
+    `
+      SELECT COUNT(*) as prevGroups FROM \`group\`
+      WHERE id IN (${ph}) AND created_at BETWEEN ? AND ?
+    `,
+    [...groupIds, start, end],
+  );
+  return Number(row?.prevGroups) || 0;
+};
+
+exports.countMessagesInPeriod = async (groupIds, start, end) => {
+  if (!groupIds.length) return 0;
+  const ph = groupIds.map(() => "?").join(",");
+  const row = await queryOne(
+    `
+      SELECT COUNT(*) as prevMessages FROM group_message
+      WHERE group_id IN (${ph}) AND created_at BETWEEN ? AND ?
+    `,
+    [...groupIds, start, end],
+  );
+  return Number(row?.prevMessages) || 0;
+};
+
+exports.countMeetingAttendanceInPeriod = async (groupIds, start, end) => {
+  if (!groupIds.length) return 0;
+  const ph = groupIds.map(() => "?").join(",");
+  const row = await queryOne(
+    `
+      SELECT COUNT(*) as prevAttendance FROM meeting_participant mp
+      JOIN meeting m ON mp.meeting_id = m.id
+      WHERE m.group_id IN (${ph}) AND mp.joined_at BETWEEN ? AND ?
+    `,
+    [...groupIds, start, end],
+  );
+  return Number(row?.prevAttendance) || 0;
+};
+
+exports.findGroupsDetailed = async (groupIds, start, end) => {
   if (!groupIds.length) return [];
   const ph = groupIds.map(() => "?").join(",");
   return queryRows(
     `
       SELECT 
-        g.id, g.group_name, g.created_at,
-        (SELECT COUNT(*) FROM group_membership WHERE group_id = g.id) as totalMembers,
-        (SELECT COUNT(*) FROM meeting WHERE group_id = g.id) as totalMeetings,
-        (SELECT COUNT(*) FROM video WHERE group_id = g.id) as totalVideos,
-        (SELECT COUNT(*) FROM group_message WHERE group_id = g.id) as totalMessages,
-        (SELECT COUNT(*) FROM comment c JOIN video v ON v.id = c.video_id WHERE v.group_id = g.id) as totalComments,
-        (SELECT COUNT(*) FROM \`like\` l JOIN video v ON v.id = l.video_id WHERE v.group_id = g.id) as totalLikes
+        g.id, g.group_name, g.group_photo, g.created_at,
+        (SELECT COUNT(*) FROM group_membership WHERE group_id = g.id AND created_at BETWEEN ? AND ?) as totalMembers,
+        (SELECT COUNT(*) FROM meeting WHERE group_id = g.id AND created_at BETWEEN ? AND ?) as totalMeetings,
+        (SELECT COUNT(*) FROM video WHERE group_id = g.id AND created_at BETWEEN ? AND ?) as totalVideos,
+        (SELECT COUNT(*) FROM group_message WHERE group_id = g.id AND created_at BETWEEN ? AND ?) as totalMessages,
+        (SELECT COUNT(*) FROM comment c JOIN video v ON v.id = c.video_id WHERE v.group_id = g.id AND c.timestamp BETWEEN ? AND ?) as totalComments,
+        (SELECT COUNT(*) FROM \`like\` l JOIN video v ON v.id = l.video_id WHERE v.group_id = g.id AND l.created_at BETWEEN ? AND ?) as totalLikes
       FROM \`group\` g
-      WHERE g.id IN (${ph})
+      WHERE g.id IN (${ph}) AND g.created_at BETWEEN ? AND ?
     `,
-    [...groupIds]
+    [
+      start,
+      end,
+      start,
+      end,
+      start,
+      end,
+      start,
+      end,
+      start,
+      end,
+      start,
+      end,
+      ...groupIds,
+      start,
+      end,
+    ],
   );
 };
 
-exports.findRecentReviews = async (groupIds, limit = 20) => {
+exports.findRecentReviews = async (groupIds, start, end, limit = 20) => {
   if (!groupIds.length) return [];
   const ph = groupIds.map(() => "?").join(",");
   const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
@@ -137,16 +195,38 @@ exports.findRecentReviews = async (groupIds, limit = 20) => {
     `
       SELECT 
         c.id, c.comment_text, c.timestamp as created_at,
-        u.name as reviewer_name, v.title as video_title, g.group_name
+        u.name as reviewer_name, u.user_photo as reviewer_photo,
+        v.title as video_title, v.poster_url as video_poster,
+        g.group_name
       FROM comment c
       JOIN video v ON c.video_id = v.id
       JOIN \`group\` g ON v.group_id = g.id
       JOIN user u ON c.member_id = u.id
-      WHERE v.group_id IN (${ph})
+      WHERE v.group_id IN (${ph}) AND c.timestamp BETWEEN ? AND ?
       ORDER BY c.timestamp DESC
       LIMIT ?
     `,
-    [...groupIds, lim]
+    [...groupIds, start, end, lim],
+  );
+};
+
+exports.findRecentMembers = async (groupIds, start, end, limit = 20) => {
+  if (!groupIds.length) return [];
+  const ph = groupIds.map(() => "?").join(",");
+  const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  return queryRows(
+    `
+      SELECT 
+        u.id, u.name, u.user_photo, u.email,
+        gm.created_at as joined_at, g.group_name
+      FROM group_membership gm
+      JOIN user u ON u.id = gm.member_id
+      JOIN \`group\` g ON g.id = gm.group_id
+      WHERE gm.group_id IN (${ph}) AND gm.created_at BETWEEN ? AND ?
+      ORDER BY gm.created_at DESC
+      LIMIT ?
+    `,
+    [...groupIds, start, end, lim],
   );
 };
 
@@ -154,7 +234,7 @@ exports.findGroupMembershipActivityByPeriod = async (
   groupIds,
   start,
   end,
-  mysqlDateFormat
+  mysqlDateFormat,
 ) => {
   if (!groupIds.length) return [];
   const safeDateFormat = resolveSafeDateFormat(mysqlDateFormat);
@@ -166,7 +246,7 @@ exports.findGroupMembershipActivityByPeriod = async (
       WHERE group_id IN (${ph}) AND created_at BETWEEN ? AND ?
       GROUP BY period
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
 };
 
@@ -174,7 +254,7 @@ exports.findMeetingJoinActivityByPeriod = async (
   groupIds,
   start,
   end,
-  mysqlDateFormat
+  mysqlDateFormat,
 ) => {
   if (!groupIds.length) return [];
   const safeDateFormat = resolveSafeDateFormat(mysqlDateFormat);
@@ -187,7 +267,7 @@ exports.findMeetingJoinActivityByPeriod = async (
       WHERE m.group_id IN (${ph}) AND mp.joined_at BETWEEN ? AND ?
       GROUP BY period
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
 };
 
@@ -195,7 +275,7 @@ exports.findVideoWatchActivityByPeriod = async (
   groupIds,
   start,
   end,
-  mysqlDateFormat
+  mysqlDateFormat,
 ) => {
   if (!groupIds.length) return [];
   const safeDateFormat = resolveSafeDateFormat(mysqlDateFormat);
@@ -208,6 +288,6 @@ exports.findVideoWatchActivityByPeriod = async (
       WHERE v.group_id IN (${ph}) AND vwp.updated_at BETWEEN ? AND ?
       GROUP BY period
     `,
-    [...groupIds, start, end]
+    [...groupIds, start, end],
   );
 };

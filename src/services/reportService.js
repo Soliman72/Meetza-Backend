@@ -3,7 +3,7 @@ const reportValidator = require("../validators/reportValidator");
 
 function buildActivityTrends(
   { start, end, groupBy },
-  { groupActivity, meetingActivity, videoActivity }
+  { groupActivity, meetingActivity, videoActivity },
 ) {
   const trendsMap = {};
   let curr = new Date(start);
@@ -38,8 +38,7 @@ function buildActivityTrends(
 exports.getAnalyticsReport = async (req) => {
   const { startDate, endDate } = req.query;
   const userId = req.user.id;
-  const isSuperAdmin =
-    req.isSuperAdmin || req.user.role === "Super_Admin";
+  const isSuperAdmin = req.isSuperAdmin || req.user.role === "Super_Admin";
 
   let end = endDate ? new Date(endDate) : new Date();
   let start;
@@ -56,16 +55,16 @@ exports.getAnalyticsReport = async (req) => {
   reportValidator.assertStartBeforeEnd(start, end);
 
   const diffDays = Math.ceil(
-    Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+    Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
   );
   const { groupBy, mysqlDateFormat } = reportValidator.resolveTrendDateFormat(
     isAllTime,
-    diffDays
+    diffDays,
   );
 
   const baseGroups = await reportRepo.findAccessibleGroups(
     userId,
-    isSuperAdmin
+    isSuperAdmin,
   );
 
   if (baseGroups.length === 0) {
@@ -87,6 +86,9 @@ exports.getAnalyticsReport = async (req) => {
   let prevMeetings = 0;
   let prevVideos = 0;
   let prevMembers = 0;
+  let prevGroups = 0;
+  let prevMessages = 0;
+  let prevMeetingAttendance = 0;
   let prevStart;
   let prevEnd;
 
@@ -95,53 +97,70 @@ exports.getAnalyticsReport = async (req) => {
     prevEnd = new Date(start.getTime());
     prevStart = new Date(start.getTime() - durationMs);
 
-    [prevMeetings, prevVideos, prevMembers] = await Promise.all([
+    [
+      prevMeetings,
+      prevVideos,
+      prevMembers,
+      prevGroups,
+      prevMessages,
+      prevMeetingAttendance,
+    ] = await Promise.all([
       reportRepo.countMeetingsInPeriod(groupIds, prevStart, prevEnd),
       reportRepo.countVideosInPeriod(groupIds, prevStart, prevEnd),
       reportRepo.countMembershipsInPeriod(groupIds, prevStart, prevEnd),
+      reportRepo.countGroupsInPeriod(groupIds, prevStart, prevEnd),
+      reportRepo.countMessagesInPeriod(groupIds, prevStart, prevEnd),
+      reportRepo.countMeetingAttendanceInPeriod(groupIds, prevStart, prevEnd),
     ]);
   }
 
-  const [groupsDetailed, recentReviews, groupActivity, meetingActivity, videoActivity] =
-    await Promise.all([
-      reportRepo.findGroupsDetailed(groupIds),
-      reportRepo.findRecentReviews(groupIds, 20),
-      reportRepo.findGroupMembershipActivityByPeriod(
-        groupIds,
-        start,
-        end,
-        mysqlDateFormat
-      ),
-      reportRepo.findMeetingJoinActivityByPeriod(
-        groupIds,
-        start,
-        end,
-        mysqlDateFormat
-      ),
-      reportRepo.findVideoWatchActivityByPeriod(
-        groupIds,
-        start,
-        end,
-        mysqlDateFormat
-      ),
-    ]);
+  const [
+    groupsDetailed,
+    recentReviews,
+    recentMembers,
+    groupActivity,
+    meetingActivity,
+    videoActivity,
+  ] = await Promise.all([
+    reportRepo.findGroupsDetailed(groupIds, start, end),
+    reportRepo.findRecentReviews(groupIds, start, end, 20),
+    reportRepo.findRecentMembers(groupIds, start, end, 20),
+    reportRepo.findGroupMembershipActivityByPeriod(
+      groupIds,
+      start,
+      end,
+      mysqlDateFormat,
+    ),
+    reportRepo.findMeetingJoinActivityByPeriod(
+      groupIds,
+      start,
+      end,
+      mysqlDateFormat,
+    ),
+    reportRepo.findVideoWatchActivityByPeriod(
+      groupIds,
+      start,
+      end,
+      mysqlDateFormat,
+    ),
+  ]);
 
   const activityTrends = buildActivityTrends(
     { start, end, groupBy },
-    { groupActivity, meetingActivity, videoActivity }
+    { groupActivity, meetingActivity, videoActivity },
   );
 
   const totalMembersAllTime = groupsDetailed.reduce(
     (sum, g) => sum + g.totalMembers,
-    0
+    0,
   );
   const totalMessages = groupsDetailed.reduce(
     (sum, g) => sum + g.totalMessages,
-    0
+    0,
   );
   const totalComments = groupsDetailed.reduce(
     (sum, g) => sum + g.totalComments,
-    0
+    0,
   );
   const totalLikes = groupsDetailed.reduce((sum, g) => sum + g.totalLikes, 0);
 
@@ -150,15 +169,15 @@ exports.getAnalyticsReport = async (req) => {
     meetings.length > 0
       ? Math.round(
           meetings.reduce((sum, m) => sum + (m.duration || 0), 0) /
-            meetings.length
+            meetings.length,
         )
       : 0;
-  const avgAttendance =
+  const avgMeetingAttendance =
     meetings.length > 0
       ? Math.round(
           (meetings.reduce((sum, m) => sum + m.attendeeCount, 0) /
             meetings.length) *
-            10
+            10,
         ) / 10
       : 0;
 
@@ -169,7 +188,7 @@ exports.getAnalyticsReport = async (req) => {
     if (duration > 0) {
       avgProgressPercent = Math.min(
         100,
-        Math.round((avgProg / duration) * 100)
+        Math.round((avgProg / duration) * 100),
       );
     }
     return {
@@ -192,28 +211,47 @@ exports.getAnalyticsReport = async (req) => {
     data: {
       filters: { start, end, prevStart, prevEnd },
       summary: {
-        totalGroups: groupsDetailed.length,
-        totalMembers: totalMembersAllTime,
-        totalMeetings: meetings.length,
-        totalVideos: videos.length,
+        totalGroups: {
+          numbers: groupsDetailed.length,
+          photos: groupsDetailed.slice(0, 5).map((g) => g.group_photo),
+        },
+        totalMembers: {
+          numbers: totalMembersAllTime,
+          photos: recentMembers.slice(0, 5).map((m) => m.user_photo),
+        },
+        totalMeetings: {
+          numbers: meetings.length,
+          photos: meetings.slice(0, 5).map((m) => m.poster_url),
+        },
+        totalVideos: {
+          numbers: videos.length,
+          photos: videos.slice(0, 5).map((v) => v.poster_url),
+        },
         totalMessages,
         totalComments,
         totalLikes,
         totalReviews: totalComments + totalLikes,
         avgMeetingDuration: avgDuration,
         recordedMeetings,
-        avgAttendance,
+        avgMeetingAttendance,
       },
       comparison: {
         meetings: { current: meetings.length, previous: prevMeetings },
         videos: { current: videos.length, previous: prevVideos },
         members: { current: currentMembers, previous: prevMembers },
+        groups: { current: groupsDetailed.length, previous: prevGroups },
+        messages: { current: totalMessages, previous: prevMessages },
+        meetingAttendance: {
+          current: Math.round(avgMeetingAttendance),
+          previous: prevMeetingAttendance,
+        },
       },
       distributions: { meetingStatus },
       activityTrends,
       groups: groupsDetailed,
       meetings,
       videos: videosWithProgress,
+      members: recentMembers,
       reviews: recentReviews,
     },
   };
