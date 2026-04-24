@@ -82,6 +82,7 @@ exports.getAdminsByGroupIds = async (groupIds) => {
 
   if (safeIds.length === 0) return [];
 
+  const placeholders = safeIds.map(() => "?").join(",");
   const [admins] = await db.promise().execute(
     `SELECT 
           ga.group_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
@@ -90,7 +91,7 @@ exports.getAdminsByGroupIds = async (groupIds) => {
        JOIN user u ON u.id = ga.user_id
        WHERE ga.group_id IN (?)
        ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
-    [safeIds]
+    [placeholders]
   );
 
   return admins;
