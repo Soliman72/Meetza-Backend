@@ -157,6 +157,9 @@ async function getHomeSavedVideos(req) {
   homeValidator.requireAuthenticatedUser(req);
   const userId = req.user.id;
   const cap = homeValidator.parseSavedVideosLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
   const visibility = getVideoVisibility(req, "v");
   const conditions = ["sv.member_id = ?"];
@@ -165,6 +168,11 @@ async function getHomeSavedVideos(req) {
   if (visibility.whereClause) {
     conditions.push(visibility.whereClause);
     params.push(...visibility.params);
+  }
+  const searchFilter = buildVideoSearchCondition(search, "v");
+  if (searchFilter.clause) {
+    conditions.push(searchFilter.clause);
+    params.push(...searchFilter.params);
   }
 
   params.push(cap);
