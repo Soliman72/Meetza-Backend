@@ -231,8 +231,12 @@ exports.addGroupAdmin = async (req) => {
 exports.removeGroupAdmin = async (req) => {
   const groupId = req.params.id;
 
-  validateRemoveAdmin(req.body);
-
+  validateRemoveAdmin({
+    groupId,
+    userId: req.user?.id,
+    role: req.body?.role || "ADMIN",
+  });
+  
   let targetEmails = extractArray(req.body, "emails");
   if (req.body.email) targetEmails.push(req.body.email.trim());
   targetEmails = [...new Set(targetEmails)];
