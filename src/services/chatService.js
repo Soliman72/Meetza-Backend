@@ -157,14 +157,16 @@ exports.deleteMessage = async (req) => {
   const groupAccess = await ensureGroupAccess(userId, groupId);
   const membershipRole = groupAccess.membership_role;
 
-  let whereClause = "";
-  const params = [messageId, groupId];
+  let affected = 0;
 
   if (membershipRole === "Administrator" || membershipRole === "Super_Admin") {
-    whereClause = "WHERE id = ? AND group_id = ?";
+    affected = await chatRepository.deleteGroupMessageAsAdmin(messageId, groupId);
   } else if (membershipRole === "Member") {
-    whereClause = "WHERE id = ? AND group_id = ? AND sender_id = ?";
-    params.push(userId);
+    affected = await chatRepository.deleteGroupMessageAsSender(
+      messageId,
+      groupId,
+      userId
+    );
   } else {
     const err = new Error(
       "You do not have permission to delete messages in this group"
@@ -173,7 +175,6 @@ exports.deleteMessage = async (req) => {
     throw err;
   }
 
-  const affected = await chatRepository.deleteGroupMessage(whereClause, params);
   if (affected === 0) {
     const err = new Error(
       "Message not found or you are not authorized to delete it"
@@ -242,21 +243,13 @@ exports.getGroupMeetings = async (req) => {
 
   await ensureGroupAccess(userId, groupId);
 
-  const params = [groupId];
-  let whereClause = "WHERE group_id = ?";
+  let fromDate = null;
+  let toDate = null;
 
-  const fromDate = chatValidator.validateMeetingDate("from", from);
-  if (fromDate) {
-    whereClause += " AND start_time >= ?";
-    params.push(fromDate);
-  }
-  const toDate = chatValidator.validateMeetingDate("to", to);
-  if (toDate) {
-    whereClause += " AND start_time <= ?";
-    params.push(toDate);
-  }
+  fromDate = chatValidator.validateMeetingDate("from", from);
+  toDate = chatValidator.validateMeetingDate("to", to);
 
-  return chatRepository.getMeetingsForGroup(whereClause, params);
+  return chatRepository.getMeetingsForGroup(groupId, fromDate, toDate);
 };
 
 exports.markMessageAsRead = async (req) => {

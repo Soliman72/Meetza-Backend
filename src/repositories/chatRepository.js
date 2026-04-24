@@ -168,10 +168,23 @@ exports.getUnreadGroups = async (userId) => {
   return rows;
 };
 
-exports.deleteGroupMessage = async (whereClause, params) => {
+exports.deleteGroupMessageAsAdmin = async (messageId, groupId) => {
   const [result] = await db
     .promise()
-    .query(`DELETE FROM group_message ${whereClause}`, params);
+    .query("DELETE FROM group_message WHERE id = ? AND group_id = ?", [
+      messageId,
+      groupId,
+    ]);
+  return result.affectedRows;
+};
+
+exports.deleteGroupMessageAsSender = async (messageId, groupId, userId) => {
+  const [result] = await db
+    .promise()
+    .query(
+      "DELETE FROM group_message WHERE id = ? AND group_id = ? AND sender_id = ?",
+      [messageId, groupId, userId]
+    );
   return result.affectedRows;
 };
 
@@ -254,9 +267,8 @@ exports.getGroupContentResources = async (groupContentId) => {
   return resources;
 };
 
-exports.getMeetingsForGroup = async (whereClause, params) => {
-  const [meetings] = await db.promise().query(
-    `
+exports.getMeetingsForGroup = async (groupId, fromDate = null, toDate = null) => {
+  let sql = `
           SELECT
             id,
             title,
@@ -264,11 +276,22 @@ exports.getMeetingsForGroup = async (whereClause, params) => {
             end_time,
             status
           FROM meeting
-          ${whereClause}
-          ORDER BY start_time ASC
-        `,
-    params
-  );
+          WHERE group_id = ?
+        `;
+  const params = [groupId];
+
+  if (fromDate) {
+    sql += " AND start_time >= ?";
+    params.push(fromDate);
+  }
+  if (toDate) {
+    sql += " AND start_time <= ?";
+    params.push(toDate);
+  }
+
+  sql += " ORDER BY start_time ASC";
+
+  const [meetings] = await db.promise().query(sql, params);
   return meetings;
 };
 

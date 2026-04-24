@@ -61,7 +61,7 @@ exports.login = async (data) => {
       throw new Error("Please verify your email");
     }
   
-    if (from && !isAdminAccess(user, from)) {
+    if (from && isAdminAccess(user, from)) {
       throw new Error("Access denied. Administrators only.");
     }
     

@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
 async function queryRows(sql, params = []) {
   const [rows] = await db.promise().query(sql, params);
@@ -92,11 +93,13 @@ exports.deleteMeetingSeriesById = async (seriesId) => {
 };
 
 exports.updateMeetingById = async (setClause, paramsWithoutId, id) => {
+  assertSafeSqlFragment(setClause, "setClause");
   const sql = `UPDATE meeting SET ${setClause} WHERE id = ?`;
   await queryExec(sql, [...paramsWithoutId, id]);
 };
 
 exports.updateMeetingSeriesTemplate = async (setClause, params, seriesId) => {
+  assertSafeSqlFragment(setClause, "setClause");
   const sql = `UPDATE meeting_series SET ${setClause} WHERE id = ?`;
   await queryExec(sql, [...params, seriesId]);
 };
@@ -183,6 +186,7 @@ exports.listMeetingsForMember = async (
     params.push(`%${title}%`);
   }
   if (dateClause) {
+    assertSafeSqlFragment(dateClause, "dateClause");
     sql += " AND " + dateClause;
     params.push(...dateParams);
   }
@@ -210,6 +214,7 @@ exports.listMeetingsForAdministrator = async (
     params.push(group_id);
   }
   if (dateClause) {
+    assertSafeSqlFragment(dateClause, "dateClause");
     conditions.push(dateClause);
     params.push(...dateParams);
   }
@@ -236,6 +241,7 @@ exports.listMeetingsSuperAdmin = async ({
     params.push(group_id);
   }
   if (dateClause) {
+    assertSafeSqlFragment(dateClause, "dateClause");
     conditions.push(dateClause);
     params.push(...dateParams);
   }

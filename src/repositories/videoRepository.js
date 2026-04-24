@@ -5,6 +5,7 @@ const { getUserExtras } = require("../utils/videoWatchProgressSQL");
 const { VIDEO_AGGREGATIONS } = require("../utils/videoAggregations");
 const { buildVideoSearchCondition } = require("../utils/videoSearch");
 const { WATCH_PROGRESS_SELECT } = require("../utils/videoWatchProgressFields");
+const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
 
 const query = (sql, params = []) =>
@@ -156,6 +157,7 @@ const deleteVideo = async (videoId, req) => {
   const params = [videoId];
 
   if (vis.whereClause) {
+    assertSafeSqlFragment(vis.whereClause, "visibility.whereClause");
     sql += " AND " + vis.whereClause;
     params.push(...vis.params);
   }
@@ -202,6 +204,7 @@ const updateVideo = async (videoId, data, req) => {
   params.push(videoId);
 
   if (vis.whereClause) {
+    assertSafeSqlFragment(vis.whereClause, "visibility.whereClause");
     sql += " AND " + vis.whereClause;
     params.push(...vis.params);
   }
@@ -211,10 +214,14 @@ const updateVideo = async (videoId, data, req) => {
 };
 
 const getRelatedVideos = async (req) => {
-  const { groupId, id } = req.params;
+  const id = req.params.id;
   const userId = req.user?.id;
 
   const relatedVideoId = await resolveVideoId(id);
+  if (!relatedVideoId) {
+    return [];
+  }
+
   const visibility = getVideoVisibility(req, "v");
   let sql = `
     SELECT v.id, v.title, v.poster_url, v.group_id
@@ -224,18 +231,19 @@ const getRelatedVideos = async (req) => {
       LEFT JOIN video_watch_progress vwp
         ON vwp.video_id = v.id AND vwp.user_id = ?
     ` : ""}
-    WHERE v.group_id = ? AND v.id != ?
+    WHERE v.group_id = (SELECT group_id FROM video WHERE id = ?) AND v.id <> ?
   `;
 
   const params = [];
 
   if (userId) params.push(userId);
 
-  params.push(groupId, relatedVideoId);
+  params.push(relatedVideoId, relatedVideoId);
 
-  if (vis.whereClause) {
-    sql += " AND " + vis.whereClause;
-    params.push(...vis.params);
+  if (visibility.whereClause) {
+    assertSafeSqlFragment(visibility.whereClause, "visibility.whereClause");
+    sql += " AND " + visibility.whereClause;
+    params.push(...visibility.params);
   }
 
   sql += " ORDER BY v.created_at DESC LIMIT 10";

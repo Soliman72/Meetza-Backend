@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
 /** Join user row — used by auth middleware (expects an array of rows). */
 exports.getAdministratorByUserId = async (userId) => {
@@ -21,7 +22,10 @@ exports.findByUserId = async (userId) => {
 
 exports.findAll = async (whereClause, params = []) => {
   let sql = "SELECT * FROM administrator";
-  if (whereClause) sql += ` ${whereClause}`;
+  if (whereClause) {
+    assertSafeSqlFragment(whereClause, "whereClause");
+    sql += ` ${whereClause}`;
+  }
   const [rows] = await db.promise().query(sql, params);
   return rows;
 };

@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const { WATCH_PROGRESS_SELECT } = require("../utils/videoWatchProgressFields");
+const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
 async function queryRows(sql, params = []) {
   const [rows] = await db.promise().query(sql, params);
@@ -9,6 +10,7 @@ async function queryRows(sql, params = []) {
 exports.countVideosWithVisibility = async (whereClause, params) => {
   let sql = "SELECT COUNT(*) AS c FROM video v";
   if (whereClause) {
+    assertSafeSqlFragment(whereClause, "whereClause");
     sql += ` WHERE ${whereClause}`;
   }
   const rows = await queryRows(sql, params);
@@ -69,6 +71,7 @@ exports.countGroupsMember = async (userId) => {
 };
 
 exports.countUnreadMessages = async (sql, params) => {
+  assertSafeSqlFragment(sql, "sql");
   const rows = await queryRows(sql, params);
   return Number(rows[0]?.c) || 0;
 };
@@ -131,6 +134,7 @@ exports.findUpcomingMeetingsMember = async (userId, limit) => {
 };
 
 exports.findMostInterestedVideos = async (whereSql, params) => {
+  assertSafeSqlFragment(whereSql, "whereSql");
   const sql = `
     SELECT
       v.id,
@@ -221,6 +225,7 @@ exports.findHomeLeadersMember = async (userId, limit) => {
 };
 
 exports.findHomeSavedVideos = async (whereClause, params) => {
+  assertSafeSqlFragment(whereClause, "whereClause");
   const sql = `
     SELECT
       v.id,

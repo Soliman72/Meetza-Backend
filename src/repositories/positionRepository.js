@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
 exports.insert = async (id, title, administrator_id) => {
   await db.promise().query(
@@ -11,6 +12,7 @@ exports.findAll = async (whereClause, params, titleLike) => {
   let query = "SELECT * FROM position";
   const p = [...params];
   if (whereClause) {
+    assertSafeSqlFragment(whereClause, "whereClause");
     query += ` ${whereClause}`;
   }
   if (titleLike) {

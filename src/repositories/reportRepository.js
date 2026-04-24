@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { resolveSafeDateFormat } = require("../utils/sqlSafety");
 
 async function queryRows(sql, params = []) {
   const [rows] = await db.promise().query(sql, params);
@@ -156,10 +157,11 @@ exports.findGroupMembershipActivityByPeriod = async (
   mysqlDateFormat
 ) => {
   if (!groupIds.length) return [];
+  const safeDateFormat = resolveSafeDateFormat(mysqlDateFormat);
   const ph = groupIds.map(() => "?").join(",");
   return queryRows(
     `
-      SELECT DATE_FORMAT(created_at, '${mysqlDateFormat}') as period, COUNT(*) as count 
+      SELECT DATE_FORMAT(created_at, '${safeDateFormat}') as period, COUNT(*) as count 
       FROM group_membership 
       WHERE group_id IN (${ph}) AND created_at BETWEEN ? AND ?
       GROUP BY period
@@ -175,10 +177,11 @@ exports.findMeetingJoinActivityByPeriod = async (
   mysqlDateFormat
 ) => {
   if (!groupIds.length) return [];
+  const safeDateFormat = resolveSafeDateFormat(mysqlDateFormat);
   const ph = groupIds.map(() => "?").join(",");
   return queryRows(
     `
-      SELECT DATE_FORMAT(mp.joined_at, '${mysqlDateFormat}') as period, COUNT(*) as count 
+      SELECT DATE_FORMAT(mp.joined_at, '${safeDateFormat}') as period, COUNT(*) as count 
       FROM meeting_participant mp
       JOIN meeting m ON mp.meeting_id = m.id
       WHERE m.group_id IN (${ph}) AND mp.joined_at BETWEEN ? AND ?
@@ -195,10 +198,11 @@ exports.findVideoWatchActivityByPeriod = async (
   mysqlDateFormat
 ) => {
   if (!groupIds.length) return [];
+  const safeDateFormat = resolveSafeDateFormat(mysqlDateFormat);
   const ph = groupIds.map(() => "?").join(",");
   return queryRows(
     `
-      SELECT DATE_FORMAT(vwp.updated_at, '${mysqlDateFormat}') as period, COUNT(*) as count 
+      SELECT DATE_FORMAT(vwp.updated_at, '${safeDateFormat}') as period, COUNT(*) as count 
       FROM video_watch_progress vwp
       JOIN video v ON vwp.video_id = v.id
       WHERE v.group_id IN (${ph}) AND vwp.updated_at BETWEEN ? AND ?

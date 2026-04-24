@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
 /** Get one progress */
 async function findOne(userId, videoId) {
@@ -26,6 +27,7 @@ async function findByUser(userId, limit, offset, visibility) {
   const params = [userId];
 
   if (visibility?.whereClause) {
+    assertSafeSqlFragment(visibility.whereClause, "visibility.whereClause");
     sql += " AND " + visibility.whereClause;
     params.push(...visibility.params);
   }
@@ -70,6 +72,7 @@ async function checkAccess(videoId, visibility) {
   const params = [videoId];
 
   if (visibility?.whereClause) {
+    assertSafeSqlFragment(visibility.whereClause, "visibility.whereClause");
     sql += " AND " + visibility.whereClause;
     params.push(...visibility.params);
   }

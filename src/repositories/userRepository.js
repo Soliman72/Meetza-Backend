@@ -1,10 +1,12 @@
 const db = require("../config/db");
+const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
 exports.findAll = async (name, ownershipFilter) => {
   let query = "SELECT * FROM user";
   let params = [];
 
   if (ownershipFilter?.whereClause) {
+    assertSafeSqlFragment(ownershipFilter.whereClause, "ownershipFilter.whereClause");
     query += " " + ownershipFilter.whereClause;
     params.push(...ownershipFilter.params);
   }
