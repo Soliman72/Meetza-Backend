@@ -1,22 +1,20 @@
-const jwt = require("jsonwebtoken");
 const getTokenFromHandshake = require("../utils/tokenFormHandshake");
-const userRepository = require("../repositories/userRepository");
+const { loadUserFromAccessToken } = require("../utils/authJwtUser");
 
+/**
+ * مصادقة Socket.IO — لا تُستخدم كـ Express middleware.
+ * تُسجَّل مرة واحدة على `io` في server.js مع باقي الـ namespaces.
+ */
 const authenticateSocket = async (socket, next) => {
   try {
     const token = getTokenFromHandshake(socket);
-
-    if (!token) return next(new Error("No token"));
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const [user] = await userRepository.getById(decoded.id);
-    if (!user) return next(new Error("User not found"));
-
-    socket.user = user;
-    next();
-  } catch (error) {
-    next(new Error("Authentication failed"));
+    if (!token) {
+      return next(new Error("Authentication token missing"));
+    }
+    socket.user = await loadUserFromAccessToken(token);
+    return next();
+  } catch {
+    return next(new Error("Authentication failed"));
   }
 };
 

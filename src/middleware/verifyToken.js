@@ -1,30 +1,44 @@
 const jwt = require("jsonwebtoken");
-const db = require("../config/db");
+const {
+  getBearerTokenFromRequest,
+  loadUserFromAccessToken,
+} = require("../utils/authJwtUser");
 
-// Middleware to verify JWT token
-exports.verifyToken = (req, res, next) => {
+/** نفس تحقق JWT + المستخدم المستخدم في Socket (`soketAuth`). */
+exports.verifyToken = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-
+    const token = getBearerTokenFromRequest(req);
     if (!token) {
       return res.status(401).json({
         success: false,
         message: "No token provided",
+        code: "NO_TOKEN",
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    db.query("SELECT * FROM user WHERE id = ?", [decoded.id], (err, rows) => {
-      if (err) return res.status(400).json({ error: err });
-      req.user = rows[0];
-      next();
-    });
+    req.user = await loadUserFromAccessToken(token);
+    next();
   } catch (error) {
-    res.status(401).json({
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please sign in again.",
+        code: "TOKEN_EXPIRED",
+      });
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token",
+        code: "INVALID_TOKEN",
+        error: error.message,
+      });
+    }
+    const status = error.status || 401;
+    return res.status(status).json({
       success: false,
-      message: "Invalid token",
-      error: error.message,
+      message: error.message || "Authentication failed",
+      code: "AUTH_ERROR",
     });
   }
 };

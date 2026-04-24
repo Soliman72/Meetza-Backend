@@ -29,6 +29,7 @@ const saved_videoRouter = require("./src/routes/saved_videoRoute");
 
 const notificationSocket = require("./src/sockets/notificationSocket");
 const registerNotificationSocket = notificationSocket.registerNotificationSocket;
+const authenticateSocket = require("./src/middleware/soketAuth");
 const notificationRouter = require("./src/routes/notificationRoute");
 const contactRouter = require("./src/routes/contactRoute");
 const homeRouter = require("./src/routes/homeRoute");
@@ -50,6 +51,7 @@ const io = new Server(server, {
   allowEIO3: true,
 });
 app.set("io", io);
+io.use(authenticateSocket);
 chatController.registerChatIo(io);
 registerChatSocket(io);
 const registerMeetingSocket = require("./src/sockets/meetingSocket");

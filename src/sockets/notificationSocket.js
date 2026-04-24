@@ -1,5 +1,3 @@
-const authenticateSocket = require("../middleware/soketAuth");
-
 let io;
 
 const setSocket = (socketInstance) => {
@@ -20,7 +18,6 @@ const emitUnreadCount = (memberId, count) => {
 };
 
 const registerNotificationSocket = (io) => {
-    io.use(authenticateSocket);
     io.on("connection", (socket) => {
 
         if (socket.user?.id) {
