@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const groupContentService = require("./groupContentService");
-const extractArray = require("../utils/extractArray");
+const { extractArray } = require("../utils/extractArray");
 const repo = require("../repositories/groupRepository");
 const groupAdminService = require("./groupAdminService");
 const db = require("../config/db");

@@ -31,7 +31,7 @@ exports.createContent = async ({ id, content_name, content_description, group_id
   await db.promise().execute(sql, [
     id,
     content_name,
-    content_description,
+    content_description ?? null,
     group_id,
   ]);
 };

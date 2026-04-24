@@ -68,7 +68,8 @@ async function remove(userId, videoId) {
 
 /** check access */
 async function checkAccess(videoId, visibility) {
-  let sql = `SELECT id FROM video WHERE id = ?`;
+  // visibility.whereClause is built against alias "v" in getVideoVisibility(req, "v")
+  let sql = `SELECT v.id FROM video v WHERE v.id = ?`;
   const params = [videoId];
 
   if (visibility?.whereClause) {

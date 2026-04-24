@@ -7,7 +7,14 @@ exports.createGroup = async (data) => {
     (id, group_name, description, group_photo, year, semester)
     VALUES (?, ?, ?, ?, ?, ?)
   `;
-  await db.promise().execute(sql, Object.values(data));
+  await db.promise().execute(sql, [
+    data.id,
+    data.group_name,
+    data.description ?? null,
+    data.group_photo ?? null,
+    data.year,
+    data.semester,
+  ]);
 };
 
 exports.findById = async (id) => {
@@ -16,6 +23,21 @@ exports.findById = async (id) => {
     [id]
   );
   return rows[0];
+};
+
+exports.validateAdminIds = async (adminIds) => {
+  if (!Array.isArray(adminIds) || adminIds.length === 0) return [];
+
+  const cleanIds = [...new Set(adminIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (!cleanIds.length) return [];
+
+  const placeholders = cleanIds.map(() => "?").join(",");
+  const [rows] = await db.promise().execute(
+    `SELECT user_id FROM administrator WHERE user_id IN (${placeholders})`,
+    cleanIds
+  );
+
+  return rows.map((r) => r.user_id);
 };
 
 exports.getAllGroups = async (req) => {

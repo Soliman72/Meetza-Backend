@@ -12,8 +12,8 @@ function getVideoVisibility(req, tableAlias = "v") {
 
   if (req.user?.role === "Administrator" || req.administratorId) {
     return {
-      whereClause: `(${v}.administrator_id = ? OR ${v}.group_id IN (SELECT group_id FROM group_admin WHERE user_id = ?))`,
-      params: [userId, userId],
+      whereClause: `${v}.group_id IN (SELECT group_id FROM group_admin WHERE user_id = ?)`,
+      params: [userId],
     };
   }
 
