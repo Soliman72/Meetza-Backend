@@ -141,6 +141,7 @@ exports.findMostInterestedVideos = async (whereSql, params) => {
       v.title,
       v.slug,
       v.poster_url,
+      v.video_url,
       v.duration,
       v.group_id,
       g.group_name,
