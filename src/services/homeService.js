@@ -61,14 +61,17 @@ async function getUpcomingMeetings(req) {
   homeValidator.assertHomeMeetingsRole(role);
 
   const cap = homeValidator.parseUpcomingLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
   if (role === "Super_Admin") {
-    return homeRepo.findUpcomingMeetingsSuperAdmin(cap);
+    return homeRepo.findUpcomingMeetingsByScope(userId, role, cap, search);
   }
   if (role === "Administrator") {
-    return homeRepo.findUpcomingMeetingsAdministrator(userId, cap);
+    return homeRepo.findUpcomingMeetingsByScope(userId, role, cap, search);
   }
-  return homeRepo.findUpcomingMeetingsMember(userId, cap);
+  return homeRepo.findUpcomingMeetingsByScope(userId, role, cap, search);
 }
 
 async function getMostInterestedVideos(req) {

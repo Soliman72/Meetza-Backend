@@ -84,7 +84,7 @@ exports.countSavedVideosByMember = async (userId) => {
   return Number(rows[0]?.c) || 0;
 };
 
-exports.findUpcomingMeetingsSuperAdmin = async (limit) => {
+exports.findUpcomingMeetingsByScope = async (userId, role, limit, search) => {
   const sql = `
     SELECT m.id, m.title, m.start_time, m.end_time, m.status, m.group_id,
            g.group_name
@@ -92,46 +92,36 @@ exports.findUpcomingMeetingsSuperAdmin = async (limit) => {
     INNER JOIN \`group\` g ON g.id = m.group_id
     WHERE m.status = 'Scheduled'
       AND m.start_time >= NOW()
-    ORDER BY m.start_time ASC
-    LIMIT ?
-  `;
-  return queryRows(sql, [limit]);
-};
-
-exports.findUpcomingMeetingsAdministrator = async (userId, limit) => {
-  const sql = `
-    SELECT m.id, m.title, m.start_time, m.end_time, m.status, m.group_id,
-           g.group_name
-    FROM meeting m
-    INNER JOIN \`group\` g ON g.id = m.group_id
-    WHERE m.status = 'Scheduled'
-      AND m.start_time >= NOW()
-      AND EXISTS (
+      ${
+        role === "Administrator"
+          ? `AND EXISTS (
         SELECT 1 FROM group_admin ga
         WHERE ga.group_id = m.group_id AND ga.user_id = ?
-      )
+      )`
+          : ""
+      }
+      ${
+        role === "Member"
+          ? `AND m.group_id IN (
+        SELECT group_id FROM group_membership WHERE member_id = ?
+      )`
+          : ""
+      }
+      ${search ? "AND (m.title LIKE ? OR g.group_name LIKE ?)" : ""}
     ORDER BY m.start_time ASC
     LIMIT ?
   `;
-  return queryRows(sql, [userId, limit]);
+  const params = [];
+  if (role === "Administrator" || role === "Member") {
+    params.push(userId);
+  }
+  if (search) params.push(`%${search}%`, `%${search}%`);
+  params.push(limit);
+  return queryRows(sql, params);
 };
 
-exports.findUpcomingMeetingsMember = async (userId, limit) => {
-  const sql = `
-    SELECT m.id, m.title, m.start_time, m.end_time, m.status, m.group_id,
-           g.group_name
-    FROM meeting m
-    INNER JOIN \`group\` g ON g.id = m.group_id
-    WHERE m.status = 'Scheduled'
-      AND m.start_time >= NOW()
-      AND m.group_id IN (
-        SELECT group_id FROM group_membership WHERE member_id = ?
-      )
-    ORDER BY m.start_time ASC
-    LIMIT ?
-  `;
-  return queryRows(sql, [userId, limit]);
-};
+
+
 
 exports.findMostInterestedVideos = async (whereSql, params) => {
   assertSafeSqlFragment(whereSql, "whereSql");
