@@ -84,7 +84,7 @@ exports.countSavedVideosByMember = async (userId) => {
   return Number(rows[0]?.c) || 0;
 };
 
-exports.findUpcomingMeetingsSuperAdmin = async (limit) => {
+exports.findUpcomingMeetingsByScope = async (userId, role, limit, search) => {
   const sql = `
     SELECT m.id, m.title, m.start_time, m.end_time, m.status, m.group_id,
            g.group_name
@@ -92,46 +92,36 @@ exports.findUpcomingMeetingsSuperAdmin = async (limit) => {
     INNER JOIN \`group\` g ON g.id = m.group_id
     WHERE m.status = 'Scheduled'
       AND m.start_time >= NOW()
-    ORDER BY m.start_time ASC
-    LIMIT ?
-  `;
-  return queryRows(sql, [limit]);
-};
-
-exports.findUpcomingMeetingsAdministrator = async (userId, limit) => {
-  const sql = `
-    SELECT m.id, m.title, m.start_time, m.end_time, m.status, m.group_id,
-           g.group_name
-    FROM meeting m
-    INNER JOIN \`group\` g ON g.id = m.group_id
-    WHERE m.status = 'Scheduled'
-      AND m.start_time >= NOW()
-      AND EXISTS (
+      ${
+        role === "Administrator"
+          ? `AND EXISTS (
         SELECT 1 FROM group_admin ga
         WHERE ga.group_id = m.group_id AND ga.user_id = ?
-      )
+      )`
+          : ""
+      }
+      ${
+        role === "Member"
+          ? `AND m.group_id IN (
+        SELECT group_id FROM group_membership WHERE member_id = ?
+      )`
+          : ""
+      }
+      ${search ? "AND (m.title LIKE ? OR g.group_name LIKE ?)" : ""}
     ORDER BY m.start_time ASC
     LIMIT ?
   `;
-  return queryRows(sql, [userId, limit]);
+  const params = [];
+  if (role === "Administrator" || role === "Member") {
+    params.push(userId);
+  }
+  if (search) params.push(`%${search}%`, `%${search}%`);
+  params.push(limit);
+  return queryRows(sql, params);
 };
 
-exports.findUpcomingMeetingsMember = async (userId, limit) => {
-  const sql = `
-    SELECT m.id, m.title, m.start_time, m.end_time, m.status, m.group_id,
-           g.group_name
-    FROM meeting m
-    INNER JOIN \`group\` g ON g.id = m.group_id
-    WHERE m.status = 'Scheduled'
-      AND m.start_time >= NOW()
-      AND m.group_id IN (
-        SELECT group_id FROM group_membership WHERE member_id = ?
-      )
-    ORDER BY m.start_time ASC
-    LIMIT ?
-  `;
-  return queryRows(sql, [userId, limit]);
-};
+
+
 
 exports.findMostInterestedVideos = async (whereSql, params) => {
   assertSafeSqlFragment(whereSql, "whereSql");
@@ -165,7 +155,12 @@ exports.findMostInterestedVideos = async (whereSql, params) => {
   return queryRows(sql, params);
 };
 
-exports.findHomeLeadersSuperAdmin = async (limit) => {
+exports.findHomeLeadersByScope = async (
+  userId,
+  role,
+  limit,
+  search = ""
+) => {
   const sql = `
       SELECT DISTINCT
         u.id AS leader_id,
@@ -173,56 +168,44 @@ exports.findHomeLeadersSuperAdmin = async (limit) => {
         u.user_photo,
         p.id AS position_id,
         p.title AS position_title
-      FROM administrator a
-      INNER JOIN user u ON u.id = a.user_id AND u.role = 'Administrator'
-      LEFT JOIN position p ON p.administrator_id = a.user_id
-      ORDER BY u.name ASC
-      LIMIT ?
-    `;
-  return queryRows(sql, [limit]);
-};
-
-exports.findHomeLeadersAdministrator = async (userId, limit) => {
-  const sql = `
-      SELECT DISTINCT
-        u.id AS leader_id,
-        u.name,
-        u.user_photo,
-        p.id AS position_id,
-        p.title AS position_title
-      FROM group_admin ga
-      INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator'
-      LEFT JOIN position p ON p.administrator_id = ga.user_id
-      WHERE ga.group_id IN (
+      ${
+        role === "Super_Admin"
+          ? "FROM administrator a INNER JOIN user u ON u.id = a.user_id AND u.role = 'Administrator' LEFT JOIN position p ON p.administrator_id = a.user_id"
+          : "FROM group_admin ga INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator' LEFT JOIN position p ON p.administrator_id = ga.user_id"
+      }
+      WHERE 1 = 1
+      ${
+        role === "Administrator"
+          ? `AND ga.group_id IN (
         SELECT group_id FROM group_admin WHERE user_id = ?
       )
         AND ga.role IN ('OWNER', 'ADMIN')
-        AND ga.user_id <> ?
-      ORDER BY u.name ASC
-      LIMIT ?
-    `;
-  return queryRows(sql, [userId, userId, limit]);
-};
-
-exports.findHomeLeadersMember = async (userId, limit) => {
-  const sql = `
-      SELECT DISTINCT
-        u.id AS leader_id,
-        u.name,
-        u.user_photo,
-        p.id AS position_id,
-        p.title AS position_title
-      FROM group_admin ga
-      INNER JOIN user u ON u.id = ga.user_id AND u.role = 'Administrator'
-      LEFT JOIN position p ON p.administrator_id = ga.user_id
-      WHERE ga.group_id IN (
+        AND ga.user_id <> ?`
+          : ""
+      }
+      ${
+        role === "Member"
+          ? `AND ga.group_id IN (
         SELECT group_id FROM group_membership WHERE member_id = ?
       )
-        AND ga.role IN ('OWNER', 'ADMIN')
+        AND ga.role IN ('OWNER', 'ADMIN')`
+          : ""
+      }
+      ${search ? "AND (u.name LIKE ? OR p.title LIKE ?)" : ""}
       ORDER BY u.name ASC
       LIMIT ?
     `;
-  return queryRows(sql, [userId, limit]);
+  const params = [];
+  if (role === "Administrator") {
+    params.push(userId, userId);
+  } else if (role === "Member") {
+    params.push(userId);
+  }
+  if (search) {
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  params.push(limit);
+  return queryRows(sql, params);
 };
 
 exports.findHomeSavedVideos = async (whereClause, params) => {

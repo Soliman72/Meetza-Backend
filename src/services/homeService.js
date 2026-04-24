@@ -1,5 +1,6 @@
 const { getVideoVisibility } = require("../utils/videoVisibility");
 const { mapWatchProgressFromRow } = require("../utils/videoWatchProgressFields");
+const { buildVideoSearchCondition } = require("../utils/videoSearch");
 const { buildUnreadTotalQuery } = require("./chatMessageService");
 const homeRepo = require("../repositories/homeRepository");
 const homeValidator = require("../validators/homeValidator");
@@ -61,20 +62,26 @@ async function getUpcomingMeetings(req) {
   homeValidator.assertHomeMeetingsRole(role);
 
   const cap = homeValidator.parseUpcomingLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
   if (role === "Super_Admin") {
-    return homeRepo.findUpcomingMeetingsSuperAdmin(cap);
+    return homeRepo.findUpcomingMeetingsByScope(userId, role, cap, search);
   }
   if (role === "Administrator") {
-    return homeRepo.findUpcomingMeetingsAdministrator(userId, cap);
+    return homeRepo.findUpcomingMeetingsByScope(userId, role, cap, search);
   }
-  return homeRepo.findUpcomingMeetingsMember(userId, cap);
+  return homeRepo.findUpcomingMeetingsByScope(userId, role, cap, search);
 }
 
 async function getMostInterestedVideos(req) {
   homeValidator.requireAuthenticatedUser(req);
   const userId = req.user.id;
   const cap = homeValidator.parseMostInterestedLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
   const vis = getVideoVisibility(req, "v");
   const conditions = [];
@@ -82,6 +89,11 @@ async function getMostInterestedVideos(req) {
   if (vis.whereClause) {
     conditions.push(vis.whereClause);
     params.push(...vis.params);
+  }
+  const searchFilter = buildVideoSearchCondition(search, "v");
+  if (searchFilter.clause) {
+    conditions.push(searchFilter.clause);
+    params.push(...searchFilter.params);
   }
   const whereSql = conditions.length
     ? `WHERE ${conditions.join(" AND ")}`
@@ -122,15 +134,16 @@ async function getHomeLeaders(req) {
   const userId = req.user.id;
   const role = req.user.role;
   const cap = homeValidator.parseLeadersLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
-  let rows;
-  if (role === "Super_Admin") {
-    rows = await homeRepo.findHomeLeadersSuperAdmin(cap);
-  } else if (role === "Administrator") {
-    rows = await homeRepo.findHomeLeadersAdministrator(userId, cap);
-  } else {
-    rows = await homeRepo.findHomeLeadersMember(userId, cap);
-  }
+  const rows = await homeRepo.findHomeLeadersByScope(
+    userId,
+    role,
+    cap,
+    search
+  );
 
   return (rows || []).map((r) => ({
     id: r.leader_id,
@@ -144,6 +157,9 @@ async function getHomeSavedVideos(req) {
   homeValidator.requireAuthenticatedUser(req);
   const userId = req.user.id;
   const cap = homeValidator.parseSavedVideosLimit(req.query.limit);
+  const search = homeValidator.parseUpcomingSearch(
+    req.query.search ?? req.query.q
+  );
 
   const visibility = getVideoVisibility(req, "v");
   const conditions = ["sv.member_id = ?"];
@@ -152,6 +168,11 @@ async function getHomeSavedVideos(req) {
   if (visibility.whereClause) {
     conditions.push(visibility.whereClause);
     params.push(...visibility.params);
+  }
+  const searchFilter = buildVideoSearchCondition(search, "v");
+  if (searchFilter.clause) {
+    conditions.push(searchFilter.clause);
+    params.push(...searchFilter.params);
   }
 
   params.push(cap);

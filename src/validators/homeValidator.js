@@ -41,6 +41,11 @@ function clampLimit(raw, defaultLimit, maxLimit) {
 exports.parseUpcomingLimit = (limit) =>
   clampLimit(limit, UPCOMING_DEFAULT_LIMIT, UPCOMING_MAX_LIMIT);
 
+exports.parseUpcomingSearch = (search) => {
+  if (search == null) return "";
+  return String(search).trim();
+};
+
 exports.parseMostInterestedLimit = (limit) =>
   clampLimit(limit, MOST_INTERESTED_DEFAULT_LIMIT, MOST_INTERESTED_MAX_LIMIT);
 
