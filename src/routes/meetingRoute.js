@@ -94,7 +94,13 @@ router.get("/", verifyToken, meetingController.getAllMeetings);
  *       409:
  *         description: Overlapping meeting for the same group.
  */
-router.post("/", verifyToken, checkAdminPermission, meetingController.createMeeting);
+router.post(
+  "/",
+  verifyToken,
+  checkAdminPermission,
+  uploadMiddleware,
+  meetingController.createMeeting
+);
 
 /**
  * @swagger
