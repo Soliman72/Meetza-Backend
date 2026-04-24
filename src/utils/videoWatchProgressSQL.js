@@ -42,7 +42,7 @@ const getUserExtras = (userId) => {
 
   return {
     join: WATCH_PROGRESS_USER_JOIN,
-    fields: `, ${WATCH_PROGRESS_USER_FIELDS}, ${USER_REACTIONS_FIELDS}`,
+    fields: `${WATCH_PROGRESS_USER_FIELDS}, ${USER_REACTIONS_FIELDS}`,
     params: [userId, userId, userId],
   };
 };

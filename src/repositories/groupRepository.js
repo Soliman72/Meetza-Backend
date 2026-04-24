@@ -45,7 +45,7 @@ exports.getAllGroups = async (req) => {
     params.push(...yearsArray);
   }
 
-  const semestersArray = normalizeAndValidate(semester, [
+  const semestersArray = normalizeAndValidate(req.query.semester, [
     "Fall",
     "Spring",
     "Summer",
