@@ -89,9 +89,9 @@ exports.getAdminsByGroupIds = async (groupIds) => {
           u.name, u.email, u.user_photo
        FROM group_admin ga
        JOIN user u ON u.id = ga.user_id
-       WHERE ga.group_id IN (?)
+       WHERE ga.group_id IN (${placeholders})
        ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
-    [placeholders]
+    safeIds
   );
 
   return admins;
