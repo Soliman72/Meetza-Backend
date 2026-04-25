@@ -280,23 +280,13 @@ exports.removeGroupAdmin = async (req) => {
         continue;
       }
 
-      const adminRecord = await repo.getOwner(groupId);
-
-      if (!adminRecord) {
-        results.push({ email, success: false, message: "Admin not found" });
+      if (!req.isSuperAdmin && user.group_admin_role === "OWNER") {
+        results.push({
+          email,
+          success: false,
+          message: "Cannot remove the group owner",
+        });
         continue;
-      }
-
-      if (adminRecord.role === "OWNER") {
-        const ownersCount = await repo.countOwners(groupId);
-        if (ownersCount <= 1) {
-          results.push({
-            email,
-            success: false,
-            message: "Cannot remove last owner",
-          });
-          continue;
-        }
       }
 
       await repo.removeGroupAdmin(groupId, user.id);

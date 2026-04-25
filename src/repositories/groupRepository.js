@@ -163,7 +163,10 @@ exports.getGroupMeetingIds = async (groupId) => {
 
 exports.getUserByEmail = async (email, groupId) => {
   const [rows] = await db.promise().execute(
-    `SELECT u.* FROM user u 
+    `SELECT
+       u.*,
+       ga.role AS group_admin_role
+     FROM user u 
     JOIN group_admin ga ON ga.user_id = u.id
      WHERE u.email = ? AND ga.group_id = ?`,
     [email, groupId]
