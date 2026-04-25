@@ -1,6 +1,8 @@
 const db = require("../config/db");
 const { normalizeToArray, normalizeAndValidate } = require("../utils/normalize");
 
+const toNullable = (value) => (value === undefined ? null : value);
+
 exports.createGroup = async (data) => {
   const sql = `
     INSERT INTO \`group\` 
@@ -137,11 +139,11 @@ exports.updateGroup = async (id, updates) => {
   const [result] = await db
     .promise()
     .execute(sql, [
-      updates.group_name,
-      updates.description,
-      updates.group_photo,
-      updates.year,
-      updates.semester,
+      toNullable(updates.group_name),
+      toNullable(updates.description),
+      toNullable(updates.group_photo),
+      toNullable(updates.year),
+      toNullable(updates.semester),
       id,
     ]);
 

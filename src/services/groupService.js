@@ -119,7 +119,6 @@ exports.getGroupById = async (req) => {
 
 exports.updateGroup = async (req) => {
     const { id } = req.params;
-    const updates = req.body;
     validateUpdateGroup(req);
   
     // Check group exists and user is allowed
@@ -142,8 +141,15 @@ exports.updateGroup = async (req) => {
       validateFileType(req.body.group_photo, "image");
       group_photo_url = req.body.group_photo;
     }
-  
-    await repo.updateGroup(id, req.body);
+
+    const updates = Object.fromEntries(
+      Object.entries(req.body || {}).filter(([, value]) => value !== undefined)
+    );
+    if (group_photo_url !== null) {
+      updates.group_photo = group_photo_url;
+    }
+
+    await repo.updateGroup(id, updates);
     return { message: "Updated" };
   };
 

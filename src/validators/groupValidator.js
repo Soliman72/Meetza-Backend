@@ -1,9 +1,3 @@
-exports.validateUpdateGroup = (data) => {
-    if (data.year && !["1", "2", "3", "4"].includes(data.year)) {
-      throw { status: 400, message: "Invalid year" };
-    }
-  };
-
 exports.validateCreateGroup = (data) => {
     if (!data.group_name || !data.year || !data.semester || !data.group_content_name) {
       throw { status: 400, message: "Missing required fields" };
@@ -17,13 +11,14 @@ exports.validateCreateGroup = (data) => {
   };
 
 exports.validateUpdateGroup = (req) => {
-    const { group_name, description, year, semester } = req.body;
+    const body = req.body || {};
+    const { group_name, description, year, semester } = body;
     const { group_photo } = req.files || {};
     if(
         !group_name &&
         !description &&
         !group_photo &&
-        !req.body?.group_photo &&
+        !body.group_photo &&
         !year &&
         !semester
     ) {
@@ -32,7 +27,7 @@ exports.validateUpdateGroup = (req) => {
     if (year && !["1", "2", "3", "4"].includes(year)) {
       throw { status: 400, message: "Invalid year" };
     }
-    if (data.semester && !["Fall", "Spring", "Summer"].includes(data.semester)) {
+    if (semester && !["Fall", "Spring", "Summer"].includes(semester)) {
       throw { status: 400, message: "Invalid semester" };
     }
   };
