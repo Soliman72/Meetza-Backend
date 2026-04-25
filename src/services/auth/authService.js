@@ -48,53 +48,53 @@ exports.register = async (data) => {
 };
 
 exports.login = async (data) => {
-    authValidator.validateLogin(data);
-    const { email, password, remember_me, from, captchaToken } = data;
+  authValidator.validateLogin(data);
+  const { email, password, remember_me, from, captchaToken } = data;
 
-    const domainName = email.split('@')[1];
-    if (domainName) {
-      const domainObj = await domainRepository.findByDomainName(domainName.toLowerCase());
-      if (domainObj && !domainObj.auth_email_enabled) {
-        throw new Error("Email authentication is disabled for your organization. Please use Google Sign-In.");
-      }
+  const domainName = email.split('@')[1];
+  if (domainName) {
+    const domainObj = await domainRepository.findByDomainName(domainName.toLowerCase());
+    if (domainObj && !domainObj.auth_email_enabled) {
+      throw new Error("Email authentication is disabled for your organization. Please use Google Sign-In.");
     }
+  }
 
-    const user = await authRepo.findByEmail(email);
-    if (!user) {
-      recordFailedAttempt(email);
-      throw new Error("Invalid credentials");
-    }
-  
-    const securityCheck = await authSecurity.checkLoginSecurity(email, captchaToken);
-  
-    if (securityCheck.blocked) {
-      return {
-        success: false,
-        ...securityCheck,
-      };
-    }
-  
-    if (!user.email_verification) {
-      throw new Error("Please verify your email");
-    }
-  
-    if (from && isAdminAccess(user, from)) {
-      throw new Error("Access denied. Administrators only.");
-    }
-    
-  
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      recordFailedAttempt(email);
-      throw new Error("Invalid credentials");
-    }
-  
-    clearAttempts(email);
-  
-    const token = generateToken(user, remember_me);
-  
-    return { token };
-  };
+  const user = await authRepo.findByEmail(email);
+  if (!user) {
+    recordFailedAttempt(email);
+    throw new Error("Invalid credentials");
+  }
+
+  const securityCheck = await authSecurity.checkLoginSecurity(email, captchaToken);
+
+  if (securityCheck.blocked) {
+    return {
+      success: false,
+      ...securityCheck,
+    };
+  }
+
+  if (!user.email_verification) {
+    throw new Error("Please verify your email");
+  }
+
+  if (from && isAdminAccess(user, from)) {
+    throw new Error("Access denied. Administrators only.");
+  }
+
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) {
+    recordFailedAttempt(email);
+    throw new Error("Invalid credentials");
+  }
+
+  clearAttempts(email);
+
+  const token = generateToken(user, remember_me);
+
+  return { token };
+};
 
 exports.verifyEmail = async ({ email, code }) => {
   authValidator.validateVerifyEmail({ email, code });

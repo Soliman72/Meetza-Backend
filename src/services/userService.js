@@ -58,11 +58,17 @@ exports.updateUser = async (req) => {
 
   let user_photo_url;
 
-  
+
   if (req.files?.user_photo) {
     const file = req.files.user_photo[0];
     validateFileType(file, "image");
     user_photo_url = await uploadToCloudinary(file, "posters");
+  }
+
+  const theme = req.body.theme;
+  const supportedThemes = ["light", "dark", "blue", "green"];
+  if (theme && !supportedThemes.includes(theme)) {
+    throw new Error("Invalid theme. Supported themes: light, dark, blue, green");
   }
 
   await userRepo.update(id, { ...req.body, user_photo: user_photo_url });

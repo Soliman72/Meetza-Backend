@@ -21,6 +21,7 @@ exports.generateToken = (user, remember_me) => {
       role: user.role,
       name: user.name,
       user_photo: user.user_photo,
+      theme: user.theme,
     },
     process.env.JWT_SECRET,
     { expiresIn }

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `verification_code` VARCHAR(4) NULL,
     `email_verification` BOOLEAN DEFAULT FALSE,
     `user_photo` TEXT NULL,
+    `theme` ENUM('light', 'dark', 'blue', 'green') DEFAULT 'light',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_email` (`email`),

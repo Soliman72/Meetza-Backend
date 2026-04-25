@@ -21,6 +21,7 @@ function proceedWithUser(user, redirectUrl, res) {
     name: user.name,
     email: user.email,
     user_photo: user.user_photo,
+    theme: user.theme || "light",
     created_at: user.created_at,
     updated_at: user.updated_at,
   };
@@ -31,6 +32,7 @@ function proceedWithUser(user, redirectUrl, res) {
     role: user.role,
     name: user.name,
     user_photo: user.user_photo,
+    theme: user.theme || "light",
   };
   const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: "24h" });
 

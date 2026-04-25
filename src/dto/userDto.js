@@ -14,6 +14,7 @@ const toPublic = (row) => {
     name: row.name,
     email: row.email,
     user_photo: row.user_photo ?? null,
+    theme: row.theme ?? "light",
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -46,6 +47,7 @@ const toPublicWithRole = (row) => {
     email: row.email,
     role: row.role,
     user_photo: row.user_photo ?? null,
+    theme: row.theme ?? "light",
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

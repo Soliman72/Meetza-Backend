@@ -49,8 +49,8 @@ exports.getEmailById = async (id) => {
 
 exports.create = async (user) => {
   const sql = `
-    INSERT INTO user (id, name, email, password, role, verification_code, email_verification)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO user (id, name, email, password, role, verification_code, email_verification, theme)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   await db.promise().execute(sql, [
@@ -61,6 +61,7 @@ exports.create = async (user) => {
     user.role,
     user.verification_code,
     user.email_verification,
+    user.theme || "light",
   ]);
 
   if (user.role === "Administrator" || user.role === "Super_Admin") {
@@ -79,18 +80,20 @@ exports.update = async (id, data) => {
     role = COALESCE(?, role),
     verification_code = COALESCE(?, verification_code),
     email_verification = COALESCE(?, email_verification),
-    user_photo = COALESCE(?, user_photo)
+    user_photo = COALESCE(?, user_photo),
+    theme = COALESCE(?, theme)
     WHERE id = ?
   `;
 
   const [result] = await db.promise().execute(sql, [
-    data.name,
-    data.email,
-    data.password,
-    data.role,
-    data.verification_code,
-    data.email_verification,
-    data.user_photo,
+    data.name ?? null,
+    data.email ?? null,
+    data.password ?? null,
+    data.role ?? null,
+    data.verification_code ?? null,
+    data.email_verification ?? null,
+    data.user_photo ?? null,
+    data.theme ?? null,
     id,
   ]);
 
