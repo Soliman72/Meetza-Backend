@@ -1,33 +1,47 @@
+const VALID_YEARS = ["1", "2", "3", "4"];
+const VALID_SEMESTERS = ["Fall", "Spring", "Summer"];
+
+const normalizeYear = (year) => String(year || "").trim();
+const normalizeSemester = (semester) => String(semester || "").trim();
+
+exports.normalizeGroupYear = normalizeYear;
+exports.normalizeGroupSemester = normalizeSemester;
+
 exports.validateCreateGroup = (data) => {
-    if (!data.group_name || !data.year || !data.semester || !data.group_content_name) {
+    const year = normalizeYear(data?.year);
+    const semester = normalizeSemester(data?.semester);
+
+    if (!data?.group_name || !year || !semester || !data?.group_content_name) {
       throw { status: 400, message: "Missing required fields" };
     }
-    if (!["1", "2", "3", "4"].includes(data.year)) {
+    if (!VALID_YEARS.includes(year)) {
       throw { status: 400, message: "Invalid year" };
     }
-    if (!["Fall", "Spring", "Summer"].includes(data.semester)) {
+    if (!VALID_SEMESTERS.includes(semester)) {
       throw { status: 400, message: "Invalid semester" };
     }
   };
 
 exports.validateUpdateGroup = (req) => {
     const body = req.body || {};
-    const { group_name, description, year, semester } = body;
+    const { group_name, description } = body;
+    const year = normalizeYear(body.year);
+    const semester = normalizeSemester(body.semester);
     const { group_photo } = req.files || {};
     if(
         !group_name &&
         !description &&
         !group_photo &&
         !body.group_photo &&
-        !year &&
-        !semester
+        body.year === undefined &&
+        body.semester === undefined
     ) {
         throw { status: 400, message: "No fields provided" };
     }
-    if (year && !["1", "2", "3", "4"].includes(year)) {
+    if (body.year !== undefined && !VALID_YEARS.includes(year)) {
       throw { status: 400, message: "Invalid year" };
     }
-    if (semester && !["Fall", "Spring", "Summer"].includes(semester)) {
+    if (body.semester !== undefined && !VALID_SEMESTERS.includes(semester)) {
       throw { status: 400, message: "Invalid semester" };
     }
   };

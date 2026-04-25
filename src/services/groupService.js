@@ -10,6 +10,8 @@ const {
   validateUpdateGroup,
   validateAddAdmin,
   validateRemoveAdmin,
+  normalizeGroupYear,
+  normalizeGroupSemester,
 } = require("../validators/groupValidator");
 const { validateFileType } = require("../validators/validateFiles");
 const { uploadToCloudinary } = require("../middleware/uploadFile");
@@ -63,6 +65,8 @@ exports.createGroup = async (req) => {
   await repo.createGroup({
     id,
     ...req.body,
+    year: normalizeGroupYear(req.body.year),
+    semester: normalizeGroupSemester(req.body.semester),
     group_photo: group_photo_url,
   });
 
@@ -145,6 +149,12 @@ exports.updateGroup = async (req) => {
     const updates = Object.fromEntries(
       Object.entries(req.body || {}).filter(([, value]) => value !== undefined)
     );
+    if (updates.year !== undefined) {
+      updates.year = normalizeGroupYear(updates.year);
+    }
+    if (updates.semester !== undefined) {
+      updates.semester = normalizeGroupSemester(updates.semester);
+    }
     if (group_photo_url !== null) {
       updates.group_photo = group_photo_url;
     }
