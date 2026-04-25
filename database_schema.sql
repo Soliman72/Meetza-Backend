@@ -112,23 +112,12 @@ CREATE TABLE IF NOT EXISTS `group` (
     `group_name` VARCHAR(255) NOT NULL,
     `description` TEXT NULL,
     `group_photo` TEXT NULL,
-    `position_id` VARCHAR(36) NOT NULL,
-    `group_content_id` VARCHAR(36) NULL,
     `year` ENUM('1', '2', '3', '4') NOT NULL,
     `semester` ENUM('Fall', 'Spring', 'Summer') NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_position_id` (`position_id`),
-    INDEX `idx_group_content_id` (`group_content_id`),
+        `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_position_id` (`position_id`),
     INDEX `idx_year_semester` (`year`, `semester`),
-    CONSTRAINT `fk_group_position` 
-        FOREIGN KEY (`position_id`) REFERENCES `position`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE,
-    CONSTRAINT `fk_group_content` 
-        FOREIGN KEY (`group_content_id`) REFERENCES `group_content`(`id`) 
-        ON DELETE SET NULL 
-        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
