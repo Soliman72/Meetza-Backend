@@ -436,7 +436,7 @@ CREATE TABLE IF NOT EXISTS `group_message_media` (
     `message_id` VARCHAR(36) NOT NULL,
     `file_name` VARCHAR(255) NOT NULL,
     `media_url` TEXT NOT NULL,
-    `media_type` ENUM('image', 'voice', 'file', 'link') NOT NULL,
+    `media_type` ENUM('image', 'voice', 'video', 'file', 'link') NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_group_id` (`group_id`),
     INDEX `idx_sender_id` (`sender_id`),

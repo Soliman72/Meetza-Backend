@@ -217,6 +217,8 @@ exports.getGroupInfo = async (req) => {
     groupId
   );
 
+  const media = await chatRepository.getGroupMedia(groupId);
+
   let content = null;
   const contentRow = await chatRepository.getFirstGroupContentRow(groupId);
   if (contentRow) {
@@ -232,7 +234,7 @@ exports.getGroupInfo = async (req) => {
     };
   }
 
-  return { group, members: memberRows, content };
+  return { group, members: memberRows, content, media };
 };
 
 exports.getGroupMeetings = async (req) => {

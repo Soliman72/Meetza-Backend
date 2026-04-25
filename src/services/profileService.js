@@ -23,7 +23,8 @@ exports.getMyChatMedia = async (req) => {
   profileValidator.requireAuthenticatedUser(req);
 
   const userId = req.user.id;
-  const rows = await chatRepository.findChatMediaByUserId(userId, req.user.role);
+  const userRole = req.user.role || await chatRepository.getUserRole(userId);
+  const rows = await chatRepository.findChatMediaByUserId(userId, userRole);
 
   return chatMediaDto.toChatMediaList(rows);
 };

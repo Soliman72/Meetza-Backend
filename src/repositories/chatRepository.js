@@ -100,6 +100,14 @@ exports.getMyGroupsForUser = async (userId) => {
   return rows;
 };
 
+exports.getGroupMedia = async (groupId) => {
+  const [media] = await db.promise().execute(
+    `SELECT * FROM group_message_media WHERE group_id = ?`,
+    [groupId]
+  );
+  return media;
+};
+
 exports.getUnreadGroups = async (userId) => {
   const [rows] = await db.promise().query(
     `
@@ -310,27 +318,25 @@ exports.getUserForReaction = async (userId) => {
 };
 
 exports.findChatMediaByUserId = async (userId, userRole) => {
-  const params = [];
-  let accessClause = "";
+  const params = [userId, userId];
+  let accessClause = `
+    WHERE (
+      ? = 'Super_Admin'
+      OR EXISTS (
+        SELECT 1
+        FROM group_admin ga
+        WHERE ga.group_id = gmm.group_id
+          AND ga.user_id = ?
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM group_membership gms
+        WHERE gms.group_id = gmm.group_id
+          AND gms.member_id = ?
+      )
+    )`;
 
-  if (userRole !== "Super_Admin") {
-    accessClause = `
-      WHERE (
-        EXISTS (
-          SELECT 1
-          FROM group_admin ga
-          WHERE ga.group_id = gmm.group_id
-            AND ga.user_id = ?
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM group_membership gms
-          WHERE gms.group_id = gmm.group_id
-            AND gms.member_id = ?
-        )
-      )`;
-    params.push(userId, userId);
-  }
+  params.unshift(userRole || "");
 
   const [rows] = await db.promise().execute(
     `SELECT
@@ -338,14 +344,20 @@ exports.findChatMediaByUserId = async (userId, userRole) => {
         gmm.file_name,
         gmm.media_url,
         gmm.media_type,
+        gmm.media_url AS url,
+        CAST(gmm.media_type AS CHAR) AS file_type,
         gmm.created_at,
         gmm.sender_id,
         sender.name AS sender_name,
         sender.user_photo AS sender_photo,
+        sender.email AS sender_email,
         gmm.group_id,
         g.group_name,
+        g.group_photo,
         gmm.message_id,
-        gm.message
+        gm.message,
+        gm.created_at AS message_created_at,
+        'chat' AS source
       FROM group_message_media gmm
       INNER JOIN group_message gm ON gm.id = gmm.message_id
       INNER JOIN \`group\` g ON g.id = gmm.group_id
