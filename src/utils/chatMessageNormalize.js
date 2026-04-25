@@ -15,9 +15,10 @@ const normalizeBefore = (before) => {
   return d;
 };
 
-const normalizeMessage = (message) => {
+const normalizeMessage = (message, { allowEmpty = false } = {}) => {
   const text = String(message || "").trim();
   if (!text) {
+    if (allowEmpty) return "";
     const e = new Error("Message is required");
     e.status = 400;
     throw e;

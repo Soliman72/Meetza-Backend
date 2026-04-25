@@ -7,7 +7,8 @@ const {
 } = require("../utils/chatMessageNormalize");
 
 const saveMessage = async (groupId, senderId, message, media = null, parentMessageId = null) => {
-  const msg = normalizeMessage(message);
+  const hasMedia = Array.isArray(media) && media.length > 0;
+  const msg = normalizeMessage(message, { allowEmpty: hasMedia });
   return repo.saveMessage(groupId, senderId, msg, media, parentMessageId);
 };
 
