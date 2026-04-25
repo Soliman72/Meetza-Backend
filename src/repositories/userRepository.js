@@ -30,6 +30,18 @@ exports.findByEmail = async (email) => {
   return rows[0];
 };// true
 
+exports.findPositionsByUserId = async (userId) => {
+  const [rows] = await db.promise().execute(
+    `SELECT p.id, p.title
+      FROM position p
+      WHERE p.administrator_id = ?
+      ORDER BY p.title ASC`,
+    [userId]
+  );
+
+  return rows;
+};
+
 exports.getEmailById = async (id) => {
   const [rows] = await db.promise().execute("SELECT email FROM user WHERE id = ?", [id]);
   return rows[0];

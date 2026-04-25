@@ -33,6 +33,7 @@ const authenticateSocket = require("./src/middleware/soketAuth");
 const notificationRouter = require("./src/routes/notificationRoute");
 const contactRouter = require("./src/routes/contactRoute");
 const homeRouter = require("./src/routes/homeRoute");
+const profileRouter = require("./src/routes/profileRoute");
 const reportRouter = require("./src/routes/reportRoute");
 
 const os = require("os");
@@ -160,6 +161,7 @@ app.use("/api/chat", chatRouter);
 app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
 app.use("/api/home", homeRouter);
+app.use("/api/profile", profileRouter);
 app.use("/api/reports", reportRouter);
 
 

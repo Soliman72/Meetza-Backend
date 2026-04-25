@@ -51,10 +51,22 @@ const toPublicWithRole = (row) => {
   };
 };
 
+const toProfile = (row, positions = []) => {
+  if (!row) return null;
+  return {
+    ...toPublicWithRole(row),
+    positions: (positions || []).map((position) => ({
+      id: position.id,
+      title: position.title,
+    })),
+  };
+};
+
 module.exports = {
   toPublic,
   toMinimal,
   toPublicList,
   toPublicWithRole,
   toPublicListWithRole,
+  toProfile,
 };

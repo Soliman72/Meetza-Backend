@@ -308,3 +308,52 @@ exports.getUserForReaction = async (userId) => {
     .query("SELECT id, name, user_photo, email FROM user WHERE id = ?", [userId]);
   return userRows[0] || null;
 };
+
+exports.findChatMediaByUserId = async (userId, userRole) => {
+  const params = [];
+  let accessClause = "";
+
+  if (userRole !== "Super_Admin") {
+    accessClause = `
+      WHERE (
+        EXISTS (
+          SELECT 1
+          FROM group_admin ga
+          WHERE ga.group_id = gmm.group_id
+            AND ga.user_id = ?
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM group_membership gms
+          WHERE gms.group_id = gmm.group_id
+            AND gms.member_id = ?
+        )
+      )`;
+    params.push(userId, userId);
+  }
+
+  const [rows] = await db.promise().execute(
+    `SELECT
+        gmm.id,
+        gmm.file_name,
+        gmm.media_url,
+        gmm.media_type,
+        gmm.created_at,
+        gmm.sender_id,
+        sender.name AS sender_name,
+        sender.user_photo AS sender_photo,
+        gmm.group_id,
+        g.group_name,
+        gmm.message_id,
+        gm.message
+      FROM group_message_media gmm
+      INNER JOIN group_message gm ON gm.id = gmm.message_id
+      INNER JOIN \`group\` g ON g.id = gmm.group_id
+      INNER JOIN user sender ON sender.id = gmm.sender_id
+      ${accessClause}
+      ORDER BY gmm.created_at DESC`,
+    params
+  );
+
+  return rows;
+};
