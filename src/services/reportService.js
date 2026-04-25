@@ -150,10 +150,6 @@ exports.getAnalyticsReport = async (req) => {
     { groupActivity, meetingActivity, videoActivity },
   );
 
-  const totalMembersAllTime = groupsDetailed.reduce(
-    (sum, g) => sum + g.totalMembers,
-    0,
-  );
   const totalMessages = groupsDetailed.reduce(
     (sum, g) => sum + g.totalMessages,
     0,
@@ -163,6 +159,11 @@ exports.getAnalyticsReport = async (req) => {
     0,
   );
   const totalLikes = groupsDetailed.reduce((sum, g) => sum + g.totalLikes, 0);
+
+  const newGroups = groupsDetailed.filter(
+    (g) => new Date(g.created_at) >= start && new Date(g.created_at) <= end
+  );
+  const currentGroupsCount = newGroups.length;
 
   const recordedMeetings = meetings.filter((m) => m.recording === "1").length;
   const avgDuration =
@@ -206,26 +207,30 @@ exports.getAnalyticsReport = async (req) => {
     return acc;
   }, {});
 
+  const uniquePhotos = (arr, key) => {
+    return [...new Set(arr.map(x => x[key]).filter(Boolean))].slice(0, 5);
+  };
+
   return {
     empty: false,
     data: {
       filters: { start, end, prevStart, prevEnd },
       summary: {
         totalGroups: {
-          numbers: groupsDetailed.length,
-          photos: groupsDetailed.slice(0, 5).map((g) => g.group_photo),
+          numbers: currentGroupsCount,
+          photos: uniquePhotos(newGroups, "group_photo"),
         },
         totalMembers: {
-          numbers: totalMembersAllTime,
-          photos: recentMembers.slice(0, 5).map((m) => m.user_photo),
+          numbers: currentMembers,
+          photos: uniquePhotos(recentMembers, "user_photo"),
         },
         totalMeetings: {
           numbers: meetings.length,
-          photos: meetings.slice(0, 5).map((m) => m.poster_url),
+          photos: uniquePhotos(meetings, "poster_url"),
         },
         totalVideos: {
           numbers: videos.length,
-          photos: videos.slice(0, 5).map((v) => v.poster_url),
+          photos: uniquePhotos(videos, "poster_url"),
         },
         totalMessages,
         totalComments,
@@ -239,7 +244,7 @@ exports.getAnalyticsReport = async (req) => {
         meetings: { current: meetings.length, previous: prevMeetings },
         videos: { current: videos.length, previous: prevVideos },
         members: { current: currentMembers, previous: prevMembers },
-        groups: { current: groupsDetailed.length, previous: prevGroups },
+        groups: { current: currentGroupsCount, previous: prevGroups },
         messages: { current: totalMessages, previous: prevMessages },
         meetingAttendance: {
           current: Math.round(avgMeetingAttendance),
