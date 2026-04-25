@@ -71,7 +71,15 @@ exports.updateUser = async (req) => {
     throw new Error("Invalid theme. Supported themes: light, dark, blue, green");
   }
 
-  await userRepo.update(id, { ...req.body, user_photo: user_photo_url });
+  const updateData = Object.fromEntries(
+    Object.entries(req.body || {}).filter(([, value]) => value !== undefined)
+  );
+
+  if (user_photo_url !== undefined) {
+    updateData.user_photo = user_photo_url;
+  }
+
+  await userRepo.update(id, updateData);
 };
 
 exports.deleteUser = async (id) => {

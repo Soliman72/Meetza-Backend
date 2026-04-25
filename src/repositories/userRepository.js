@@ -1,6 +1,8 @@
 const db = require("../config/db");
 const { assertSafeSqlFragment } = require("../utils/sqlSafety");
 
+const toNullable = (value) => (value === undefined ? null : value);
+
 exports.findAll = async (name, ownershipFilter) => {
   let query = "SELECT * FROM user";
   let params = [];
@@ -86,14 +88,14 @@ exports.update = async (id, data) => {
   `;
 
   const [result] = await db.promise().execute(sql, [
-    data.name ?? null,
-    data.email ?? null,
-    data.password ?? null,
-    data.role ?? null,
-    data.verification_code ?? null,
-    data.email_verification ?? null,
-    data.user_photo ?? null,
-    data.theme ?? null,
+    toNullable(data.name),
+    toNullable(data.email),
+    toNullable(data.password),
+    toNullable(data.role),
+    toNullable(data.verification_code),
+    toNullable(data.email_verification),
+    toNullable(data.user_photo),
+    toNullable(data.theme),
     id,
   ]);
 
