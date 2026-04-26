@@ -20,6 +20,89 @@ const { attachAdminsToGroups } = require("../utils/attachAdmin");
 const userService = require("../services/userService");
 const meetingAdminService = require("../services/meetingAdminService");
 const groupMembershipService = require("../repositories/group_memberShipRepository");
+const userRepository = require("../repositories/userRepository");
+const { createNotification } = require("./notificatioService");
+const {
+  signPendingGroupAction,
+  verifyPendingGroupActionToken,
+} = require("../utils/pendingGroupEmailToken");
+const {
+  DEFAULT_EMAIL_REJECTION_REASON,
+  getPublicApiBaseUrl,
+  buildPendingGroupEmailActionUrl,
+} = require("../utils/pendingGroupEmailHelpers");
+
+const createApprovedGroup = async ({
+  id,
+  body,
+  adminIds,
+  ownerId,
+  assignedBy,
+  groupPhotoUrl,
+}) => {
+  await repo.createGroup({
+    id,
+    ...body,
+    year: normalizeGroupYear(body.year),
+    semester: normalizeGroupSemester(body.semester),
+    group_photo: groupPhotoUrl,
+  });
+
+  await Promise.all(
+    adminIds.map((adminId) =>
+      groupAdminService.assignGroupAdmin({
+        groupId: id,
+        userId: adminId,
+        role: adminId === ownerId ? "OWNER" : "ADMIN",
+        assignedBy,
+      })
+    )
+  );
+
+  return groupContentService.createGroupContent({
+    content_name: body.group_content_name || `${body.group_name} Content`,
+    content_description:
+      body.group_content_description || body.description || null,
+    group_id: id,
+  });
+};
+
+const notifySuperAdminsForPendingGroup = async ({
+  senderId,
+  groupName,
+  pendingGroupId,
+  req,
+}) => {
+  const superAdmins = await userRepository.findByRole("Super_Admin");
+  const apiBase = getPublicApiBaseUrl(req);
+
+  await Promise.allSettled(
+    superAdmins.map((admin) => {
+      const approveToken = signPendingGroupAction({
+        pendingGroupId,
+        reviewerId: admin.id,
+        action: "approve",
+      });
+      const rejectToken = signPendingGroupAction({
+        pendingGroupId,
+        reviewerId: admin.id,
+        action: "reject",
+      });
+      const approveUrl = buildPendingGroupEmailActionUrl(apiBase, approveToken);
+      const rejectUrl = buildPendingGroupEmailActionUrl(apiBase, rejectToken);
+
+      return createNotification({
+        senderId,
+        memberId: admin.id,
+        title: "New group pending approval",
+        message: `A new group "${groupName}" is waiting for your approval.`,
+        type: "GROUP_APPROVAL",
+        emailHeaderTagline: "Group approval",
+        emailActions: { approveUrl, rejectUrl },
+      });
+    })
+  );
+};
 
 exports.createGroup = async (req) => {
   validateCreateGroup(req.body);
@@ -62,30 +145,52 @@ exports.createGroup = async (req) => {
 
   const id = uuidv4();
 
-  await repo.createGroup({
+  if (!req.isSuperAdmin && req.user.role === "Administrator") {
+    await repo.createPendingGroup({
+      id,
+      group_name: req.body.group_name,
+      description: req.body.description,
+      group_photo: group_photo_url,
+      year: normalizeGroupYear(req.body.year),
+      semester: normalizeGroupSemester(req.body.semester),
+      created_by: req.user.id,
+      status: "pending",
+    });
+
+    await Promise.all(
+      adminIds.map((adminId) =>
+        repo.createPendingGroupAdmin({
+          id: uuidv4(),
+          pending_group_id: id,
+          user_id: adminId,
+          role: adminId === req.user.id ? "OWNER" : "ADMIN",
+          assigned_by: req.user.id,
+        })
+      )
+    );
+
+    await notifySuperAdminsForPendingGroup({
+      senderId: req.user.id,
+      groupName: req.body.group_name,
+      pendingGroupId: id,
+      req,
+    });
+
+    return {
+      id,
+      ...req.body,
+      status: "pending",
+      message: "Group creation request sent to Super Admins for approval.",
+    };
+  }
+
+  const content = await createApprovedGroup({
     id,
-    ...req.body,
-    year: normalizeGroupYear(req.body.year),
-    semester: normalizeGroupSemester(req.body.semester),
-    group_photo: group_photo_url,
-  });
-
-  await Promise.all(
-    adminIds.map((adminId) =>
-      groupAdminService.assignGroupAdmin({
-        groupId: id,
-        userId: adminId,
-        role: adminId === req.user.id ? "OWNER" : "ADMIN",
-        assignedBy: req.user.id,
-      })
-    )
-  );
-
-  // create default content
-  const content = await groupContentService.createGroupContent({
-    content_name: req.body.group_content_name,
-    content_description: req.body.group_content_description,
-    group_id: id,
+    body: req.body,
+    adminIds,
+    ownerId: req.user.id,
+    assignedBy: req.user.id,
+    groupPhotoUrl: group_photo_url,
   });
   if (!content) {
     throw new Error("Failed to create default content");
@@ -96,6 +201,190 @@ exports.createGroup = async (req) => {
     ...req.body,
     group_content_id: content.id,
   };
+};
+
+exports.getPendingGroups = async (req) => {
+  if (!req.isSuperAdmin && req.user.role !== "Super_Admin") {
+    throw { status: 403, message: "Access denied. Super Admins only." };
+  }
+
+  const pendingGroups = await repo.getPendingGroups();
+  const groupsWithAdmins = await Promise.all(
+    pendingGroups.map(async (group) => ({
+      ...group,
+      admins: await repo.getPendingGroupAdmins(group.id),
+    }))
+  );
+
+  return groupsWithAdmins;
+};
+
+const notifyPendingGroupDecisionFollowUp = async ({
+  pendingGroup,
+  status,
+  rejection_reason,
+  decidedByUserId,
+}) => {
+  const groupName = pendingGroup.group_name;
+  const reviewer = await userRepository.findById(decidedByUserId);
+  const reviewerName = reviewer?.name || "A Super Admin";
+  const creatorId = pendingGroup.created_by;
+
+  if (creatorId && creatorId !== decidedByUserId) {
+    if (status === "approved") {
+      await createNotification({
+        senderId: decidedByUserId,
+        memberId: creatorId,
+        title: "Group approved",
+        message: `Your group "${groupName}" was approved by ${reviewerName}.`,
+        type: "GROUP_APPROVAL_RESULT",
+        emailOptional: true,
+      });
+    } else {
+      await createNotification({
+        senderId: decidedByUserId,
+        memberId: creatorId,
+        title: "Group rejected",
+        message: `Your group "${groupName}" was rejected by ${reviewerName}. Reason: ${rejection_reason}`,
+        type: "GROUP_APPROVAL_RESULT",
+        emailOptional: true,
+      });
+    }
+  }
+
+  await createNotification({
+    senderId: decidedByUserId,
+    memberId: decidedByUserId,
+    title: status === "approved" ? "Approval recorded" : "Rejection recorded",
+    message:
+      status === "approved"
+        ? `You approved "${groupName}". The group is now active.`
+        : `You rejected "${groupName}".`,
+    type: "GROUP_APPROVAL_RESULT",
+    skipEmail: true,
+  });
+};
+
+const processPendingGroupDecision = async ({
+  pendingGroupId: id,
+  status,
+  rejection_reason,
+  decidedByUserId,
+}) => {
+  if (!["approved", "rejected"].includes(status)) {
+    throw { status: 400, message: "Status must be approved or rejected" };
+  }
+  if (status === "rejected" && !rejection_reason) {
+    throw { status: 400, message: "Rejection reason is required" };
+  }
+
+  const pendingGroup = await repo.findPendingGroupById(id);
+  if (!pendingGroup) {
+    throw { status: 404, message: "Pending group not found" };
+  }
+  if (pendingGroup.status !== "pending") {
+    throw { status: 400, message: "Pending group is already processed" };
+  }
+
+  await repo.updatePendingGroupStatus({
+    id,
+    status,
+    approvedBy: status === "approved" ? decidedByUserId : null,
+    rejectedBy: status === "rejected" ? decidedByUserId : null,
+    rejectionReason: status === "rejected" ? rejection_reason : null,
+  });
+
+  if (status === "rejected") {
+    await notifyPendingGroupDecisionFollowUp({
+      pendingGroup,
+      status,
+      rejection_reason,
+      decidedByUserId,
+    });
+    return {
+      id,
+      status,
+      message: "Pending group rejected successfully.",
+    };
+  }
+
+  const pendingAdmins = await repo.getPendingGroupAdmins(id);
+  const adminIds = pendingAdmins.map((admin) => admin.user_id);
+  const ownerId =
+    pendingAdmins.find((admin) => admin.role === "OWNER")?.user_id ||
+    pendingGroup.created_by;
+
+  const content = await createApprovedGroup({
+    id,
+    body: {
+      group_name: pendingGroup.group_name,
+      description: pendingGroup.description,
+      year: pendingGroup.year,
+      semester: pendingGroup.semester,
+      group_content_name: `${pendingGroup.group_name} Content`,
+      group_content_description: pendingGroup.description,
+    },
+    adminIds,
+    ownerId,
+    assignedBy: decidedByUserId,
+    groupPhotoUrl: pendingGroup.group_photo,
+  });
+
+  if (!content) {
+    throw new Error("Failed to create default content");
+  }
+
+  await repo.deletePendingGroup(id);
+
+  await notifyPendingGroupDecisionFollowUp({
+    pendingGroup,
+    status,
+    rejection_reason,
+    decidedByUserId,
+  });
+
+  return {
+    id,
+    status,
+    group_content_id: content.id,
+    message: "Pending group approved and created successfully.",
+  };
+};
+
+exports.updatePendingGroupStatus = async (req) => {
+  if (!req.isSuperAdmin && req.user.role !== "Super_Admin") {
+    throw { status: 403, message: "Access denied. Super Admins only." };
+  }
+
+  const { id } = req.params;
+  const { status, rejection_reason } = req.body || {};
+
+  return processPendingGroupDecision({
+    pendingGroupId: id,
+    status,
+    rejection_reason,
+    decidedByUserId: req.user.id,
+  });
+};
+
+exports.executePendingGroupFromEmail = async (token) => {
+  const payload = verifyPendingGroupActionToken(token);
+
+  const reviewer = await userRepository.findById(payload.reviewerId);
+  if (!reviewer || reviewer.role !== "Super_Admin") {
+    throw { status: 403, message: "This link is not valid for your account." };
+  }
+
+  const status = payload.action === "approve" ? "approved" : "rejected";
+  const rejection_reason =
+    status === "rejected" ? DEFAULT_EMAIL_REJECTION_REASON : undefined;
+
+  return processPendingGroupDecision({
+    pendingGroupId: payload.pendingGroupId,
+    status,
+    rejection_reason,
+    decidedByUserId: payload.reviewerId,
+  });
 };
 
 exports.getAllGroups = async (req) => {

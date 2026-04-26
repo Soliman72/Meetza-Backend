@@ -32,6 +32,13 @@ exports.findByEmail = async (email) => {
   return rows[0];
 };// true
 
+exports.findByRole = async (role) => {
+  const [rows] = await db
+    .promise()
+    .execute("SELECT id, name, email FROM user WHERE role = ?", [role]);
+  return rows;
+};
+
 exports.findPositionsByUserId = async (userId) => {
   const [rows] = await db.promise().execute(
     `SELECT p.id, p.title

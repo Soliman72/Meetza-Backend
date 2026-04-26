@@ -595,3 +595,65 @@ CREATE TABLE IF NOT EXISTS `organization_domain` (
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =============================================
+-- 23. PENDING GROUP TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `pending_groups` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `group_name` VARCHAR(255) NOT NULL,
+    `description` TEXT NULL,
+    `group_photo` TEXT NULL,
+    `year` ENUM('1', '2', '3', '4') NOT NULL,
+    `semester` ENUM('Fall', 'Spring', 'Summer') NOT NULL,
+    `created_by` VARCHAR(36) NOT NULL,
+    `status` ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    `approved_by` VARCHAR(36) NULL,
+    `approved_at` TIMESTAMP NULL,
+    `rejected_by` VARCHAR(36) NULL,
+    `rejected_at` TIMESTAMP NULL,
+    `rejection_reason` TEXT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_created_by` (`created_by`),
+    INDEX `idx_status` (`status`),
+    CONSTRAINT `fk_pending_groups_created_by`
+        FOREIGN KEY (`created_by`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_groups_approved_by`
+        FOREIGN KEY (`approved_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_groups_rejected_by`
+        FOREIGN KEY (`rejected_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 24. PENDING GROUP ADMIN TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `pending_group_admins` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `pending_group_id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN') NOT NULL DEFAULT 'ADMIN',
+    `assigned_by` VARCHAR(36) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_pending_group_admin` (`pending_group_id`, `user_id`),
+    INDEX `idx_pending_group_admin_pending_group_id` (`pending_group_id`),
+    INDEX `idx_pending_group_admin_user_id` (`user_id`),
+    CONSTRAINT `fk_pending_group_admin_pending_group`
+        FOREIGN KEY (`pending_group_id`) REFERENCES `pending_groups`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_group_admin_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_group_admin_assigned_by`
+        FOREIGN KEY (`assigned_by`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

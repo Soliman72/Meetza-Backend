@@ -40,12 +40,33 @@ const deleteNotification = async (id, memberId) => {
   return ok;
 };
 
+const buildEmailActionButtons = ({ approveUrl, rejectUrl }) => `
+                      <div style="text-align:center;margin:28px 0 8px;">
+                        <a href="${approveUrl}"
+                          style="display:inline-block;padding:14px 28px;margin:6px;background:#0f172a;color:#ffffff;
+                          text-decoration:none;border-radius:12px;font-weight:600;font-size:15px;">
+                          Approve
+                        </a>
+                        <a href="${rejectUrl}"
+                          style="display:inline-block;padding:14px 28px;margin:6px;background:#ffffff;color:#0f172a;
+                          text-decoration:none;border-radius:12px;font-weight:600;font-size:15px;border:2px solid #0f172a;">
+                          Reject
+                        </a>
+                      </div>
+                      <p style="margin:0 auto 8px;color:#64748b;font-size:13px;line-height:1.6;text-align:center;max-width:520px;">
+                        Or open Meetza and go to pending groups to review this request.
+                      </p>`;
+
 const createNotification = async ({
   senderId,
   memberId,
   title,
   message,
   type,
+  emailActions,
+  emailHeaderTagline,
+  skipEmail,
+  emailOptional,
 }) => {
   const notification = buildNotification({
     senderId,
@@ -64,11 +85,24 @@ const createNotification = async ({
   emitter.emitNotification(notification);
   emitter.emitUnreadCount(memberId, count);
 
+  if (skipEmail) {
+    return notification;
+  }
+
   let senderName = "Someone";
   if (senderId) {
     const sender = await userRepository.findById(senderId);
     if (sender?.name) senderName = sender.name;
   }
+
+  const headerTagline = emailHeaderTagline || "New Group Content";
+  const actionBlock =
+    emailActions?.approveUrl && emailActions?.rejectUrl
+      ? buildEmailActionButtons({
+          approveUrl: emailActions.approveUrl,
+          rejectUrl: emailActions.rejectUrl,
+        })
+      : "";
 
   const messageMail =
       message +
@@ -107,7 +141,7 @@ const createNotification = async ({
                         </tr>
                       </table>
                       <p style="margin:10px 0 0;color:#64748b;font-size:12px;letter-spacing:2px;text-transform:uppercase;">
-                        New Group Content
+                        ${headerTagline}
                       </p>
                     </td>
                   </tr>
@@ -121,8 +155,10 @@ const createNotification = async ({
                       </h2>
 
                       <p style="margin:0 auto;color:#4a5568;font-size:15px;line-height:1.7;text-align:center;max-width:520px;">
-                        ${messageMail}
+                        ${messageMail.replace(/\n/g, "<br/>")}
                       </p>
+
+                      ${actionBlock}
 
                       <!-- Highlight Box -->
                       <div style="margin:32px auto 24px;background:#f8fafc;border-left:4px solid #0f172a;
@@ -163,7 +199,7 @@ const createNotification = async ({
 
   const member = await userRepository.getEmailById(memberId);
   if (member?.email) {
-    try{
+    try {
       await sendEmail({
         to: member.email,
         subject: "New Update from " + senderName,
@@ -172,7 +208,7 @@ const createNotification = async ({
     } catch (error) {
       throw error;
     }
-  } else {
+  } else if (!emailOptional) {
     throw new Error("Member email not found");
   }
 

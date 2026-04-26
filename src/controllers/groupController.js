@@ -1,5 +1,16 @@
 const groupService = require("../services/groupService");
 const { GroupAccessError } = require("../utils/groupAccess");
+const {
+  buildPendingGroupEmailActionResultHtml,
+  getFrontendBaseUrl,
+  buildPendingGroupEmailSuccessRedirectUrl,
+  buildPendingGroupEmailErrorRedirectUrl,
+  getPendingGroupEmailActionSuccessView,
+  getPendingGroupEmailActionErrorView,
+} = require("../utils/pendingGroupEmailHelpers");
+const {
+  requirePendingGroupEmailToken,
+} = require("../validators/pendingGroupEmailActionValidator");
 
 exports.createGroup = async (req, res) => {
   try {
@@ -26,6 +37,74 @@ exports.getAllGroups = async (req, res) => {
       success: false,
       message: err.message,
     });
+  }
+};
+
+exports.getPendingGroups = async (req, res) => {
+  try {
+    const data = await groupService.getPendingGroups(req);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+exports.updatePendingGroupStatus = async (req, res) => {
+  try {
+    const data = await groupService.updatePendingGroupStatus(req);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+exports.pendingGroupEmailAction = async (req, res) => {
+  const frontend = getFrontendBaseUrl();
+
+  try {
+    const token = requirePendingGroupEmailToken(req);
+    const data = await groupService.executePendingGroupFromEmail(token);
+    if (frontend) {
+      return res.redirect(
+        302,
+        buildPendingGroupEmailSuccessRedirectUrl(frontend, data.status)
+      );
+    }
+    const view = getPendingGroupEmailActionSuccessView(data);
+    return res
+      .status(view.httpStatus)
+      .type("html")
+      .send(
+        buildPendingGroupEmailActionResultHtml(
+          view.heading,
+          view.detail,
+          view.success
+        )
+      );
+  } catch (err) {
+    const view = getPendingGroupEmailActionErrorView(err);
+    if (frontend) {
+      return res.redirect(
+        302,
+        buildPendingGroupEmailErrorRedirectUrl(frontend, view.detail)
+      );
+    }
+    return res
+      .status(view.httpStatus)
+      .type("html")
+      .send(
+        buildPendingGroupEmailActionResultHtml(
+          view.heading,
+          view.detail,
+          view.success
+        )
+      );
   }
 };
 

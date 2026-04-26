@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const groupController = require("../controllers/groupController");
 const { verifyToken } = require("../middleware/verifyToken");
-const { checkAdminPermission } = require("../middleware/checkAdminPermission");
+const { checkAdminPermission, requireSuperAdmin } = require("../middleware/checkAdminPermission");
 const uploadMiddleware = require("../middleware/uploadMiddleware");
 
 /**
@@ -102,6 +102,10 @@ router.get("/", verifyToken, groupController.getAllGroups);
  *         description: Related resource not found.
  */
 router.post("/", verifyToken, checkAdminPermission, uploadMiddleware, groupController.createGroup);
+
+router.get("/pending", verifyToken, requireSuperAdmin, groupController.getPendingGroups);
+router.put("/pending/:id/status", verifyToken, requireSuperAdmin, groupController.updatePendingGroupStatus);
+router.get("/pending/email-action", groupController.pendingGroupEmailAction);
 
 /**
  * @swagger
