@@ -54,7 +54,7 @@ exports.getPendingGroups = async (req, res) => {
 
 exports.updatePendingGroupStatus = async (req, res) => {
   try {
-    const data = await groupService.updatePendingGroupStatus(req);
+    const data = await groupService.updatePendingGroupStatusInNotificationPendingGroupAction(req);
     res.status(200).json({ success: true, data });
   } catch (err) {
     res.status(err.status || 500).json({
@@ -176,6 +176,18 @@ exports.leaveGroup = async (req, res) => {
       success: false,
       message: "Database error",
       error: err.message,
+    });
+  }
+};
+
+exports.updatePendingGroupStatusInNotificationPendingGroupAction = async (req, res) => {
+  try {
+    const data = await groupService.updatePendingGroupStatusInNotificationPendingGroupAction(req);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      message: err.message,
     });
   }
 };

@@ -85,18 +85,21 @@ const createNotification = async ({
   if (
     pendingGroupApproval?.pendingGroupId &&
     pendingGroupApproval?.approveUrl &&
-    pendingGroupApproval?.rejectUrl
+    pendingGroupApproval?.rejectUrl &&
+    pendingGroupApproval?.status
   ) {
     await notificationPendingGroupActionRepo.create({
       notificationId: notification.id,
       pendingGroupId: pendingGroupApproval.pendingGroupId,
       approveUrl: pendingGroupApproval.approveUrl,
       rejectUrl: pendingGroupApproval.rejectUrl,
+      status: pendingGroupApproval.status,
     });
     notification.pending_group_approval = {
       pending_group_id: pendingGroupApproval.pendingGroupId,
       approve_url: pendingGroupApproval.approveUrl,
       reject_url: pendingGroupApproval.rejectUrl,
+      status: pendingGroupApproval.status,
     };
   }
 

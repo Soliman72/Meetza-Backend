@@ -32,6 +32,7 @@ const {
   getPublicApiBaseUrl,
   buildPendingGroupEmailActionUrl,
 } = require("../utils/pendingGroupEmailHelpers");
+const notificationPendingGroupActionRepo = require("../repositories/notificationPendingGroupActionRepository");
 
 const createApprovedGroup = async ({
   id,
@@ -92,6 +93,8 @@ const notifySuperAdminsForPendingGroup = async ({
       const approveUrl = buildPendingGroupEmailActionUrl(apiBase, approveToken);
       const rejectUrl = buildPendingGroupEmailActionUrl(apiBase, rejectToken);
 
+      const status = repo.getPendingGroupStatus(pendingGroupId);
+
       return createNotification({
         senderId,
         memberId: admin.id,
@@ -104,6 +107,7 @@ const notifySuperAdminsForPendingGroup = async ({
           pendingGroupId,
           approveUrl,
           rejectUrl,
+          status: status,
         },
       });
     })
@@ -760,4 +764,17 @@ exports.leaveGroup = async (req) => {
   } finally {
     conn.release();
   }
+};
+
+exports.updatePendingGroupStatusInNotificationPendingGroupAction = async (req) => {
+  const { pendingGroupId } = req.body;
+  const { status } = req.body;
+  await notificationPendingGroupActionRepo.updateStatus({
+    pendingGroupId,
+    status,
+  });
+  return {
+    success: true,
+    message: "Pending group status updated successfully",
+  };
 };
