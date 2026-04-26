@@ -126,4 +126,10 @@ exports.createUserBySuperAdmin = async (user) => {
     true,
     "light",
   ]);
+
+  if (user.role === "Administrator" || user.role === "Super_Admin") {
+    await db.promise().execute("INSERT INTO administrator (user_id) VALUES (?)", [user.id]);
+  } else if (user.role === "Member") {
+    await db.promise().execute("INSERT INTO member (user_id) VALUES (?)", [user.id]);
+  }
 };
