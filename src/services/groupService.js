@@ -12,6 +12,7 @@ const {
   validateRemoveAdmin,
   normalizeGroupYear,
   normalizeGroupSemester,
+  normalizePendingGroupStatus,
 } = require("../validators/groupValidator");
 const { validateFileType } = require("../validators/validateFiles");
 const { uploadToCloudinary } = require("../middleware/uploadFile");
@@ -357,7 +358,13 @@ exports.updatePendingGroupStatus = async (req) => {
   }
 
   const { id } = req.params;
-  const { status, rejection_reason } = req.body || {};
+  const body = req.body || {};
+  const status = normalizePendingGroupStatus(body.status);
+  if (!status) {
+    throw { status: 400, message: "Status must be approved or rejected" };
+  }
+  const rejection_reason =
+    body.rejection_reason ?? body.rejectionReason ?? undefined;
 
   return processPendingGroupDecision({
     pendingGroupId: id,

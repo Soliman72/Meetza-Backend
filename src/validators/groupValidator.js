@@ -1,6 +1,17 @@
 const VALID_YEARS = ["1", "2", "3", "4"];
 const VALID_SEMESTERS = ["Fall", "Spring", "Summer"];
 
+/**
+ * Maps API / UI values to DB values for PUT .../pending/:id/status.
+ * Accepts approve|reject (email-style) and any casing.
+ */
+exports.normalizePendingGroupStatus = (raw) => {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (s === "1") return "approved";
+  if (s === "0") return "rejected";
+  return null;
+};
+
 const normalizeYear = (year) => String(year || "").trim();
 const normalizeSemester = (semester) => String(semester || "").trim();
 
