@@ -36,6 +36,7 @@ const homeRouter = require("./src/routes/homeRoute");
 const profileRouter = require("./src/routes/profileRoute");
 const reportRouter = require("./src/routes/reportRoute");
 const domainRouter = require("./src/routes/domainRoute");
+const chatBotRouter = require("./src/routes/chatBotRoute");
 
 const os = require("os");
 const fs = require("fs");
@@ -159,6 +160,7 @@ app.use("/api/like", require("./src/routes/likeRoute"));
 app.use("/api/comment", commentRouter);
 app.use("/api/saved_video", saved_videoRouter);
 app.use("/api/chat", chatRouter);
+app.use("/api/chat-bot", chatBotRouter);
 app.use("/api/notification", notificationRouter);
 app.use("/api/contact", contactRouter);
 app.use("/api/home", homeRouter);
