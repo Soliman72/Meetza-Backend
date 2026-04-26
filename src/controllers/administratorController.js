@@ -36,7 +36,7 @@ exports.updateAdministrator = async (req, res) => {
     await administratorService.updateAdministrator(user_id, new_user_id, role);
     res
       .status(200)
-      .json(resSuccess(null, "Administrator updated successfully"));
+      .json(resSuccess(null, "Leader updated successfully"));
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json(resError(err.message, { error: err.message }));
@@ -49,7 +49,7 @@ exports.deleteAdministrator = async (req, res) => {
     await administratorService.deleteAdministrator(user_id);
     res
       .status(200)
-      .json(resSuccess(null, "Administrator deleted successfully"));
+      .json(resSuccess(null, "Leader deleted successfully"));
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json(resError(err.message, { error: err.message }));

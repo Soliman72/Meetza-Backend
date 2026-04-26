@@ -143,7 +143,7 @@ exports.updateGroupContentById = async (req) => {
   if (req.user.role !== "Super_Admin") {
     const admin = await repo.isUserGroupAdmin(row.group_id, req.user.id);
     if (!admin) {
-      throw forbidden("Only group administrators can update content");
+      throw forbidden("Only group Leaders can update content");
     }
   }
   const affected = await repo.updateContentFields(
@@ -180,7 +180,7 @@ exports.addFilesToGroupContent = async (req) => {
     );
     if (!admin) {
       throw forbidden(
-        "Only group administrators can add files to this content"
+        "Only group Leaders can add files to this content"
       );
     }
   }
@@ -351,7 +351,7 @@ exports.deleteFileFromGroupContent = async (req) => {
     );
     if (!admin) {
       throw forbidden(
-        "Only group administrators can delete files from this content"
+        "Only group Leaders can delete files from this content"
       );
     }
   }

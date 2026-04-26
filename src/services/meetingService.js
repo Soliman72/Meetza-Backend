@@ -542,7 +542,7 @@ exports.deactivateMeetingRecurrence = async (req) => {
   if (!req.isSuperAdmin && !(await isMeetingAdmin(req.user?.id, id))) {
     throw httpError(
       403,
-      "Only the meeting administrator or a super admin can stop recurrence"
+      "Only the meeting Leader or a super admin can stop recurrence"
     );
   }
 
@@ -568,7 +568,7 @@ exports.activateMeetingRecurrence = async (req) => {
     if (!req.isSuperAdmin && !(await isMeetingAdmin(req.user?.id, id))) {
       throw httpError(
         403,
-        "Only the meeting administrator or a super admin can activate recurrence"
+        "Only the meeting Leader or a super admin can activate recurrence"
       );
     }
 
@@ -626,7 +626,7 @@ exports.activateMeetingRecurrence = async (req) => {
   ) {
     throw httpError(
       403,
-      "Only the series administrator or a super admin can start recurrence"
+      "Only the series Leader or a super admin can start recurrence"
     );
   }
 
@@ -649,7 +649,7 @@ exports.deleteMeetingById = async (req) => {
   if (!req.isSuperAdmin && !(await isMeetingAdmin(req.user?.id, id))) {
     throw httpError(
       403,
-      "Only the meeting administrator can delete this meeting"
+      "Only the meeting Leader can delete this meeting"
     );
   }
 
@@ -720,7 +720,7 @@ exports.joinMeeting = async (req) => {
     if (!ok) {
       throw httpError(
         403,
-        "You are not an Administrator of this meeting's group!"
+        "You are not an Leader of this meeting's group!"
       );
     }
   }
@@ -775,7 +775,7 @@ exports.getMeetingParticipants = async (req) => {
     if (!membership) {
       throw httpError(
         403,
-        "Only the meeting admins or group members can view participants"
+        "Only the meeting Leaders or group members can view participants"
       );
     }
   }

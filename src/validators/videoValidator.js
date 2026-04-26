@@ -24,7 +24,7 @@ exports.createVideoValidator = async (req) => {
 
   const groupAdmins = await groupRepository.getGroupAdmins(group_id);
   if (!groupAdmins.length) {
-    throw new Error("Group administrators not found");
+    throw new Error("Group Leaders not found");
   }
 };
 

@@ -12,7 +12,7 @@ exports.createAdministrator = async (req) => {
 
   const existing = await administratorRepository.findByUserId(user_id);
   if (existing) {
-    throw new Error("Administrator already exists");
+    throw new Error("Leader already exists");
   }
 
   return administratorRepository.insert(user_id, role);
@@ -30,7 +30,7 @@ exports.getAdministratorById = async (user_id) => {
   validateAdministratorIdParam(user_id);
   const row = await administratorRepository.findByUserId(user_id);
   if (!row) {
-    throw Object.assign(new Error("Administrator not found"), { status: 404 });
+    throw Object.assign(new Error("Leader not found"), { status: 404 });
   }
   return row;
 };
@@ -43,7 +43,7 @@ exports.updateAdministrator = async (user_id, new_user_id, role) => {
     role
   );
   if (affected === 0) {
-    throw Object.assign(new Error("Administrator not found"), { status: 404 });
+    throw Object.assign(new Error("Leader not found"), { status: 404 });
   }
 };
 
@@ -51,7 +51,7 @@ exports.deleteAdministrator = async (user_id) => {
   validateAdministratorIdParam(user_id);
   const existing = await administratorRepository.findByUserId(user_id);
   if (!existing) {
-    throw Object.assign(new Error("Administrator not found"), { status: 404 });
+    throw Object.assign(new Error("Leader not found"), { status: 404 });
   }
   await administratorRepository.deleteByUserId(user_id);
 };

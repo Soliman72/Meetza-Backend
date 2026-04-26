@@ -675,7 +675,7 @@ exports.leaveGroup = async (req) => {
             status: 400,
             body: {
               success: false,
-              message: "new_admin_id must be an Administrator user",
+              message: "new_admin_id must be an Leader user",
             },
           };
         }

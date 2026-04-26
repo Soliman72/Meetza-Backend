@@ -12,7 +12,7 @@ exports.checkAdminPermission = async (req, res, next) => {
     if (req.user.role !== "Administrator" && req.user.role !== "Super_Admin") {
       return res.status(403).json({
         success: false,
-        message: "Access denied. Administrators or Super Admins only.",
+        message: "Access denied. Leaders or Super Admins only.",
       });
     }
 
@@ -31,7 +31,7 @@ exports.checkAdminPermission = async (req, res, next) => {
       if (!isSuperAdminFromUserTable) {
         return res.status(403).json({
           success: false,
-          message: "Administrator record not found",
+          message: "Leader record not found",
         });
       }
     }

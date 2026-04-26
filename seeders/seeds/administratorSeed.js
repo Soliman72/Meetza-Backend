@@ -24,7 +24,7 @@ async function seedAdministrators() {
     `, [admin.email]);
   }
 
-  console.log("Administrators Seeded");
+  console.log("Leaders Seeded");
 }
 
 module.exports = seedAdministrators;
