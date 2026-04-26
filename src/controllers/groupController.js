@@ -179,15 +179,3 @@ exports.leaveGroup = async (req, res) => {
     });
   }
 };
-
-exports.updatePendingGroupStatusInNotificationPendingGroupAction = async (req, res) => {
-  try {
-    const data = await groupService.updatePendingGroupStatusInNotificationPendingGroupAction(req);
-    res.status(200).json({ success: true, data });
-  } catch (err) {
-    res.status(err.status || 500).json({
-      success: false,
-      message: err.message,
-    });
-  }
-};

@@ -106,7 +106,6 @@ router.post("/", verifyToken, checkAdminPermission, uploadMiddleware, groupContr
 router.get("/pending", verifyToken, requireSuperAdmin, groupController.getPendingGroups);
 router.put("/pending/:id/status", verifyToken, requireSuperAdmin, groupController.updatePendingGroupStatus);
 router.get("/pending/email-action", groupController.pendingGroupEmailAction);
-router.put("/pending/status", groupController.updatePendingGroupStatusInNotificationPendingGroupAction);
 
 /**
  * @swagger

@@ -304,6 +304,11 @@ const processPendingGroupDecision = async ({
     rejectionReason: status === "rejected" ? rejection_reason : null,
   });
 
+  await notificationPendingGroupActionRepo.updateStatus({
+    pendingGroupId: id,
+    status,
+  });
+
   if (status === "rejected") {
     await notifyPendingGroupDecisionFollowUp({
       pendingGroup,
@@ -764,17 +769,4 @@ exports.leaveGroup = async (req) => {
   } finally {
     conn.release();
   }
-};
-
-exports.updatePendingGroupStatusInNotificationPendingGroupAction = async (req) => {
-  const { pendingGroupId } = req.body;
-  const { status } = req.body;
-  await notificationPendingGroupActionRepo.updateStatus({
-    pendingGroupId,
-    status,
-  });
-  return {
-    success: true,
-    message: "Pending group status updated successfully",
-  };
 };
