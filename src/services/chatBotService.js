@@ -11,7 +11,7 @@ exports.chat = async (req) => {
 
   return {
     conversation_id: conversationId || null,
-    reply: "",
+    reply: "hi farida how are you?",
     role: "assistant",
   };
 };
