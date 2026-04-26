@@ -12,15 +12,30 @@ const fields = [
 
 const multerHandler = upload.fields(fields);
 
+const handleMulterError = (res, err) =>
+  res.status(400).json({ success: false, message: err.message });
+
 /**
  * Shared multipart parser for routes that may send any of the declared fields.
  * Responds with JSON 400 on multer errors (e.g. file size / type).
  */
-module.exports = function uploadMiddleware(req, res, next) {
+function uploadMiddleware(req, res, next) {
   multerHandler(req, res, (err) => {
     if (err) {
-      return res.status(400).json({ success: false, message: err.message });
+      return handleMulterError(res, err);
+    }
+    next();
+  });
+}
+
+function summarizeVideoUpload(req, res, next) {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      return handleMulterError(res, err);
     }
     next();
   });
 };
+
+module.exports = uploadMiddleware;
+module.exports.summarizeVideoUpload = summarizeVideoUpload;

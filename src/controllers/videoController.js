@@ -1,12 +1,5 @@
 const videoService = require("../services/videoService");
-
-const sendError = (res, err) => {
-  const status =
-    err.status && err.status >= 400 && err.status < 600 ? err.status : 500;
-  const body = { success: false, message: err.message };
-  if (status >= 500) body.error = err.message;
-  return res.status(status).json(body);
-};
+const sendError = require("../utils/sendError");
 
 exports.createVideo = async (req, res) => {
   try {

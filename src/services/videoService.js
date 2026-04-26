@@ -1,4 +1,6 @@
 const videoRepo = require("../repositories/videoRepository");
+const axios = require("axios");
+const FormData = require("form-data");
 const { uploadFiles } = require("../utils/uploadVideoFiles");
 const { createUniqueVideoSlug } = require("../utils/slug");
 const { createVideoDuration } = require("../utils/videoDuration");
@@ -6,6 +8,8 @@ const videoValidator = require("../validators/videoValidator");
 const groupRepository = require("../repositories/groupRepository");
 const commentRepository = require("../repositories/commentRepository");
 const { mapVideoDetails, mapVideoRow } = require("../utils/mapper");
+const { getRequestedLocalization } = require("../utils/localization");
+const { normalizeTopics } = require("../utils/normalizeTopicsVideo");
 
 const httpError = (status, message) => {
   const e = new Error(message);
@@ -99,9 +103,115 @@ exports.deleteVideo = async (req) => {
 };
 
 exports.summarizeVideo = async (req) => {
-  const video = await videoRepo.getVideoById(req.params.video_id, req);
+  const apiUrl =
+    process.env.SUMMARIZE_API_URL || "http://127.0.0.1:8000/summarize_video";
+  const apiKey =
+    process.env.SUMMARIZE_API_KEY || "#$$0limaaaannnn##sddsdsd23233522dd";
+  const timeoutMs = Number(process.env.SUMMARIZE_API_TIMEOUT_MS) || 1800000;
+  const localization = getRequestedLocalization(req);
+  const { video_id } = req.params;
+
+  if (!video_id) {
+    throw httpError(400, "Missing video_id in request");
+  }
+
+  const resolvedVideoId = await videoRepo.resolveVideoId(video_id);
+  if (!resolvedVideoId) {
+    throw httpError(404, "Video not found");
+  }
+
+  const video = await videoRepo.getVideoSourceById(resolvedVideoId);
   if (!video) {
     throw httpError(404, "Video not found");
   }
-  return videoRepo.listTranscriptSummariesByVideoId(video.id);
+
+  const cachedRow = await videoRepo.getTranscriptSummaryByVideoAndLanguage(
+    resolvedVideoId,
+    localization
+  );
+  if (cachedRow?.transcript || cachedRow?.summary) {
+    return {
+      video_id: resolvedVideoId,
+      language: cachedRow.language,
+      transcript: cachedRow.transcript,
+      summary: cachedRow.summary,
+      topics: normalizeTopics(cachedRow.topics),
+      cached: true,
+    };
+  }
+
+  const fileBuffer = req.file?.buffer || null;
+  const url = req.body?.url || video.video_url;
+
+  if (!fileBuffer && !url) {
+    throw httpError(400, "No file or url provided");
+  }
+
+  const form = new FormData();
+  if (fileBuffer) {
+    form.append("file", fileBuffer, {
+      filename: req.file?.originalname || "file.mp4",
+      contentType: req.file?.mimetype || "video/mp4",
+    });
+  } else {
+    form.append("url", url);
+  }
+
+  let apiData;
+  try {
+    const apiRes = await axios.post(`${apiUrl}/${resolvedVideoId}`, form, {
+      headers: {
+        ...form.getHeaders(),
+        "X-API-Key": apiKey,
+        "X-Localization": localization,
+      },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+      timeout: timeoutMs,
+    });
+    apiData = apiRes.data;
+  } catch (err) {
+    if (err.response?.data) {
+      const detail =
+        err.response.data.detail ||
+        err.response.data.message ||
+        "Unknown error";
+      const error = httpError(500, `Summarization API error: ${detail}`);
+      error.details = err.response.data;
+      throw error;
+    }
+
+    const error = httpError(500, "Summarization API connection error");
+    error.details = err.message || err;
+    throw error;
+  }
+
+  const transcript = apiData?.data?.transcript ?? apiData?.transcript ?? null;
+  const summary = apiData?.data?.summary ?? apiData?.summary ?? null;
+  const topics = normalizeTopics(apiData?.data?.topics ?? apiData?.topics ?? null);
+  const storedLanguage =
+    apiData?.data?.language ?? apiData?.language ?? localization;
+  const topicsForDb =
+    topics == null
+      ? null
+      : typeof topics === "string"
+        ? topics
+        : JSON.stringify(topics);
+
+  await videoRepo.upsertTranscriptSummary({
+    videoId: resolvedVideoId,
+    language: storedLanguage,
+    transcript,
+    summary,
+    topics: topicsForDb,
+  });
+
+  return {
+    video_id: resolvedVideoId,
+    language: storedLanguage,
+    transcript,
+    summary,
+    topics,
+    cached: false,
+  };
 };

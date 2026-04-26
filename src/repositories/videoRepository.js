@@ -57,6 +57,15 @@ const resolveVideoId = async (id) => {
   return rows[0]?.id || null;
 };
 
+const getVideoSourceById = async (videoId) => {
+  const [rows] = await db
+    .promise()
+    .query("SELECT id, video_url FROM video WHERE id = ? LIMIT 1", [videoId]);
+
+  return rows[0] || null;
+};
+
+
 const getVideos = async (req) => {
   const { group_id, q } = req.query;
   const searchTerm = q;
@@ -254,13 +263,44 @@ const getRelatedVideos = async (req) => {
 
 const listTranscriptSummariesByVideoId = async (videoId) => {
   const [rows] = await db.promise().query(
-    `SELECT id, video_id, language, transcript, topics, updated_at
+    `SELECT id, video_id, language, transcript, summary, topics, updated_at
      FROM video_transcript_summary
      WHERE video_id = ?
      ORDER BY updated_at DESC`,
     [videoId]
   );
   return rows;
+};
+
+const getTranscriptSummaryByVideoAndLanguage = async (videoId, language) => {
+  const [rows] = await db.promise().query(
+    `SELECT language, transcript, summary, topics
+     FROM video_transcript_summary
+     WHERE video_id = ? AND language = ?
+     LIMIT 1`,
+    [videoId, language]
+  );
+  return rows[0] || null;
+};
+
+const upsertTranscriptSummary = async ({
+  videoId,
+  language,
+  transcript,
+  summary,
+  topics,
+}) => {
+  await db.promise().query(
+    `INSERT INTO video_transcript_summary
+      (video_id, language, transcript, summary, topics)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       transcript = VALUES(transcript),
+       summary = VALUES(summary),
+       topics = VALUES(topics),
+       updated_at = CURRENT_TIMESTAMP`,
+    [videoId, language, transcript, summary, topics]
+  );
 };
 
 module.exports = {
@@ -271,5 +311,8 @@ module.exports = {
   updateVideo,
   getRelatedVideos,
   resolveVideoId,
+  getVideoSourceById,
   listTranscriptSummariesByVideoId,
+  getTranscriptSummaryByVideoAndLanguage,
+  upsertTranscriptSummary,
 };

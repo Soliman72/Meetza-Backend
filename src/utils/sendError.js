@@ -6,7 +6,7 @@ module.exports = function sendError(res, err) {
 
   return res.status(status).json(
     resError(err.message || "Server error", {
-      ...(status >= 500 ? { error: err.message } : {}),
+      ...(status >= 500 ? { error: err.details || err.message } : {}),
     })
   );
 };
