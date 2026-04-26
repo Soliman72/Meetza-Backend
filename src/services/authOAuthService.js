@@ -111,7 +111,6 @@ async function handleGoogleOAuthCallback(err, profile, req, res) {
       );
     }
 
-    const role = stateObj.role || "Member";
     const email = profile._json?.email || profile.emails?.[0]?.value;
 
     if (email) {
@@ -220,14 +219,10 @@ async function handleGoogleOAuthCallback(err, profile, req, res) {
         name,
         email,
         hashedPassword,
-        role,
+        role: "Member",
       });
 
-      if (role === "Administrator" || role === "Super_Admin") {
-        await authRepository.insertAdministratorRole(newId, role);
-      } else if (role === "Member") {
-        await authRepository.insertMemberForUser(newId);
-      }
+      await authRepository.insertMemberForUser(newId);
 
       await socialAuthRepository.insert(newId, "google", providerId);
 

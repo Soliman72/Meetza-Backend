@@ -16,7 +16,7 @@ exports.deleteUserByEmail = async (email) => {
 
 exports.register = async (data) => {
   authValidator.validateRegister(data);
-  const { name, email, password, role } = data;
+  const { name, email, password } = data;
 
   const domainName = email.split('@')[1];
   if (domainName) {
@@ -38,13 +38,13 @@ exports.register = async (data) => {
     name,
     email,
     password: hashed,
-    role,
+    role: "Member",
     verification_code: code,
   });
 
   await sendVerificationEmail(email, code, "Verify your email");
 
-  return { id, name, email, role };
+  return { id, name, email, role: "Member" };
 };
 
 exports.login = async (data) => {

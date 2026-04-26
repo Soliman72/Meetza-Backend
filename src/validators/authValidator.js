@@ -1,13 +1,9 @@
-const ALLOWED_ROLES = ["Member", "Administrator", "Super_Admin"];
 const ALLOWED_SOCIAL_TYPES = ["signin", "signup"];
 
 exports.validateRegister = (data) => {
-  const { name, email, password, role } = data || {};
-  if (!name || !email || !password || !role) {
+  const { name, email, password } = data || {};
+  if (!name || !email || !password) {
     throw new Error("Missing fields");
-  }
-  if (!ALLOWED_ROLES.includes(role)) {
-    throw new Error("Invalid role");
   }
 };
 
@@ -38,15 +34,10 @@ exports.validateResetPassword = (data) => {
   if (!is_verified) throw new Error("Not verified");
 };
 
-/** @returns {{ role, redirect, type }} or throws Error */
 exports.parseSocialAuthQuery = (query) => {
-  const role = query.role || "Member";
   const redirect = query.redirect || "http://localhost:3000/home";
   const type = query.type || "signin";
 
-  if (!ALLOWED_ROLES.includes(role)) {
-    throw new Error("Invalid role specified");
-  }
   if (!ALLOWED_SOCIAL_TYPES.includes(type)) {
     throw new Error("Invalid type specified");
   }
@@ -55,5 +46,5 @@ exports.parseSocialAuthQuery = (query) => {
   } catch {
     throw new Error("Invalid redirect URL format");
   }
-  return { role, redirect, type };
+  return { redirect, type };
 };
