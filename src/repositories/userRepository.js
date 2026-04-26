@@ -30,7 +30,7 @@ exports.findById = async (id) => {
 exports.findByEmail = async (email) => {
   const [rows] = await db.promise().execute("SELECT * FROM user WHERE email = ?", [email]);
   return rows[0];
-};// true
+};
 
 exports.findByRole = async (role) => {
   const [rows] = await db
@@ -112,4 +112,18 @@ exports.update = async (id, data) => {
 exports.delete = async (id) => {
   const [result] = await db.promise().execute("DELETE FROM user WHERE id = ?", [id]);
   return result.affectedRows > 0;
+};
+
+exports.createUserBySuperAdmin = async (user) => {
+  const sql = `INSERT INTO user (id, name, email, password, role, verification_code, email_verification, theme) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+  await db.promise().execute(sql, [
+    user.id,
+    user.name,
+    user.email,
+    user.password,
+    user.role,
+    0,
+    true,
+    "light",
+  ]);
 };

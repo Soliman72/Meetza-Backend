@@ -10,6 +10,15 @@ exports.createUser = async (req, res) => {
   }
 };
 
+exports.createUserBySuperAdmin = async (req, res) => {
+  try {
+    const result = await userService.createUserBySuperAdmin(req);
+    res.status(201).json(resSuccess(result));
+  } catch (err) {
+    res.status(400).json(resError(err.message));
+  }
+};
+
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await userService.getAllUsers(req);

@@ -1,5 +1,4 @@
 const administratorRepository = require("../repositories/administratorRepository");
-const httpError = require("../utils/httpError");
 
 exports.checkAdminPermission = async (req, res, next) => {
   try {
@@ -66,11 +65,43 @@ exports.getOwnershipFilter = (req, ownerField = "administrator_id") => {
   return { whereClause: "", params: [] };
 };
 
-/** Super Admin only (use after verifyToken). */
-exports.requireSuperAdmin = (req, res, next) => {
-  if (req.user && req.user.role === "Super_Admin") {
-    next();
-  } else {
-    return res.status(403).json(httpError(403, "Access denied. Super Admins only."));
+/**
+ * Super Admin only (use after verifyToken).
+ * Accepts Super_Admin from JWT or from `administrator.role` (JWT may still say Administrator).
+ */
+exports.requireSuperAdmin = async (req, res, next) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    if (req.user.role === "Super_Admin") {
+      req.isSuperAdmin = true;
+      req.adminRole = "Super_Admin";
+      req.administratorId = req.user.id;
+      return next();
+    }
+
+    const adminRecord = await administratorRepository.findByUserId(req.user.id);
+    if (adminRecord?.role === "Super_Admin") {
+      req.isSuperAdmin = true;
+      req.adminRole = "Super_Admin";
+      req.administratorId = req.user.id;
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Super Admins only.",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error checking super admin permission",
+      error: error.message,
+    });
   }
 };

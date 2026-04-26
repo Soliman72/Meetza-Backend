@@ -87,3 +87,24 @@ exports.deleteUser = async (id) => {
   const deleted = await userRepo.delete(id);
   if (!deleted) throw new Error("User not found");
 };
+
+exports.createUserBySuperAdmin = async (req) => {
+  userValidator.validateCreateUserBody(req.body);
+  const { name, email, password, role } = req.body;
+
+  const exists = await userRepo.findByEmail(email);
+  if (exists) throw new Error("User already exists");
+
+  const id = uuidv4();
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  await userRepo.createUserBySuperAdmin({
+    id,
+    name,
+    email,
+    password: hashedPassword,
+    role,
+  });
+
+  return { id, name, email, role };
+};
