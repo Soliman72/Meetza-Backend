@@ -280,9 +280,9 @@ const processPendingGroupDecision = async ({
   if (!["approved", "rejected"].includes(status)) {
     throw { status: 400, message: "Status must be approved or rejected" };
   }
-  if (status === "rejected" && !rejection_reason) {
-    throw { status: 400, message: "Rejection reason is required" };
-  }
+  // if (status === "rejected" && !rejection_reason) {
+  //   throw { status: 400, message: "Rejection reason is required" };
+  // }
 
   const pendingGroup = await repo.findPendingGroupById(id);
   if (!pendingGroup) {
