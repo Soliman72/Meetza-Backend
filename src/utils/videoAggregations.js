@@ -22,7 +22,23 @@ const VIDEO_AGGREGATIONS = `
     WHERE vts.video_id = v.id AND vts.language = 'en'
     ORDER BY vts.updated_at DESC
     LIMIT 1
-  ) AS topics_en
+  ) AS topics_en,
+
+  (
+    SELECT vts.summary
+    FROM video_transcript_summary vts
+    WHERE vts.video_id = v.id AND vts.language = 'ar'
+    ORDER BY vts.updated_at DESC
+    LIMIT 1
+  ) AS summary_ar,
+
+  (
+    SELECT vts.summary
+    FROM video_transcript_summary vts
+    WHERE vts.video_id = v.id AND vts.language = 'en'
+    ORDER BY vts.updated_at DESC
+    LIMIT 1
+  ) AS summary_en
 `;
 
 module.exports = {

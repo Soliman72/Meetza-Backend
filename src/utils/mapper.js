@@ -19,6 +19,9 @@ function mapVideoRow(row, withWatch = false) {
     topics_ar,
     topics_en,
 
+    summary_ar,
+    summary_en,
+
     user_like,
     user_dislike,
 
@@ -45,6 +48,11 @@ function mapVideoRow(row, withWatch = false) {
     topics: {
       ar: normalizeTopics(topics_ar),
       en: normalizeTopics(topics_en),
+    },
+
+    summary: {
+      ar: summary_ar,
+      en: summary_en,
     },
 
     user_like: !!user_like,
@@ -84,6 +92,9 @@ function mapVideoDetails(row, commentsRows = [], withWatch = false) {
     topics_ar,
     topics_en,
 
+    summary_ar,
+    summary_en,
+
     user_like,
     user_dislike,
 
@@ -112,6 +123,11 @@ function mapVideoDetails(row, commentsRows = [], withWatch = false) {
     topics: {
       ar: normalizeTopics(topics_ar),
       en: normalizeTopics(topics_en),
+    },
+
+    summary: {
+      ar: summary_ar,
+      en: summary_en,
     },
 
     user_like: !!user_like,
