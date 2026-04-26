@@ -23,13 +23,19 @@ exports.createVideo = async (req) => {
     throw httpError(404, "Owner not found");
   }
 
+  const isSuperAdmin =
+    req.isSuperAdmin === true || req.user?.role === "Super_Admin";
+  const administrator_id = isSuperAdmin
+    ? String(req.body.administrator_id || "").trim()
+    : owner.user_id;
+
   const video = await videoRepo.createVideo({
     title: req.body.title,
     video_url: videoUrl,
     poster_url: posterUrl,
     slug,
     duration,
-    administrator_id: owner.user_id,
+    administrator_id,
     description: req.body.description,
     meeting_id: req.body.meeting_id,
     group_id: req.body.group_id,

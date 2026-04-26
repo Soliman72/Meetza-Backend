@@ -26,6 +26,28 @@ exports.createVideoValidator = async (req) => {
   if (!groupAdmins.length) {
     throw new Error("Group administrators not found");
   }
+
+  const isSuperAdmin =
+    req.isSuperAdmin === true || req.user?.role === "Super_Admin";
+
+  if (isSuperAdmin) {
+    const administratorId = String(req.body?.administrator_id || "").trim();
+    if (!administratorId) {
+      throw new Error(
+        "administrator_id is required when creating a video as Super Admin"
+      );
+    }
+    const ok = groupAdmins.some(
+      (a) => String(a.user_id) === administratorId
+    );
+    if (!ok) {
+      throw new Error(
+        "administrator_id must be an administrator of this group"
+      );
+    }
+    return;
+  }
+
   let hasPermission = false;
   for (let i = 0; i < groupAdmins.length; i++) {
     if (groupAdmins[i].user_id === req.user.id) {
