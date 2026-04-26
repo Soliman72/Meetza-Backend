@@ -3,6 +3,9 @@ const repo = require("../repositories/groupContentRepository");
 const { uploadToCloudinaryResources } = require("../middleware/uploadFile");
 const { createNotification } = require("./notificatioService");
 const groupContentValidator = require("../validators/groupContentValidator");
+const { internalSummarizePdf } = require("../utils/pdfSummarize");
+const { getRequestedLocalization } = require("../utils/localization");
+const { mapResourceRow } = require("../utils/mapper");
 
 const badRequest = (message) => {
   const e = new Error(message);
@@ -102,7 +105,7 @@ exports.getAllGroupContentsWithResources = async (req) => {
   const allResources = await repo.getResourcesByContentIds(contentIds);
   const resourcesByContentId = allResources.reduce((acc, res) => {
     if (!acc[res.group_content_id]) acc[res.group_content_id] = [];
-    acc[res.group_content_id].push(res);
+    acc[res.group_content_id].push(mapResourceRow(res));
     return acc;
   }, {});
 
@@ -126,7 +129,7 @@ exports.getGroupContentById = async (req) => {
     }
   }
   const resources = await repo.getResourcesByContentId(id);
-  return { ...row, resources };
+  return { ...row, resources: resources.map(mapResourceRow) };
 };
 
 exports.updateGroupContentById = async (req) => {
@@ -201,13 +204,15 @@ exports.addFilesToGroupContent = async (req) => {
   }
 
   const uploadedResources = [];
+  const localization = getRequestedLocalization(req);
 
   if (hasFiles) {
     for (const file of req.files) {
       try {
+        const isPdf = file.mimetype && file.mimetype.includes("pdf");
         const isDocument =
           file.mimetype &&
-          (file.mimetype.includes("pdf") ||
+          (isPdf ||
             file.mimetype.includes("document") ||
             file.mimetype.includes("msword") ||
             file.mimetype.includes("spreadsheet") ||
@@ -232,6 +237,16 @@ exports.addFilesToGroupContent = async (req) => {
           meeting_id,
         });
 
+        if (isPdf) {
+          try {
+            await internalSummarizePdf(resourceId, fileUrl, localization, file);
+          } catch (summarizeError) {
+            // Rollback: Delete the resource if summarization fails (as per user request pattern for videos)
+            await repo.deleteResource(resourceId, id);
+            throw summarizeError;
+          }
+        }
+
         uploadedResources.push({
           id: resourceId,
           file_url: fileUrl,
@@ -240,6 +255,7 @@ exports.addFilesToGroupContent = async (req) => {
           file_size: file.size,
         });
       } catch (fileError) {
+        if (fileError.status) throw fileError;
         console.error(
           `Error uploading file ${file.originalname}:`,
           fileError
@@ -267,6 +283,17 @@ exports.addFilesToGroupContent = async (req) => {
         file_size: 0,
         meeting_id,
       });
+
+      // Summarize PDF links if they end with .pdf
+      if (link.toLowerCase().endsWith(".pdf")) {
+        try {
+          await internalSummarizePdf(resourceId, link, localization);
+        } catch (summarizeError) {
+          await repo.deleteResource(resourceId, id);
+          throw summarizeError;
+        }
+      }
+
       uploadedResources.push({
         id: resourceId,
         file_url: link,
@@ -295,9 +322,14 @@ exports.addFilesToGroupContent = async (req) => {
     });
   }
 
+  // Fetch all resources for this content to get fully mapped data (including AI metadata)
+  const finalResources = await repo.getResourcesByContentId(id);
+  const mappedResources = finalResources.map(mapResourceRow);
+  const uploadedIds = uploadedResources.map((ur) => ur.id);
+
   return {
     group_content_id: id,
-    added_resources: uploadedResources,
+    added_resources: mappedResources.filter((r) => uploadedIds.includes(r.id)),
     total_added: uploadedResources.length,
   };
 };
@@ -333,5 +365,6 @@ exports.deleteFileFromGroupContent = async (req) => {
 exports.getGroupContentResourcesByMeetingId = async (req) => {
   const { meeting_id } = req.params;
   groupContentValidator.validateMeetingIdParam(meeting_id);
-  return repo.getResourcesByMeetingId(meeting_id);
+  const rows = await repo.getResourcesByMeetingId(meeting_id);
+  return rows.map(mapResourceRow);
 };

@@ -142,5 +142,29 @@ function mapVideoDetails(row, commentsRows = [], withWatch = false) {
   };
 }
 
+function mapResourceRow(row) {
+  if (!row) return null;
 
-module.exports = { mapVideoRow, mapVideoDetails, mapCommentRow };
+  const {
+    topics_ar,
+    topics_en,
+    summary_ar,
+    summary_en,
+    ...resource
+  } = row;
+
+  return {
+    ...resource,
+    topics: {
+      ar: normalizeTopics(topics_ar),
+      en: normalizeTopics(topics_en),
+    },
+    summary: {
+      ar: summary_ar,
+      en: summary_en,
+    },
+  };
+}
+
+
+module.exports = { mapVideoRow, mapVideoDetails, mapCommentRow, mapResourceRow };

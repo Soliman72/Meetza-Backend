@@ -41,11 +41,45 @@ exports.getAllContents = async (query, params) => {
   return rows;
 };
 
+const RESOURCE_AGGREGATIONS = `
+  (
+    SELECT ram.topics
+    FROM resource_ai_metadata ram
+    WHERE ram.resource_id = gcr.id AND ram.language = 'ar'
+    ORDER BY ram.updated_at DESC
+    LIMIT 1
+  ) AS topics_ar,
+
+  (
+    SELECT ram.topics
+    FROM resource_ai_metadata ram
+    WHERE ram.resource_id = gcr.id AND ram.language = 'en'
+    ORDER BY ram.updated_at DESC
+    LIMIT 1
+  ) AS topics_en,
+
+  (
+    SELECT ram.summary
+    FROM resource_ai_metadata ram
+    WHERE ram.resource_id = gcr.id AND ram.language = 'ar'
+    ORDER BY ram.updated_at DESC
+    LIMIT 1
+  ) AS summary_ar,
+
+  (
+    SELECT ram.summary
+    FROM resource_ai_metadata ram
+    WHERE ram.resource_id = gcr.id AND ram.language = 'en'
+    ORDER BY ram.updated_at DESC
+    LIMIT 1
+  ) AS summary_en
+`;
+
 exports.getResourcesByContentIds = async (ids) => {
   if (!ids || !ids.length) return [];
   const placeholders = ids.map(() => "?").join(",");
   const [rows] = await db.promise().query(
-    `SELECT id, group_content_id, file_url, file_name, file_type, file_size, created_at FROM group_content_resource WHERE group_content_id IN (${placeholders}) ORDER BY created_at ASC`,
+    `SELECT gcr.*, ${RESOURCE_AGGREGATIONS} FROM group_content_resource gcr WHERE gcr.group_content_id IN (${placeholders}) ORDER BY created_at ASC`,
     ids
   );
   return rows;
@@ -53,7 +87,7 @@ exports.getResourcesByContentIds = async (ids) => {
 
 exports.getResourcesByContentId = async (contentId) => {
   const [rows] = await db.promise().query(
-    `SELECT id, file_url, file_name, file_type, file_size, created_at FROM group_content_resource WHERE group_content_id = ? ORDER BY created_at ASC`,
+    `SELECT gcr.*, ${RESOURCE_AGGREGATIONS} FROM group_content_resource gcr WHERE gcr.group_content_id = ? ORDER BY created_at ASC`,
     [contentId]
   );
   return rows;
@@ -119,6 +153,26 @@ exports.insertResource = async ({
   );
 };
 
+exports.upsertResourceAiMetadata = async ({
+  resourceId,
+  language,
+  transcript,
+  summary,
+  topics,
+}) => {
+  await db.promise().query(
+    `INSERT INTO resource_ai_metadata
+      (resource_id, language, transcript, summary, topics)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       transcript = VALUES(transcript),
+       summary = VALUES(summary),
+       topics = VALUES(topics),
+       updated_at = CURRENT_TIMESTAMP`,
+    [resourceId, language, transcript, summary, topics]
+  );
+};
+
 exports.deleteResource = async (resourceId, groupContentId) => {
   const [result] = await db.promise().query(
     "DELETE FROM group_content_resource WHERE id = ? AND group_content_id = ?",
@@ -145,7 +199,7 @@ exports.getGroupNameAndOwnerAdmin = async (groupId) => {
 
 exports.getResourcesByMeetingId = async (meetingId) => {
   const [rows] = await db.promise().query(
-    "SELECT * FROM group_content_resource WHERE meeting_id = ?",
+    `SELECT gcr.*, ${RESOURCE_AGGREGATIONS} FROM group_content_resource gcr WHERE gcr.meeting_id = ?`,
     [meetingId]
   );
   return rows;

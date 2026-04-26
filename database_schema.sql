@@ -280,6 +280,28 @@ CREATE TABLE IF NOT EXISTS `video_transcript_summary` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
+-- 10b. RESOURCE AI METADATA TABLE (for PDFs, etc.)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `resource_ai_metadata` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `resource_id` VARCHAR(36) NOT NULL,
+    `language` VARCHAR(10) NOT NULL,
+    `transcript` LONGTEXT NULL,
+    `summary` LONGTEXT NULL,
+    `topics` LONGTEXT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `unique_resource_language` (`resource_id`, `language`),
+    INDEX `idx_resource_id` (`resource_id`),
+    INDEX `idx_language` (`language`),
+    CONSTRAINT `fk_resource_ai_metadata_resource`
+        FOREIGN KEY (`resource_id`) REFERENCES `group_content_resource`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
 -- 11. COMMENT TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `comment` (
