@@ -54,7 +54,7 @@ exports.getPendingGroups = async (req, res) => {
 
 exports.updatePendingGroupStatus = async (req, res) => {
   try {
-    const data = await groupService.updatePendingGroupStatusInNotificationPendingGroupAction(req);
+    const data = await groupService.updatePendingGroupStatus(req);
     res.status(200).json({ success: true, data });
   } catch (err) {
     res.status(err.status || 500).json({
