@@ -5,14 +5,35 @@ const query = (sql, params = []) =>
 
 const getByMemberId = async (memberId) => {
   const [rows] = await query(
-    `SELECT n.*, u.name AS sender_name, u.user_photo, u.email
+    `SELECT n.*, u.name AS sender_name, u.user_photo, u.email,
+            pga.pending_group_id AS npga_pending_group_id,
+            pga.approve_url AS npga_approve_url,
+            pga.reject_url AS npga_reject_url
      FROM notifications n
      JOIN user u ON n.sender_id = u.id
+     LEFT JOIN notification_pending_group_action pga
+       ON pga.notification_id = n.id
      WHERE n.member_id = ?
      ORDER BY n.created_at DESC`,
     [memberId]
   );
-  return rows;
+  return rows.map((row) => {
+    const {
+      npga_pending_group_id,
+      npga_approve_url,
+      npga_reject_url,
+      ...rest
+    } = row;
+    const out = { ...rest };
+    if (npga_pending_group_id) {
+      out.pending_group_approval = {
+        pending_group_id: npga_pending_group_id,
+        approve_url: npga_approve_url,
+        reject_url: npga_reject_url,
+      };
+    }
+    return out;
+  });
 };
 
 const countUnread = async (memberId) => {

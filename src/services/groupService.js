@@ -100,6 +100,11 @@ const notifySuperAdminsForPendingGroup = async ({
         type: "GROUP_APPROVAL",
         emailHeaderTagline: "Group approval",
         emailActions: { approveUrl, rejectUrl },
+        pendingGroupApproval: {
+          pendingGroupId,
+          approveUrl,
+          rejectUrl,
+        },
       });
     })
   );

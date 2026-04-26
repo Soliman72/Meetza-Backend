@@ -398,6 +398,22 @@ CREATE TABLE IF NOT EXISTS `notifications` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Optional payload for "pending group approval" notifications (not in title/message).
+CREATE TABLE IF NOT EXISTS `notification_pending_group_action` (
+    `notification_id` VARCHAR(36) NOT NULL PRIMARY KEY,
+    `pending_group_id` VARCHAR(36) NOT NULL,
+    `approve_url` TEXT NOT NULL,
+    `reject_url` TEXT NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_npga_pending_group` (`pending_group_id`),
+    CONSTRAINT `fk_npga_notification`
+        FOREIGN KEY (`notification_id`) REFERENCES `notifications`(`id`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- If you temporarily added a JSON `metadata` column on `notifications`, remove it after switching to the table above:
+-- ALTER TABLE notifications DROP COLUMN metadata;
+
 -- =============================================
 -- 15. GROUP MESSAGE TABLE
 -- =============================================

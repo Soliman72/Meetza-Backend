@@ -1,4 +1,5 @@
 const repo = require("../repositories/notificationRepository");
+const notificationPendingGroupActionRepo = require("../repositories/notificationPendingGroupActionRepository");
 const { buildNotification } = require("./notificationBuilder");
 const emitter = require("../sockets/notificationSocket");
 const notificationValidator = require("../validators/notificationValidator");
@@ -63,6 +64,7 @@ const createNotification = async ({
   title,
   message,
   type,
+  pendingGroupApproval,
   emailActions,
   emailHeaderTagline,
   skipEmail,
@@ -79,6 +81,24 @@ const createNotification = async ({
   await notificationValidator.createNotificationValidator(notification);
 
   await repo.create(notification);
+
+  if (
+    pendingGroupApproval?.pendingGroupId &&
+    pendingGroupApproval?.approveUrl &&
+    pendingGroupApproval?.rejectUrl
+  ) {
+    await notificationPendingGroupActionRepo.create({
+      notificationId: notification.id,
+      pendingGroupId: pendingGroupApproval.pendingGroupId,
+      approveUrl: pendingGroupApproval.approveUrl,
+      rejectUrl: pendingGroupApproval.rejectUrl,
+    });
+    notification.pending_group_approval = {
+      pending_group_id: pendingGroupApproval.pendingGroupId,
+      approve_url: pendingGroupApproval.approveUrl,
+      reject_url: pendingGroupApproval.rejectUrl,
+    };
+  }
 
   const count = await repo.countUnread(memberId);
 

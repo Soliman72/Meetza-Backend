@@ -62,7 +62,7 @@ exports.login = async (data) => {
   const user = await authRepo.findByEmail(email);
   if (!user) {
     recordFailedAttempt(email);
-    throw new Error("Invalid credentials");
+    throw new Error("Invalid email or password");
   }
 
   const securityCheck = await authSecurity.checkLoginSecurity(email, captchaToken);
@@ -86,7 +86,7 @@ exports.login = async (data) => {
   const match = await bcrypt.compare(password, user.password);
   if (!match) {
     recordFailedAttempt(email);
-    throw new Error("Invalid credentials");
+    throw new Error("Invalid email or password");
   }
 
   clearAttempts(email);
