@@ -36,6 +36,7 @@ const homeRouter = require("./src/routes/homeRoute");
 const profileRouter = require("./src/routes/profileRoute");
 const reportRouter = require("./src/routes/reportRoute");
 const domainRouter = require("./src/routes/domainRoute");
+const companyRouter = require("./src/routes/companyRoute");
 const chatBotRouter = require("./src/routes/chatBotRoute");
 
 const os = require("os");
@@ -167,6 +168,7 @@ app.use("/api/home", homeRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/organization-domain", domainRouter);
+app.use("/api/companies", companyRouter);
 
 
 

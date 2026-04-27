@@ -626,16 +626,55 @@ CREATE TABLE IF NOT EXISTS `message_reaction` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 22. ORGANIZATION DOMAIN TABLE
+-- 22a. COMPANIES & PER-COMPANY SETTINGS (multi-tenant; before organization_domain FK)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `companies` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_companies_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `company_settings` (
+    `company_id` VARCHAR(36) NOT NULL PRIMARY KEY,
+    `system_name` VARCHAR(255) NOT NULL DEFAULT 'Meetza',
+    `logo_url` TEXT NULL,
+    `theme` ENUM('light', 'dark') NOT NULL DEFAULT 'light' COMMENT 'light = white UI, dark = black UI',
+    `terms_html` LONGTEXT NULL,
+    `privacy_html` LONGTEXT NULL,
+    `guidelines_html` LONGTEXT NULL,
+    `auth_email_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Default when organization_domain row has NULL auth override',
+    `auth_google_enabled` TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_company_settings_company`
+        FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 22. ORGANIZATION DOMAIN TABLE (all domains: global legacy rows company_id NULL, or linked to a company)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `organization_domain` (
     `id` VARCHAR(36) PRIMARY KEY,
-    `domain_name` VARCHAR(255) NOT NULL UNIQUE,
-    `auth_email_enabled` BOOLEAN DEFAULT TRUE,
-    `auth_google_enabled` BOOLEAN DEFAULT TRUE,
+    `company_id` VARCHAR(36) NULL COMMENT 'NULL = legacy/global domain; set when domain belongs to a company',
+    `domain_name` VARCHAR(255) NOT NULL,
+    `auth_email_enabled` TINYINT(1) NULL DEFAULT NULL COMMENT 'NULL with company_id = inherit company_settings; else explicit or default 1',
+    `auth_google_enabled` TINYINT(1) NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_organization_domain_name` (`domain_name`),
+    INDEX `idx_organization_domain_company` (`company_id`),
+    CONSTRAINT `fk_organization_domain_company`
+        FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Existing DB: add company_id + nullable auth to organization_domain, migrate company_domains data if any, then DROP company_domains.
 
 -- =============================================
 -- 23. PENDING GROUP TABLE

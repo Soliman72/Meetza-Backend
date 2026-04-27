@@ -1,13 +1,13 @@
 require("dotenv").config();
 const seedAdmins = require("./seeds/administratorSeed");
 const seedGroups = require("./seeds/groupSeed");
-const seedDomains = require("./seeds/domainSeed");
+const seedCompany = require("./seeds/companySeed");
 
 async function runSeeds() {
   try {
+    await seedCompany();
     await seedAdmins();
     await seedGroups();
-    await seedDomains();
 
     console.log("Seeding Done");
     process.exit();
