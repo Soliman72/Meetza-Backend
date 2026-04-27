@@ -4,10 +4,8 @@ const { Server } = require("socket.io");
 const setupSwagger = require("./src/config/setupSwagger");
 require("./src/config/db");
 
-const http = require("http");
 const fs = require("fs");
 const os = require("os");
-const { Server } = require("socket.io");
 
 const { createApp } = require("./app");
 const chatController = require("./src/controllers/chatController");
