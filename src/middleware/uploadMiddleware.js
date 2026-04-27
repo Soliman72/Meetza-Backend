@@ -2,6 +2,7 @@ const { upload } = require("./uploadFile");
 
 const fields = [
   { name: "user_photo", maxCount: 1 },
+  { name: "company_logo", maxCount: 1 },
   { name: "group_photo", maxCount: 1 },
   { name: "content_photo", maxCount: 1 },
   { name: "resource_file", maxCount: 1 },

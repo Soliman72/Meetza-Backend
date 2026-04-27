@@ -4,86 +4,50 @@ const companyRepository = require("../repositories/companyRepository");
 const domainRepository = require("../repositories/domainRepository");
 const companyValidator = require("../validators/companyValidator");
 const httpError = require("../utils/httpError");
+const companyUtils = require("../utils/companyUtils");
+const { uploadToCloudinary } = require("../middleware/uploadFile");
 
-const normalizeTheme = (t) => {
-  const s = String(t || "light").toLowerCase();
-  return s === "dark" ? "dark" : "light";
-};
-
-/**
- * New company → `companies`, default `company_settings`, optional domains in `organization_domain`.
- */
 exports.provisionCompany = async (body) => {
   companyValidator.validateProvisionCompany(body);
 
   const companyId = uuidv4();
-  const domains = Array.isArray(body.domains) ? body.domains : [];
+  const domainRows = companyUtils.collectProvisionDomains(body.domains);
 
-  for (const d of domains) {
-    const dn = d?.domain_name;
-    if (!dn || String(dn).trim() === "") continue;
-    const lower = String(dn).toLowerCase().trim();
+  for (const row of domainRows) {
     let taken = false;
     try {
-      taken = await domainRepository.domainNameTaken(lower);
+      taken = await domainRepository.domainNameTaken(row.domain_name);
     } catch {
       taken = false;
     }
     if (taken) {
-      throw httpError(409, `Domain already in use: ${lower}`);
+      throw httpError(409, `Domain already in use: ${row.domain_name}`);
     }
   }
+
+  const companyRow = companyUtils.provisionCompanyRow(body);
+  const settingsValues = companyUtils.provisionCompanySettingsValues(body);
 
   const conn = await db.promise().getConnection();
   try {
     await conn.beginTransaction();
 
-    await conn.execute(
-      `INSERT INTO companies (id, name, is_active) VALUES (?, ?, ?)`,
-      [companyId, String(body.name).trim(), body.is_active === false ? 0 : 1]
-    );
+    await companyRepository.insertCompany(conn, {
+      id: companyId,
+      name: companyRow.name,
+      is_active: companyRow.is_active,
+    });
 
-    await conn.execute(
-      `INSERT INTO company_settings
-       (company_id, system_name, logo_url, theme, terms_html, privacy_html, guidelines_html,
-        auth_email_enabled, auth_google_enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        companyId,
-        String(body.system_name || body.name).trim(),
-        body.logo_url || null,
-        normalizeTheme(body.theme),
-        body.terms_html ?? null,
-        body.privacy_html ?? null,
-        body.guidelines_html ?? null,
-        body.auth_email_enabled !== false ? 1 : 0,
-        body.auth_google_enabled !== false ? 1 : 0,
-      ]
-    );
+    await companyRepository.insertCompanySettings(conn, companyId, settingsValues);
 
-    for (const d of domains) {
-      const dn = d?.domain_name;
-      if (!dn || String(dn).trim() === "") continue;
-      await conn.execute(
-        `INSERT INTO organization_domain
-         (id, company_id, domain_name, auth_email_enabled, auth_google_enabled)
-         VALUES (?, ?, ?, ?, ?)`,
-        [
-          uuidv4(),
-          companyId,
-          String(dn).toLowerCase().trim(),
-          d.auth_email_enabled === undefined
-            ? null
-            : d.auth_email_enabled
-              ? 1
-              : 0,
-          d.auth_google_enabled === undefined
-            ? null
-            : d.auth_google_enabled
-              ? 1
-              : 0,
-        ]
-      );
+    for (const row of domainRows) {
+      await companyRepository.insertOrganizationDomainForCompany(conn, {
+        id: uuidv4(),
+        company_id: companyId,
+        domain_name: row.domain_name,
+        auth_email_enabled: row.auth_email_enabled,
+        auth_google_enabled: row.auth_google_enabled,
+      });
     }
 
     await conn.commit();
@@ -98,11 +62,96 @@ exports.provisionCompany = async (body) => {
 };
 
 exports.getCompanyById = async (id) => {
-  const row = await companyRepository.findCompanyById(id);
-  if (!row) throw httpError(404, "Company not found");
-  return row;
+  return companyUtils.assertCompanyExists(id);
 };
 
 exports.listCompanies = async () => {
   return companyRepository.listCompanies();
+};
+
+exports.updateCompany = async (id, body) => {
+  companyValidator.validateUpdateCompany(body);
+  await companyUtils.assertCompanyExists(id);
+
+  await companyRepository.updateCompany(id, {
+    name: body.name,
+    is_active: body.is_active,
+  });
+
+  return companyRepository.findCompanyById(id);
+};
+
+exports.deleteCompany = async (id) => {
+  const ok = await companyRepository.deleteCompany(id);
+  if (!ok) throw httpError(404, "Company not found");
+};
+
+exports.patchCompanySettings = async (id, body) => {
+  companyValidator.validatePatchCompanySettings(body);
+  await companyUtils.assertCompanyExists(id);
+  await companyUtils.assertCompanySettingsExist(id);
+
+  const patch = companyUtils.settingsPatchFromBody(body);
+  await companyRepository.updateCompanySettings(id, patch);
+  return companyRepository.findCompanyById(id);
+};
+
+exports.updateCompanyLogo = async (companyId, file) => {
+  companyValidator.validateCompanyLogoFile(file);
+  await companyUtils.assertCompanyExists(companyId);
+  await companyUtils.assertCompanySettingsExist(companyId);
+
+  const logo_url = await uploadToCloudinary(file, "company_logos");
+  await companyRepository.updateCompanySettings(companyId, { logo_url });
+  return companyRepository.findCompanyById(companyId);
+};
+
+exports.addCompanyDomain = async (companyId, body) => {
+  companyValidator.validateAddCompanyDomain(body);
+  await companyUtils.assertCompanyExists(companyId);
+
+  const domainName = companyUtils.normalizeDomainName(body.domain_name);
+  if (await domainRepository.domainNameTaken(domainName)) {
+    throw httpError(409, "Domain already in use");
+  }
+
+  const id = uuidv4();
+  await domainRepository.createDomain({
+    id,
+    company_id: companyId,
+    domain_name: domainName,
+    auth_email_enabled: body.auth_email_enabled,
+    auth_google_enabled: body.auth_google_enabled,
+  });
+
+  return domainRepository.findById(id);
+};
+
+exports.updateCompanyDomain = async (companyId, domainId, body) => {
+  const row = await domainRepository.findByIdAndCompanyId(domainId, companyId);
+  if (!row) throw httpError(404, "Domain not found for this company");
+
+  companyValidator.validateCompanyDomainPatchBody(body);
+
+  const updates = companyUtils.domainRepositoryPatchFromBody(body);
+  if (updates.domain_name) {
+    const clash = await domainRepository.existsOtherDomainWithName(
+      updates.domain_name,
+      domainId
+    );
+    if (clash) throw httpError(409, "Domain name already exists");
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return domainRepository.findById(domainId);
+  }
+
+  await domainRepository.updateDomain(domainId, updates);
+  return domainRepository.findById(domainId);
+};
+
+exports.removeCompanyDomain = async (companyId, domainId) => {
+  const row = await domainRepository.findByIdAndCompanyId(domainId, companyId);
+  if (!row) throw httpError(404, "Domain not found for this company");
+  await domainRepository.deleteDomain(domainId);
 };
