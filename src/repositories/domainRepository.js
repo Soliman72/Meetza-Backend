@@ -17,9 +17,16 @@ exports.domainNameTaken = async (domainName) => {
   return !!rows[0];
 };
 
-/**
- * Resolves auth flags from `organization_domain` (+ `company_settings` when `company_id` is set).
- */
+exports.existsOtherDomainWithName = async (domainName, excludeDomainId) => {
+  const norm = String(domainName).toLowerCase().trim();
+  const [rows] = await db.promise().execute(
+    "SELECT id FROM organization_domain WHERE domain_name = ? AND id <> ? LIMIT 1",
+    [norm, excludeDomainId]
+  );
+  return !!rows[0];
+};
+
+
 exports.findByDomainName = async (domainName) => {
   const normalized = String(domainName).toLowerCase().trim();
   try {
@@ -57,6 +64,14 @@ exports.findById = async (id) => {
     [id]
   );
   return rows[0];
+};
+
+exports.findByIdAndCompanyId = async (domainId, companyId) => {
+  const [rows] = await db.promise().execute(
+    "SELECT * FROM organization_domain WHERE id = ? AND company_id = ?",
+    [domainId, companyId]
+  );
+  return rows[0] || null;
 };
 
 exports.getAllDomains = async () => {
