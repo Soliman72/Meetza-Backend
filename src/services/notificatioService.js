@@ -235,10 +235,7 @@ const createNotification = async ({
     throw new Error("Member email not found");
   }
 
-  return {
-    notification,
-    notificationPendingGroupAction,
-  };
+  return notification;
 };
 
 const handleCommentNotifications = async ({

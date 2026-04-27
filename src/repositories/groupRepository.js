@@ -54,9 +54,8 @@ exports.createPendingGroupAdmin = async (data) => {
 
 exports.findPendingGroupById = async (id) => {
   const [rows] = await db.promise().execute(
-    `SELECT pg.*, u.name AS created_by_name, u.email AS created_by_email
+    `SELECT pg.*
      FROM pending_groups pg
-     JOIN user u ON u.id = pg.created_by
      WHERE pg.id = ?`,
     [id]
   );

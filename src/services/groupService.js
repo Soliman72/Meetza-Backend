@@ -289,6 +289,7 @@ const processPendingGroupDecision = async ({
   // }
 
   const pendingGroup = await repo.findPendingGroupById(id);
+  console.log(pendingGroup);
   if (!pendingGroup) {
     throw { status: 404, message: "Pending group not found" };
   }
