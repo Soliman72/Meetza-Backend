@@ -17,6 +17,14 @@ const emitUnreadCount = (memberId, count) => {
   });
 };
 
+const emitPendingGroupNotificationStatus = (memberId, payload) => {
+  if (!io || !memberId) return;
+  io.to("member_" + memberId).emit(
+    "notification_pending_group_status",
+    payload
+  );
+};
+
 const registerNotificationSocket = (io) => {
     io.on("connection", (socket) => {
 
@@ -44,5 +52,6 @@ module.exports = {
   setSocket,
   emitNotification,
   emitUnreadCount,
+  emitPendingGroupNotificationStatus,
   registerNotificationSocket,
 };

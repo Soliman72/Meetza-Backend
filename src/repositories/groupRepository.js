@@ -568,20 +568,3 @@ exports.leaveDeleteGroupMembership = async (conn, groupId, memberId) => {
     [groupId, memberId]
   );
 };
-
-exports.getPendingGroupStatus = async (pendingGroupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT status FROM pending_groups WHERE id = ?`,
-    [pendingGroupId]
-  );
-  return rows[0].status;
-};
-
-exports.updatePendingGroupStatusInNotificationPendingGroupAction = async (pendingGroupId, status) => {
-  await db.promise().execute(
-    `UPDATE notification_pending_group_action
-     SET status = ?
-     WHERE pending_group_id = ?`,
-    [status, pendingGroupId]
-  );
-};

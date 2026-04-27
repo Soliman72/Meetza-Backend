@@ -22,7 +22,10 @@ const userService = require("../services/userService");
 const meetingAdminService = require("../services/meetingAdminService");
 const groupMembershipService = require("../repositories/group_memberShipRepository");
 const userRepository = require("../repositories/userRepository");
-const { createNotification } = require("./notificatioService");
+const {
+  createNotification,
+  syncPendingGroupNotificationStatus,
+} = require("./notificatioService");
 const {
   signPendingGroupAction,
   verifyPendingGroupActionToken,
@@ -32,7 +35,6 @@ const {
   getPublicApiBaseUrl,
   buildPendingGroupEmailActionUrl,
 } = require("../utils/pendingGroupEmailHelpers");
-const notificationPendingGroupActionRepo = require("../repositories/notificationPendingGroupActionRepository");
 
 const createApprovedGroup = async ({
   id,
@@ -93,8 +95,6 @@ const notifySuperAdminsForPendingGroup = async ({
       const approveUrl = buildPendingGroupEmailActionUrl(apiBase, approveToken);
       const rejectUrl = buildPendingGroupEmailActionUrl(apiBase, rejectToken);
 
-      const status = repo.getPendingGroupStatus(pendingGroupId);
-
       return createNotification({
         senderId,
         memberId: admin.id,
@@ -107,7 +107,7 @@ const notifySuperAdminsForPendingGroup = async ({
           pendingGroupId,
           approveUrl,
           rejectUrl,
-          status: status,
+          status: "pending",
         },
       });
     })
@@ -304,10 +304,7 @@ const processPendingGroupDecision = async ({
     rejectionReason: status === "rejected" ? rejection_reason : null,
   });
 
-  await notificationPendingGroupActionRepo.updateStatus({
-    pendingGroupId: id,
-    status,
-  });
+  await syncPendingGroupNotificationStatus(id, status);
 
   if (status === "rejected") {
     await notifyPendingGroupDecisionFollowUp({

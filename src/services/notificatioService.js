@@ -85,21 +85,21 @@ const createNotification = async ({
   if (
     pendingGroupApproval?.pendingGroupId &&
     pendingGroupApproval?.approveUrl &&
-    pendingGroupApproval?.rejectUrl &&
-    pendingGroupApproval?.status
+    pendingGroupApproval?.rejectUrl
   ) {
+    const approvalStatus = pendingGroupApproval.status || "pending";
     await notificationPendingGroupActionRepo.create({
       notificationId: notification.id,
       pendingGroupId: pendingGroupApproval.pendingGroupId,
       approveUrl: pendingGroupApproval.approveUrl,
       rejectUrl: pendingGroupApproval.rejectUrl,
-      status: pendingGroupApproval.status,
+      status: approvalStatus,
     });
     notification.pending_group_approval = {
       pending_group_id: pendingGroupApproval.pendingGroupId,
       approve_url: pendingGroupApproval.approveUrl,
       reject_url: pendingGroupApproval.rejectUrl,
-      status: pendingGroupApproval.status,
+      status: approvalStatus,
     };
   }
 
@@ -235,7 +235,10 @@ const createNotification = async ({
     throw new Error("Member email not found");
   }
 
-  return notification;
+  return {
+    notification,
+    notificationPendingGroupAction,
+  };
 };
 
 const handleCommentNotifications = async ({
@@ -282,6 +285,28 @@ const handleCommentNotifications = async ({
   }
 };
 
+const syncPendingGroupNotificationStatus = async (pendingGroupId, status) => {
+  await notificationPendingGroupActionRepo.updateStatus({
+    pendingGroupId,
+    status,
+  });
+  const rows =
+    await notificationPendingGroupActionRepo.findRecipientsByPendingGroupId(
+      pendingGroupId
+    );
+  for (const row of rows) {
+    emitter.emitPendingGroupNotificationStatus(row.member_id, {
+      notification_id: row.notification_id,
+      pending_group_approval: {
+        pending_group_id: row.pending_group_id,
+        approve_url: row.approve_url,
+        reject_url: row.reject_url,
+        status: row.status,
+      },
+    });
+  }
+};
+
 module.exports = {
   getMemberNotifications,
   getUnreadCount,
@@ -289,5 +314,6 @@ module.exports = {
   markAllAsRead,
   deleteNotification,
   createNotification,
+  syncPendingGroupNotificationStatus,
   handleCommentNotifications,
 };

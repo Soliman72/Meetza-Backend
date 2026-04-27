@@ -426,12 +426,16 @@ CREATE TABLE IF NOT EXISTS `notification_pending_group_action` (
     `pending_group_id` VARCHAR(36) NOT NULL,
     `approve_url` TEXT NOT NULL,
     `reject_url` TEXT NOT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | approved | rejected — mirrors pending_groups until resolved',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_npga_pending_group` (`pending_group_id`),
     CONSTRAINT `fk_npga_notification`
         FOREIGN KEY (`notification_id`) REFERENCES `notifications`(`id`)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- If `notification_pending_group_action` exists without `status`:
+-- ALTER TABLE notification_pending_group_action ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | approved | rejected' AFTER reject_url;
 
 -- If you temporarily added a JSON `metadata` column on `notifications`, remove it after switching to the table above:
 -- ALTER TABLE notifications DROP COLUMN metadata;

@@ -8,7 +8,8 @@ const getByMemberId = async (memberId) => {
     `SELECT n.*, u.name AS sender_name, u.user_photo, u.email,
             pga.pending_group_id AS npga_pending_group_id,
             pga.approve_url AS npga_approve_url,
-            pga.reject_url AS npga_reject_url
+            pga.reject_url AS npga_reject_url,
+            pga.status AS npga_status
      FROM notifications n
      JOIN user u ON n.sender_id = u.id
      LEFT JOIN notification_pending_group_action pga
@@ -22,6 +23,7 @@ const getByMemberId = async (memberId) => {
       npga_pending_group_id,
       npga_approve_url,
       npga_reject_url,
+      npga_status,
       ...rest
     } = row;
     const out = { ...rest };
@@ -30,6 +32,7 @@ const getByMemberId = async (memberId) => {
         pending_group_id: npga_pending_group_id,
         approve_url: npga_approve_url,
         reject_url: npga_reject_url,
+        status: npga_status || "pending",
       };
     }
     return out;
