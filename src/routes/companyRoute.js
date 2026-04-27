@@ -21,7 +21,7 @@ router.post("/:id/domains", verifyToken, requireSuperAdmin, companyController.ad
 router.patch("/:id/domains/:domainId", verifyToken, requireSuperAdmin, companyController.updateDomain);
 router.delete("/:id/domains/:domainId", verifyToken, requireSuperAdmin, companyController.removeDomain);
 
-router.get("/:id", verifyToken, companyController.getById);
+router.get("/:id", companyController.getById);
 router.patch("/:id", verifyToken, requireSuperAdmin, companyController.update);
 router.delete("/:id", verifyToken, requireSuperAdmin, companyController.remove);
 
