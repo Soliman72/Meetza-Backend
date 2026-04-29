@@ -68,6 +68,7 @@ exports.deleteCompany = async (id) => {
 const SETTINGS_PATCHABLE = new Set([
   "system_name",
   "logo_url",
+  "system_name_color",
   "theme",
   "terms_html",
   "privacy_html",
@@ -117,19 +118,8 @@ exports.insertCompanySettings = async (conn, companyId, s) => {
     `INSERT INTO company_settings
      (company_id, system_name, logo_url, system_name_color, theme, terms_html, privacy_html, guidelines_html,
       auth_email_enabled, auth_google_enabled)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      companyId,
-      s.system_name,
-      s.logo_url,
-      s.system_name_color,
-      s.theme,
-      s.terms_html,
-      s.privacy_html,
-      s.guidelines_html,
-      s.auth_email_enabled,
-      s.auth_google_enabled,
-    ]
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [companyId, s.system_name, s.logo_url, s.system_name_color, s.theme, s.terms_html, s.privacy_html, s.guidelines_html, s.auth_email_enabled, s.auth_google_enabled]
   );
 };
 

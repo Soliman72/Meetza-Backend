@@ -42,6 +42,7 @@ exports.validatePatchCompanySettings = (body) => {
   const allowed = new Set([
     "system_name",
     "logo_url",
+    "system_name_color",
     "theme",
     "terms_html",
     "privacy_html",

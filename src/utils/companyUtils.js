@@ -47,6 +47,7 @@ exports.settingsPatchFromBody = (body) => {
   const patch = {};
   if (body.system_name !== undefined) patch.system_name = String(body.system_name).trim();
   if (body.logo_url !== undefined) patch.logo_url = body.logo_url || null;
+  if (body.system_name_color !== undefined) patch.system_name_color = body.system_name_color || null;
   if (body.theme !== undefined) patch.theme = exports.normalizeTheme(body.theme);
   if (body.terms_html !== undefined) patch.terms_html = body.terms_html;
   if (body.privacy_html !== undefined) patch.privacy_html = body.privacy_html;
