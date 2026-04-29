@@ -641,6 +641,7 @@ CREATE TABLE IF NOT EXISTS `company_settings` (
     `company_id` VARCHAR(36) NOT NULL PRIMARY KEY,
     `system_name` VARCHAR(255) NOT NULL DEFAULT 'Meetza',
     `logo_url` TEXT NULL,
+    `system_name_color` VARCHAR(7) NOT NULL
     `theme` ENUM('light', 'dark') NOT NULL DEFAULT 'light' COMMENT 'light = white UI, dark = black UI',
     `terms_html` LONGTEXT NULL,
     `privacy_html` LONGTEXT NULL,

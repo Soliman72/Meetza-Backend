@@ -105,7 +105,6 @@ exports.companySettingsExists = async (companyId) => {
   return !!rows[0];
 };
 
-/** @param {import('mysql2/promise').PoolConnection} conn */
 exports.insertCompany = async (conn, { id, name, is_active }) => {
   await conn.execute(
     "INSERT INTO companies (id, name, is_active) VALUES (?, ?, ?)",
@@ -113,17 +112,17 @@ exports.insertCompany = async (conn, { id, name, is_active }) => {
   );
 };
 
-/** @param {import('mysql2/promise').PoolConnection} conn */
 exports.insertCompanySettings = async (conn, companyId, s) => {
   await conn.execute(
     `INSERT INTO company_settings
-     (company_id, system_name, logo_url, theme, terms_html, privacy_html, guidelines_html,
+     (company_id, system_name, logo_url, system_name_color, theme, terms_html, privacy_html, guidelines_html,
       auth_email_enabled, auth_google_enabled)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       companyId,
       s.system_name,
       s.logo_url,
+      s.system_name_color,
       s.theme,
       s.terms_html,
       s.privacy_html,
@@ -134,7 +133,6 @@ exports.insertCompanySettings = async (conn, companyId, s) => {
   );
 };
 
-/** @param {import('mysql2/promise').PoolConnection} conn */
 exports.insertOrganizationDomainForCompany = async (
   conn,
   { id, company_id, domain_name, auth_email_enabled, auth_google_enabled }

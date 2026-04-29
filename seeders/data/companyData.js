@@ -6,6 +6,7 @@ module.exports = {
 
   system_name: "Meetza",
   logo_url: null,
+  system_name_color: "#185A9D",
   theme: "light",
 
   auth_email_enabled: true,

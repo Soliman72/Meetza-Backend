@@ -43,6 +43,7 @@ async function upsertCompanySettings(companyId) {
       company_id,
       system_name,
       logo_url,
+      system_name_color,
       theme,
       terms_html,
       privacy_html,
@@ -50,10 +51,11 @@ async function upsertCompanySettings(companyId) {
       auth_email_enabled,
       auth_google_enabled
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       system_name = VALUES(system_name),
       logo_url = VALUES(logo_url),
+      system_name_color = VALUES(system_name_color),
       theme = VALUES(theme),
       terms_html = VALUES(terms_html),
       privacy_html = VALUES(privacy_html),
@@ -65,6 +67,7 @@ async function upsertCompanySettings(companyId) {
       companyId,
       seed.system_name,
       seed.logo_url,
+      seed.system_name_color,
       seed.theme ?? "light",
       seed.terms_html,
       seed.privacy_html,

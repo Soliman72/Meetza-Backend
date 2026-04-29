@@ -16,6 +16,7 @@ exports.provisionCompanyRow = (body) => ({
 exports.provisionCompanySettingsValues = (body) => ({
   system_name: String(body.system_name || body.name).trim(),
   logo_url: body.logo_url || null,
+  system_name_color: body.system_name_color || null,
   theme: exports.normalizeTheme(body.theme),
   terms_html: body.terms_html ?? null,
   privacy_html: body.privacy_html ?? null,
