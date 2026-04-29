@@ -7,7 +7,7 @@ const uploadMiddleware = require("../middleware/uploadMiddleware");
 
 
 router.get("/", verifyToken, requireSuperAdmin, companyController.list);
-router.post("/", verifyToken, requireSuperAdmin, companyController.provision);
+router.post("/", verifyToken, requireSuperAdmin, uploadMiddleware, companyController.provision);
 
 router.patch("/id/settings", verifyToken, requireSuperAdmin, companyController.patchSettings);
 router.patch(
