@@ -41,6 +41,7 @@ exports.register = async (data) => {
     role: "Member",
     verification_code: code,
   });
+  await authRepo.insertMemberForUser(id);
 
   await sendVerificationEmail(email, code, "Verify your email");
 
