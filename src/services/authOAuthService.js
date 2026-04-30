@@ -10,9 +10,9 @@ function redirectWithError(errorCode, errorMessage, res, type = "signin", redire
     ? "https://meetza-front-end.vercel.app"
     : "https://meetza-front-end-admin.vercel.app";
   const redirectPath = type == "signin" ? "/login" : "/signup";
-  const separator = redirect.includes("?") ? "&" : "?";
+  const separator = redirectPath.includes("?") ? "&" : "?";
   return res.redirect(
-    `${baseUrl}${redirectPath}${separator}error=${errorCode}&error_message=${encodeURIComponent(errorMessage)}&redirect_url=${redirect} &type=${type}`,
+    `${baseUrl}${redirectPath}${separator}error=${encodeURIComponent(errorCode)}&error_message=${encodeURIComponent(errorMessage)}&redirect_url=${encodeURIComponent(redirect)}&type=${encodeURIComponent(type)}`,
   );
 }
 
@@ -67,7 +67,7 @@ function proceedWithUser(user, redirectUrl, res) {
   }
 }
 
-async function handleGoogleOAuthCallback(err, profile, req, res) {
+async function handleGoogleOAuthCallback(err, profile, info, req, res) {
   let redirectUrl = "http://localhost:3000/home";
   let type = "signin";
   let stateObj = {};
@@ -90,6 +90,17 @@ async function handleGoogleOAuthCallback(err, profile, req, res) {
   }
 
   try {
+    const oauthError =
+      req.query?.error || info?.code || info?.message || info?.error;
+    if (oauthError) {
+      const normalized = String(oauthError).toLowerCase();
+      const message =
+        normalized === "access_denied"
+          ? "Google sign-in was cancelled or denied."
+          : "OAuth authentication failed";
+      return redirectWithError(normalized, message, res, type, redirectUrl);
+    }
+
     if (err) {
       console.error("Passport error:", err);
       return redirectWithError(

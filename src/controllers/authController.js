@@ -74,7 +74,7 @@ exports.socialAuth = (req, res, next) => {
 };
 
 exports.socialAuthCallback = (req, res, next) => {
-  passport.authenticate("google", { session: false }, (err, profile) => {
-    authOAuthService.handleGoogleOAuthCallback(err, profile, req, res);
+  passport.authenticate("google", { session: false }, (err, profile, info) => {
+    authOAuthService.handleGoogleOAuthCallback(err, profile, info, req, res);
   })(req, res, next);
 };
