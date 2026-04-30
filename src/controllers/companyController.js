@@ -13,7 +13,7 @@ const sendError = (res, err) => {
 
 exports.provision = async (req, res) => {
   try {
-    const data = await companyService.provisionCompany(req.body);
+    const data = await companyService.provisionCompany(req);
     return res.status(201).json({ success: true, data });
   } catch (err) {
     return sendError(res, err);

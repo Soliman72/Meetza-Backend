@@ -7,8 +7,17 @@ const httpError = require("../utils/httpError");
 const companyUtils = require("../utils/companyUtils");
 const { uploadToCloudinary } = require("../middleware/uploadFile");
 
-exports.provisionCompany = async (body) => {
+exports.provisionCompany = async (req) => {
+  const body = req.body;
   companyValidator.validateProvisionCompany(body);
+
+  let logo_url = null;
+  if (req.files?.company_logo) {
+    logo_url = await uploadToCloudinary(req.files.company_logo[0], "company_logos");
+  } else if (req.body?.logo_url) {
+    logo_url = req.body.logo_url;
+  }
+  body.logo_url = logo_url;
 
   const companyId = uuidv4();
   const domainRows = companyUtils.collectProvisionDomains(body.domains);
