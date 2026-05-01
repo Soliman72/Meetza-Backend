@@ -6,7 +6,7 @@ jest.mock("../../../src/middleware/verifyToken", () => ({
 }));
 jest.mock("../../../src/controllers/notificatioController", () => ({
   getMemberNotifications: (req, res) => res.status(200).json({ ok: true }),
-  getUnreadCount: (req, res) => res.status(200).json({ ok: true }),
+  getUnreadCount: (req, res) => res.status(200).json({ ok: true, count: 5 }),
   markAsRead: (req, res) => res.status(200).json({ ok: true }),
   markAllAsRead: (req, res) => res.status(200).json({ ok: true }),
   deleteNotification: (req, res) => res.status(200).json({ ok: true }),
@@ -21,6 +21,27 @@ describe("notification routes", () => {
 
   test("GET /api/notification returns 200", async () => {
     const res = await request(app).get("/api/notification");
+    expect(res.status).toBe(200);
+  });
+
+  test("GET /api/notification/unread-count returns 200", async () => {
+    const res = await request(app).get("/api/notification/unread-count");
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(5);
+  });
+
+  test("PUT /api/notification/:id/mark-as-read returns 200", async () => {
+    const res = await request(app).put("/api/notification/n1/mark-as-read");
+    expect(res.status).toBe(200);
+  });
+
+  test("PUT /api/notification/mark-all-as-read returns 200", async () => {
+    const res = await request(app).put("/api/notification/mark-all-as-read");
+    expect(res.status).toBe(200);
+  });
+
+  test("DELETE /api/notification/:id returns 200", async () => {
+    const res = await request(app).delete("/api/notification/n1");
     expect(res.status).toBe(200);
   });
 });

@@ -33,4 +33,39 @@ describe("chat routes", () => {
     const res = await request(app).get("/api/chat/groups");
     expect(res.status).toBe(200);
   });
+
+  test("GET /api/chat/groups/unread returns 200", async () => {
+    const res = await request(app).get("/api/chat/groups/unread");
+    expect(res.status).toBe(200);
+  });
+
+  test("GET /api/chat/groups/:groupId/messages returns 200", async () => {
+    const res = await request(app).get("/api/chat/groups/g1/messages");
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/chat/groups/:groupId/messages returns 201", async () => {
+    const res = await request(app).post("/api/chat/groups/g1/messages").send({ text: "hi" });
+    expect(res.status).toBe(201);
+  });
+
+  test("GET /api/chat/groups/:groupId/info returns 200", async () => {
+    const res = await request(app).get("/api/chat/groups/g1/info");
+    expect(res.status).toBe(200);
+  });
+
+  test("DELETE /api/chat/groups/:groupId/messages/:messageId returns 200", async () => {
+    const res = await request(app).delete("/api/chat/groups/g1/messages/m1");
+    expect(res.status).toBe(200);
+  });
+
+  test("GET /api/chat/groups/:groupId/unread-count returns 200", async () => {
+    const res = await request(app).get("/api/chat/groups/g1/unread-count");
+    expect(res.status).toBe(200);
+  });
+
+  test("GET /api/chat/groups/:groupId/meetings returns 200", async () => {
+    const res = await request(app).get("/api/chat/groups/g1/meetings");
+    expect(res.status).toBe(200);
+  });
 });

@@ -15,7 +15,7 @@ jest.mock("../../../src/controllers/groupController", () => ({
   getPendingGroups: (req, res) => res.status(200).json({ ok: true }),
   updatePendingGroupStatus: (req, res) => res.status(200).json({ ok: true }),
   pendingGroupEmailAction: (req, res) => res.status(200).json({ ok: true }),
-  getGroupById: (req, res) => res.status(200).json({ ok: true }),
+  getGroupById: (req, res) => res.status(200).json({ ok: true, id: req.params.id }),
   updateGroup: (req, res) => res.status(200).json({ ok: true }),
   deleteGroup: (req, res) => res.status(200).json({ ok: true }),
   leaveGroup: (req, res) => res.status(200).json({ ok: true }),
@@ -32,6 +32,42 @@ describe("group routes", () => {
 
   test("GET /api/group returns 200", async () => {
     const res = await request(app).get("/api/group");
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/group returns 201", async () => {
+    const res = await request(app).post("/api/group").send({ group_name: "Test" });
+    expect(res.status).toBe(201);
+  });
+
+  test("GET /api/group/:id returns 200", async () => {
+    const res = await request(app).get("/api/group/g1");
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe("g1");
+  });
+
+  test("PUT /api/group/:id returns 200", async () => {
+    const res = await request(app).put("/api/group/g1").send({ group_name: "Updated" });
+    expect(res.status).toBe(200);
+  });
+
+  test("DELETE /api/group/:id returns 200", async () => {
+    const res = await request(app).delete("/api/group/g1");
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/group/:id/leave returns 200", async () => {
+    const res = await request(app).post("/api/group/g1/leave");
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/group/:id/admins returns 200", async () => {
+    const res = await request(app).post("/api/group/g1/admins").send({ email: "a@b.com" });
+    expect(res.status).toBe(200);
+  });
+
+  test("GET /api/group/pending returns 200", async () => {
+    const res = await request(app).get("/api/group/pending");
     expect(res.status).toBe(200);
   });
 });

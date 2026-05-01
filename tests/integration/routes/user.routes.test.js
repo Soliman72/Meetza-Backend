@@ -32,4 +32,36 @@ describe("user routes", () => {
     const res = await request(app).get("/api/user");
     expect(res.status).toBe(200);
   });
+
+  test("POST /api/user returns 201", async () => {
+    const res = await request(app).post("/api/user").send({
+      name: "Ali",
+      email: "ali@example.com",
+      password: "123456",
+      role: "Member",
+    });
+    expect(res.status).toBe(201);
+  });
+
+  test("GET /api/user/:id returns 200", async () => {
+    const res = await request(app).get("/api/user/u1");
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe("u1");
+  });
+
+  test("GET /api/user/email/:email returns 200", async () => {
+    const res = await request(app).get("/api/user/email/ali@example.com");
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe("ali@example.com");
+  });
+
+  test("PATCH /api/user/:id returns 200", async () => {
+    const res = await request(app).patch("/api/user/u1").send({ name: "Updated" });
+    expect(res.status).toBe(200);
+  });
+
+  test("DELETE /api/user/:id returns 200", async () => {
+    const res = await request(app).delete("/api/user/u1");
+    expect(res.status).toBe(200);
+  });
 });

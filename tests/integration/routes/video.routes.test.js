@@ -20,7 +20,7 @@ jest.mock("../../../src/controllers/videoController", () => ({
   createVideo: (req, res) => res.status(201).json({ ok: true }),
   summarizeVideo: (req, res) => res.status(200).json({ ok: true }),
   getRelatedVideos: (req, res) => res.status(200).json({ ok: true }),
-  getVideoById: (req, res) => res.status(200).json({ ok: true }),
+  getVideoById: (req, res) => res.status(200).json({ ok: true, id: req.params.id }),
   getAllVideos: (req, res) => res.status(200).json({ ok: true }),
   updateVideo: (req, res) => res.status(200).json({ ok: true }),
   deleteVideo: (req, res) => res.status(200).json({ ok: true }),
@@ -35,6 +35,32 @@ describe("video routes", () => {
 
   test("GET /api/video returns 200", async () => {
     const res = await request(app).get("/api/video");
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/video/create returns 201", async () => {
+    const res = await request(app).post("/api/video/create").send({});
+    expect(res.status).toBe(201);
+  });
+
+  test("GET /api/video/:id returns 200", async () => {
+    const res = await request(app).get("/api/video/v1");
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe("v1");
+  });
+
+  test("GET /api/video/:id/related returns 200", async () => {
+    const res = await request(app).get("/api/video/v1/related");
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/video/:id (update) returns 200", async () => {
+    const res = await request(app).post("/api/video/v1").send({ title: "Updated" });
+    expect(res.status).toBe(200);
+  });
+
+  test("DELETE /api/video/:id returns 200", async () => {
+    const res = await request(app).delete("/api/video/v1");
     expect(res.status).toBe(200);
   });
 });

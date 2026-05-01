@@ -61,4 +61,75 @@ describe("verifyToken middleware", () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();
   });
+
+  test("returns invalid token payload for JsonWebTokenError", async () => {
+    getBearerTokenFromRequest.mockReturnValue("token");
+    loadUserFromAccessToken.mockRejectedValue(
+      new jwt.JsonWebTokenError("jwt malformed")
+    );
+
+    const req = {};
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+    const next = jest.fn();
+
+    await verifyToken(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: "Invalid token",
+      code: "INVALID_TOKEN",
+      error: "jwt malformed",
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("uses custom error status when authentication helper throws normal error", async () => {
+    getBearerTokenFromRequest.mockReturnValue("token");
+    const err = new Error("User not found");
+    err.status = 404;
+    loadUserFromAccessToken.mockRejectedValue(err);
+
+    const req = {};
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+    const next = jest.fn();
+
+    await verifyToken(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: "User not found",
+      code: "AUTH_ERROR",
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("uses default auth error response when status/message are missing", async () => {
+    getBearerTokenFromRequest.mockReturnValue("token");
+    loadUserFromAccessToken.mockRejectedValue({});
+
+    const req = {};
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+    const next = jest.fn();
+
+    await verifyToken(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: "Authentication failed",
+      code: "AUTH_ERROR",
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
 });
