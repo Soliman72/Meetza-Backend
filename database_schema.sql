@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `verification_code` VARCHAR(4) NULL,
     `email_verification` BOOLEAN DEFAULT FALSE,
     `user_photo` TEXT NULL,
+    `theme` ENUM('light', 'dark') DEFAULT 'light',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_email` (`email`),
@@ -76,14 +77,12 @@ CREATE TABLE IF NOT EXISTS `group_content` (
     `id` VARCHAR(36) PRIMARY KEY,
     `content_name` VARCHAR(255) NOT NULL,
     `content_description` TEXT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
     `group_id` VARCHAR(36) NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
-    CONSTRAINT `fk_group_content_administrator` 
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 
+    CONSTRAINT `fk_group_content_group` 
+        FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
         ON DELETE CASCADE 
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -114,38 +113,13 @@ CREATE TABLE IF NOT EXISTS `group` (
     `group_name` VARCHAR(255) NOT NULL,
     `description` TEXT NULL,
     `group_photo` TEXT NULL,
-    `position_id` VARCHAR(36) NOT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
-    `group_content_id` VARCHAR(36) NULL,
     `year` ENUM('1', '2', '3', '4') NOT NULL,
     `semester` ENUM('Fall', 'Spring', 'Summer') NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_position_id` (`position_id`),
-    INDEX `idx_administrator_id` (`administrator_id`),
-    INDEX `idx_group_content_id` (`group_content_id`),
+        `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_position_id` (`position_id`),
     INDEX `idx_year_semester` (`year`, `semester`),
-    CONSTRAINT `fk_group_position` 
-        FOREIGN KEY (`position_id`) REFERENCES `position`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE,
-    CONSTRAINT `fk_group_administrator` 
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE,
-    CONSTRAINT `fk_group_content` 
-        FOREIGN KEY (`group_content_id`) REFERENCES `group_content`(`id`) 
-        ON DELETE SET NULL 
-        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Add foreign key constraint for group_content.group_id after group table is created
--- (Resolving circular dependency between group and group_content)
-ALTER TABLE `group_content` 
-    ADD CONSTRAINT `fk_group_content_group` 
-        FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE;
 
 -- =============================================
 -- 8. GROUP MEMBERSHIP TABLE
@@ -177,7 +151,6 @@ CREATE TABLE IF NOT EXISTS `meeting` (
     `start_time` DATETIME NOT NULL,
     `end_time` DATETIME NOT NULL,
     `status` ENUM('Scheduled', 'Completed', 'Cancelled') NOT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
     `group_id` VARCHAR(36) NOT NULL,
     `is_weekly` TINYINT(1) NOT NULL DEFAULT 0,
     `series_id` VARCHAR(36) NULL DEFAULT NULL,
@@ -186,16 +159,11 @@ CREATE TABLE IF NOT EXISTS `meeting` (
     `recording` VARCHAR(1) NOT NULL DEFAULT '0',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX `idx_administrator_id` (`administrator_id`),
     INDEX `idx_group_id` (`group_id`),
     INDEX `idx_meeting_series_id` (`series_id`),
     INDEX `idx_start_time` (`start_time`),
     INDEX `idx_end_time` (`end_time`),
     INDEX `idx_status` (`status`),
-    CONSTRAINT `fk_meeting_administrator`
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`) 
-        ON DELETE CASCADE 
-        ON UPDATE CASCADE,
     CONSTRAINT `fk_meeting_group` 
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
         ON DELETE CASCADE 
@@ -209,8 +177,11 @@ CREATE TABLE IF NOT EXISTS `meeting_series` (
     `id` VARCHAR(36) PRIMARY KEY,
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `group_id` VARCHAR(36) NOT NULL,
-    `administrator_id` VARCHAR(36) NOT NULL,
     `original_meeting_id` VARCHAR(36) NULL,
+    `template_title` VARCHAR(255) NOT NULL,
+    `template_poster_url` TEXT NULL,
+    `template_description` TEXT NULL,
+    `template_recording` VARCHAR(1) NOT NULL DEFAULT '0',
     `duration_ms` INT UNSIGNED NOT NULL,
     `day_of_week` TINYINT NOT NULL COMMENT '0=Sunday .. 6=Saturday (node-schedule)',
     `start_hour` TINYINT UNSIGNED NOT NULL,
@@ -222,10 +193,6 @@ CREATE TABLE IF NOT EXISTS `meeting_series` (
     INDEX `idx_meeting_series_group` (`group_id`),
     CONSTRAINT `fk_meeting_series_group`
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
-    CONSTRAINT `fk_meeting_series_administrator`
-        FOREIGN KEY (`administrator_id`) REFERENCES `user`(`id`)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
     CONSTRAINT `fk_meeting_series_original_meeting`
@@ -313,6 +280,28 @@ CREATE TABLE IF NOT EXISTS `video_transcript_summary` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
+-- 10b. RESOURCE AI METADATA TABLE (for PDFs, etc.)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `resource_ai_metadata` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `resource_id` VARCHAR(36) NOT NULL,
+    `language` VARCHAR(10) NOT NULL,
+    `transcript` LONGTEXT NULL,
+    `summary` LONGTEXT NULL,
+    `topics` LONGTEXT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `unique_resource_language` (`resource_id`, `language`),
+    INDEX `idx_resource_id` (`resource_id`),
+    INDEX `idx_language` (`language`),
+    CONSTRAINT `fk_resource_ai_metadata_resource`
+        FOREIGN KEY (`resource_id`) REFERENCES `group_content_resource`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
 -- 11. COMMENT TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `comment` (
@@ -386,6 +375,27 @@ CREATE TABLE IF NOT EXISTS `saved_video` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
+-- 13a. VIDEO WATCH PROGRESS (per user; home "Watching" / "Completed")
+-- =============================================
+CREATE TABLE IF NOT EXISTS `video_watch_progress` (
+    `user_id` VARCHAR(36) NOT NULL,
+    `video_id` VARCHAR(36) NOT NULL,
+    `progress_seconds` INT UNSIGNED NOT NULL DEFAULT 0,
+    `completed` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = user finished or marked complete',
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`user_id`, `video_id`),
+    INDEX `idx_video_watch_progress_video` (`video_id`),
+    CONSTRAINT `fk_video_watch_progress_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_video_watch_progress_video`
+        FOREIGN KEY (`video_id`) REFERENCES `video`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
 -- 14. NOTIFICATIONS TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `notifications` (
@@ -410,6 +420,26 @@ CREATE TABLE IF NOT EXISTS `notifications` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Optional payload for "pending group approval" notifications (not in title/message).
+CREATE TABLE IF NOT EXISTS `notification_pending_group_action` (
+    `notification_id` VARCHAR(36) NOT NULL PRIMARY KEY,
+    `pending_group_id` VARCHAR(36) NOT NULL,
+    `approve_url` TEXT NOT NULL,
+    `reject_url` TEXT NOT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | approved | rejected — mirrors pending_groups until resolved',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_npga_pending_group` (`pending_group_id`),
+    CONSTRAINT `fk_npga_notification`
+        FOREIGN KEY (`notification_id`) REFERENCES `notifications`(`id`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- If `notification_pending_group_action` exists without `status`:
+-- ALTER TABLE notification_pending_group_action ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | approved | rejected' AFTER reject_url;
+
+-- If you temporarily added a JSON `metadata` column on `notifications`, remove it after switching to the table above:
+-- ALTER TABLE notifications DROP COLUMN metadata;
+
 -- =============================================
 -- 15. GROUP MESSAGE TABLE
 -- =============================================
@@ -418,10 +448,12 @@ CREATE TABLE IF NOT EXISTS `group_message` (
     `group_id` VARCHAR(36) NOT NULL,
     `sender_id` VARCHAR(36) NOT NULL,
     `message` TEXT NULL,
+    `parent_message_id` VARCHAR(36) NULL DEFAULT NULL COMMENT 'NULL = top-level; set = reply to another message',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_group_id` (`group_id`),
     INDEX `idx_sender_id` (`sender_id`),
     INDEX `idx_created_at` (`created_at`),
+    INDEX `idx_parent_message_id` (`parent_message_id`),
     CONSTRAINT `fk_group_message_group` 
         FOREIGN KEY (`group_id`) REFERENCES `group`(`id`) 
         ON DELETE CASCADE 
@@ -429,6 +461,10 @@ CREATE TABLE IF NOT EXISTS `group_message` (
     CONSTRAINT `fk_group_message_sender` 
         FOREIGN KEY (`sender_id`) REFERENCES `user`(`id`) 
         ON DELETE CASCADE 
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_group_message_parent`
+        FOREIGN KEY (`parent_message_id`) REFERENCES `group_message`(`id`)
+        ON DELETE SET NULL
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -442,7 +478,7 @@ CREATE TABLE IF NOT EXISTS `group_message_media` (
     `message_id` VARCHAR(36) NOT NULL,
     `file_name` VARCHAR(255) NOT NULL,
     `media_url` TEXT NOT NULL,
-    `media_type` ENUM('image', 'voice', 'file') NOT NULL,
+    `media_type` ENUM('image', 'voice', 'video', 'file', 'link') NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_group_id` (`group_id`),
     INDEX `idx_sender_id` (`sender_id`),
@@ -509,4 +545,214 @@ CREATE TABLE IF NOT EXISTS `social_auth` (
 -- =============================================
 -- END OF SCHEMA
 -- =============================================
+
+-- =============================================
+-- 19. GROUP ADMIN TABLE (multi-admin per group)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `group_admin` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `group_id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN') NOT NULL DEFAULT 'ADMIN',
+    `assigned_by` VARCHAR(36) NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_group_admin` (`group_id`, `user_id`),
+    INDEX `idx_group_admin_group_id` (`group_id`),
+    INDEX `idx_group_admin_user_id` (`user_id`),
+    CONSTRAINT `fk_group_admin_group`
+        FOREIGN KEY (`group_id`) REFERENCES `group`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_group_admin_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_group_admin_assigned_by`
+        FOREIGN KEY (`assigned_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 20. MEETING ADMIN TABLE (multi-admin per meeting)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `meeting_admin` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `meeting_id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN') NOT NULL DEFAULT 'ADMIN',
+    `assigned_by` VARCHAR(36) NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_meeting_admin` (`meeting_id`, `user_id`),
+    INDEX `idx_meeting_admin_meeting_id` (`meeting_id`),
+    INDEX `idx_meeting_admin_user_id` (`user_id`),
+    CONSTRAINT `fk_meeting_admin_meeting`
+        FOREIGN KEY (`meeting_id`) REFERENCES `meeting`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_meeting_admin_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_meeting_admin_assigned_by`
+        FOREIGN KEY (`assigned_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 21. MESSAGE REACTION TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `message_reaction` (
+    `id`         VARCHAR(36) NOT NULL,
+    `message_id` VARCHAR(36) NOT NULL,
+    `user_id`    VARCHAR(36) NOT NULL,
+    `emoji`      VARCHAR(20) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `unique_message_user` (`message_id`, `user_id`),
+    INDEX `idx_reaction_message_id` (`message_id`),
+    INDEX `idx_reaction_user_id`    (`user_id`),
+    CONSTRAINT `fk_reaction_message`
+        FOREIGN KEY (`message_id`) REFERENCES `group_message`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_reaction_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 22a. COMPANIES & PER-COMPANY SETTINGS (multi-tenant; before organization_domain FK)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `companies` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_companies_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `company_settings` (
+    `company_id` VARCHAR(36) NOT NULL PRIMARY KEY,
+    `system_name` VARCHAR(255) NOT NULL DEFAULT 'Meetza',
+    `logo_url` TEXT NULL,
+    `system_name_color` VARCHAR(7) NOT NULL
+    `theme` ENUM('light', 'dark') NOT NULL DEFAULT 'light' COMMENT 'light = white UI, dark = black UI',
+    `terms_html` LONGTEXT NULL,
+    `privacy_html` LONGTEXT NULL,
+    `guidelines_html` LONGTEXT NULL,
+    `auth_email_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Default when organization_domain row has NULL auth override',
+    `auth_google_enabled` TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_company_settings_company`
+        FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 22. ORGANIZATION DOMAIN TABLE (all domains: global legacy rows company_id NULL, or linked to a company)
+-- =============================================
+CREATE TABLE IF NOT EXISTS `organization_domain` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `company_id` VARCHAR(36) NULL COMMENT 'NULL = legacy/global domain; set when domain belongs to a company',
+    `domain_name` VARCHAR(255) NOT NULL,
+    `auth_email_enabled` TINYINT(1) NULL DEFAULT NULL COMMENT 'NULL with company_id = inherit company_settings; else explicit or default 1',
+    `auth_google_enabled` TINYINT(1) NULL DEFAULT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_organization_domain_name` (`domain_name`),
+    INDEX `idx_organization_domain_company` (`company_id`),
+    CONSTRAINT `fk_organization_domain_company`
+        FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Existing DB: add company_id + nullable auth to organization_domain, migrate company_domains data if any, then DROP company_domains.
+
+-- =============================================
+-- 23. PENDING GROUP TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `pending_groups` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `group_name` VARCHAR(255) NOT NULL,
+    `description` TEXT NULL,
+    `group_photo` TEXT NULL,
+    `year` ENUM('1', '2', '3', '4') NOT NULL,
+    `semester` ENUM('Fall', 'Spring', 'Summer') NOT NULL,
+    `created_by` VARCHAR(36) NOT NULL,
+    `status` ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    `approved_by` VARCHAR(36) NULL,
+    `approved_at` TIMESTAMP NULL,
+    `rejected_by` VARCHAR(36) NULL,
+    `rejected_at` TIMESTAMP NULL,
+    `rejection_reason` TEXT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_created_by` (`created_by`),
+    INDEX `idx_status` (`status`),
+    CONSTRAINT `fk_pending_groups_created_by`
+        FOREIGN KEY (`created_by`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_groups_approved_by`
+        FOREIGN KEY (`approved_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_groups_rejected_by`
+        FOREIGN KEY (`rejected_by`) REFERENCES `user`(`id`)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 24. PENDING GROUP ADMIN TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `pending_group_admins` (
+    `id` VARCHAR(36) PRIMARY KEY,
+    `pending_group_id` VARCHAR(36) NOT NULL,
+    `user_id` VARCHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN') NOT NULL DEFAULT 'ADMIN',
+    `assigned_by` VARCHAR(36) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_pending_group_admin` (`pending_group_id`, `user_id`),
+    INDEX `idx_pending_group_admin_pending_group_id` (`pending_group_id`),
+    INDEX `idx_pending_group_admin_user_id` (`user_id`),
+    CONSTRAINT `fk_pending_group_admin_pending_group`
+        FOREIGN KEY (`pending_group_id`) REFERENCES `pending_groups`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_group_admin_user`
+        FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT `fk_pending_group_admin_assigned_by`
+        FOREIGN KEY (`assigned_by`) REFERENCES `user`(`id`)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 25. CHAT BOT CACHE TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `chat_bot_cache` (
+    `id` VARCHAR(36) NOT NULL PRIMARY KEY,
+    `question_key` VARCHAR(512) NOT NULL,
+    `normalized_question` TEXT NOT NULL,
+    `reply` LONGTEXT NOT NULL,
+    `expires_at` DATETIME NOT NULL,
+    `hit_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_chat_bot_cache_question_key` (`question_key`),
+    INDEX `idx_chat_bot_cache_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

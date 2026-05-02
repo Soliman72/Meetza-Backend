@@ -5,16 +5,16 @@ const readline = require("readline");
 const PORT = process.env.PORT || 4000;
 
 console.log("\n" + "=".repeat(60));
-console.log("🚀 Starting ngrok tunnel...");
+console.log("Starting ngrok tunnel...");
 console.log("=".repeat(60));
-console.log(`📡 Local server: http://localhost:${PORT}`);
-console.log(`🌐 Public URL will be displayed below\n`);
+console.log(`Local server: http://localhost:${PORT}`);
+console.log(`Public URL will be displayed below\n`);
 
 // Check if ngrok is installed
 exec("ngrok version", (error) => {
   if (error) {
-    console.error("❌ ngrok is not installed!");
-    console.log("\n💡 To install ngrok:");
+    console.error("ngrok is not installed!");
+    console.log("\nTo install ngrok:");
     console.log("   1. Download from: https://ngrok.com/download");
     console.log("   2. Or use chocolatey: choco install ngrok");
     console.log("   3. Or use npm: npm install -g ngrok");
@@ -42,12 +42,12 @@ exec("ngrok version", (error) => {
         if (urlMatch) {
           const publicUrl = urlMatch[0];
           console.log("\n" + "=".repeat(60));
-          console.log("✅ ngrok tunnel is active!");
+          console.log("ngrok tunnel is active!");
           console.log("=".repeat(60));
-          console.log(`🌐 Public URL: ${publicUrl}`);
-          console.log(`🔌 Socket.IO URL: ${publicUrl}`);
+          console.log(`Public URL: ${publicUrl}`);
+          console.log(`Socket.IO URL: ${publicUrl}`);
           console.log("=".repeat(60));
-          console.log(`\n💡 Use this URL in your client application:`);
+          console.log(`\nUse this URL in your client application:`);
           console.log(`   const socket = io("${publicUrl}", {`);
           console.log(`     auth: { token: jwtToken }`);
           console.log(`   });\n`);
@@ -62,7 +62,7 @@ exec("ngrok version", (error) => {
 
   // Handle cleanup on exit
   process.on("SIGINT", () => {
-    console.log("\n\n🛑 Stopping ngrok tunnel...");
+    console.log("\n\nStopping ngrok tunnel...");
     ngrok.kill();
     process.exit(0);
   });

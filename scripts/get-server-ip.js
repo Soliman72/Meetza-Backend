@@ -21,16 +21,16 @@ const getLocalIP = () => {
   return ips;
 };
 
-console.log("\n🌐 Server IP Addresses (for network access):\n");
+console.log("\nServer IP Addresses (for network access):\n");
 const ips = getLocalIP();
 
 if (ips.length === 0) {
-  console.log("❌ No network interfaces found.");
+  console.log("No network interfaces found.");
   console.log("   Make sure you're connected to a network.\n");
 } else {
   ips.forEach((item, index) => {
     console.log(`${index + 1}. ${item.ip} (${item.interface})`);
   });
-  console.log(`\n💡 Use any of these IPs to connect from other devices:`);
+  console.log(`\nUse any of these IPs to connect from other devices:`);
   console.log(`   Example: http://${ips[0].ip}:4000\n`);
 }
