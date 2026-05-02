@@ -39,8 +39,9 @@ function createApp() {
   app.use(express.static(path.join(__dirname, "public")));
 
   app.use(cors({
-    origin: ["*",
-    ],
+    origin: ["https://meetza-front-end.vercel.app", "http://localhost:3000"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   }));
   app.use(express.json());
