@@ -4,7 +4,6 @@ const {
   loadUserFromAccessToken,
 } = require("../utils/authJwtUser");
 
-/** نفس تحقق JWT + المستخدم المستخدم في Socket (`soketAuth`). */
 exports.verifyToken = async (req, res, next) => {
   try {
     const token = getBearerTokenFromRequest(req);

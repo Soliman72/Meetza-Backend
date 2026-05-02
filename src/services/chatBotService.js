@@ -1,19 +1,20 @@
-const chatBotValidator = require("../validators/chatBotValidator");
-const geminiModel = require("../config/gemini");
-/**
- * Chat-bot turn: validate input and return a structured reply payload.
- * Wire your provider / RAG / tools inside this function later.
- */
-exports.chat = async (req) => {
-  chatBotValidator.validateChatRequest(req);
+const buildContext = require("./contextBuilder");
+const askGemini = require("../config/gemini");
 
-  const { conversation_id: conversationId } = req.body || {};
-  const result = await geminiModel.generateContent("Hello");
-  console.log(result);
-  
+exports.chat = async (req) => {
+  const { message, conversation_id } = req.body || {};
+  if (!message || typeof message !== "string") {
+    const error = new Error("Message is required");
+    error.status = 400;
+    throw error;
+  }
+
+  const context = await buildContext(message);
+  const reply = await askGemini(message, context);
+
   return {
-    conversation_id: conversationId || null,
-    reply: result.text(),
+    conversation_id: conversation_id || null,
+    reply: reply,
     role: "assistant",
   };
 };

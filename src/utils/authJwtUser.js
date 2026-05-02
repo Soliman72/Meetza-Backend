@@ -8,7 +8,6 @@ function getJwtVerifyOptions() {
   };
 }
 
-/** Bearer أو التوكن الخام في Authorization (متوافق مع REST). */
 function getBearerTokenFromRequest(req) {
   const auth = req.headers.authorization;
   if (!auth || typeof auth !== "string") return null;
@@ -22,9 +21,6 @@ function getBearerTokenFromRequest(req) {
   return null;
 }
 
-/**
- * JWT + تحميل المستخدم — نفس المنطق لـ Socket (`soketAuth`) وـ REST (`verifyToken`).
- */
 async function loadUserFromAccessToken(token) {
   if (!token) {
     const e = new Error("No token provided");

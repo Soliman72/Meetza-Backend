@@ -185,6 +185,13 @@ exports.getAllGroups = async (req) => {
   return { rows };
 };
 
+exports.getAllGroupsForContext = async () => {
+  const [rows] = await db.promise().execute(
+    "SELECT group_name, description FROM `group`"
+  );
+  return rows;
+};
+
 exports.getGroupById = async (id) => {
   const [rows] = await db.promise().execute("SELECT * FROM `group` WHERE id = ?", [id]);
 
