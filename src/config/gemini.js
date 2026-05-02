@@ -1,10 +1,25 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-require("dotenv").config();
+const { GoogleGenAI } = require("@google/genai");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash-latest",
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
-module.exports = model;
+async function askGemini(message, context) {
+  const response = await ai.models.generateContent({
+    model: "gemini-2.0-flash",
+    contents: `
+You are a chatbot for a website.
+
+Answer ONLY using this data:
+${context}
+
+User: ${message}
+
+If not found say "I don't know"
+`,
+  });
+
+  return response.text;
+}
+
+module.exports = askGemini;
