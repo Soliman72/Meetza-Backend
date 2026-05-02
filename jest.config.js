@@ -3,7 +3,6 @@ module.exports = {
   roots: ["<rootDir>/tests"],
   testMatch: ["**/*.test.js"],
   globalSetup: "<rootDir>/tests/globalSetup.js",
-  setupFilesAfterEnv: ["<rootDir>/tests/setup.js"],
   collectCoverageFrom: [
     "src/services/**/*.js",
     "src/utils/**/*.js",
@@ -15,13 +14,13 @@ module.exports = {
     {
       displayName: "unit",
       testEnvironment: "node",
-      setupFilesAfterEnv: ["<rootDir>/tests/setup.js"],
+      setupFilesAfterEnv: ["<rootDir>/tests/unit/setup.js"],
       testMatch: ["<rootDir>/tests/unit/**/*.test.js"],
     },
     {
       displayName: "integration",
       testEnvironment: "node",
-      setupFilesAfterEnv: ["<rootDir>/tests/setup.js"],
+      setupFilesAfterEnv: ["<rootDir>/tests/integration/setup/testDb.js"],
       testMatch: ["<rootDir>/tests/integration/**/*.test.js"],
     },
   ],
