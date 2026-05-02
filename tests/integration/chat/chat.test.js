@@ -25,6 +25,13 @@ jest.mock("../../../src/repositories/chatRepository", () => ({
   getUserName: jest.fn(),
   getUserForReaction: jest.fn(),
 }));
+jest.mock("../../../src/repositories/groupRepository", () => ({
+  getUserRole: jest.fn(),
+  getGroupAsSuperAdmin: jest.fn(),
+  getGroupWithAccess: jest.fn(),
+  getGroupMedia: jest.fn(),
+  getGroupAdmins: jest.fn(),
+}));
 
 jest.mock("../../../src/services/chatMessageService", () => ({
   saveMessage: jest.fn(),
@@ -49,16 +56,6 @@ jest.mock("../../../src/validators/chatValidator", () => ({
   validateEmoji: jest.fn((v) => v || "👍"),
 }));
 
-jest.mock("../../../src/utils/groupAccess", () => ({
-  ensureGroupAccess: jest.fn(),
-  GroupAccessError: class GroupAccessError extends Error {
-    constructor(message, statusCode = 403) {
-      super(message);
-      this.statusCode = statusCode;
-    }
-  },
-}));
-
 jest.mock("../../../src/middleware/uploadFile", () => ({
   upload: {
     fields: jest.fn(() => (req, res, cb) => cb()),
@@ -78,8 +75,8 @@ jest.mock("../../../src/services/groupAccessHttpService", () => ({
 
 const chatRoute = require("../../../src/routes/chatRoute");
 const chatRepository = require("../../../src/repositories/chatRepository");
+const groupRepository = require("../../../src/repositories/groupRepository");
 const chatMessageService = require("../../../src/services/chatMessageService");
-const { ensureGroupAccess } = require("../../../src/utils/groupAccess");
 
 describe("chat", () => {
   const app = express();
@@ -88,11 +85,14 @@ describe("chat", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    ensureGroupAccess.mockResolvedValue({
+    groupRepository.getUserRole.mockResolvedValue("Administrator");
+    groupRepository.getGroupWithAccess.mockResolvedValue({
       membership_role: "Administrator",
       administrator_id: "admin-1",
       group_id: "g1",
     });
+    groupRepository.getGroupMedia.mockResolvedValue([]);
+    groupRepository.getGroupAdmins.mockResolvedValue([]);
     chatRepository.getUserRole.mockResolvedValue("Member");
     chatRepository.getMyGroupsForUser.mockResolvedValue([{ id: "g1" }]);
     chatRepository.getUnreadGroups.mockResolvedValue([{ id: "g1" }]);

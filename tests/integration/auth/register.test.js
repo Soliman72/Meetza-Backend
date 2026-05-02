@@ -22,15 +22,16 @@ jest.mock("../../../src/repositories/domainRepository", () => ({
 jest.mock("bcrypt", () => ({
   hash: jest.fn(),
 }));
-jest.mock("../../../src/utils/emailService", () => ({
-  sendVerificationEmail: jest.fn(),
+jest.mock("nodemailer", () => ({
+  createTransport: jest.fn(() => ({
+    sendMail: jest.fn().mockResolvedValue({ messageId: "test-mail" }),
+  })),
 }));
 
 const authRoute = require("../../../src/routes/authRoute");
 const authRepo = require("../../../src/repositories/authRepository");
 const domainRepo = require("../../../src/repositories/domainRepository");
 const bcrypt = require("bcrypt");
-const { sendVerificationEmail } = require("../../../src/utils/emailService");
 
 describe("Registration Integration Tests", () => {
   const app = express();
@@ -49,7 +50,6 @@ describe("Registration Integration Tests", () => {
     bcrypt.hash.mockResolvedValueOnce("hashed");
     authRepo.createUser.mockResolvedValueOnce();
     authRepo.insertMemberForUser.mockResolvedValueOnce();
-    sendVerificationEmail.mockResolvedValueOnce();
     const res = await request(app)
       .post("/api/auth/register")
       .send(testUser);

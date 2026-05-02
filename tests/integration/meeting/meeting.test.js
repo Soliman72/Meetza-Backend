@@ -60,10 +60,6 @@ jest.mock("../../../src/validators/meetingValidator", () => ({
   validateDateRange: jest.fn(),
   validateStatusValue: jest.fn(),
 }));
-jest.mock("../../../src/utils/meetingQueryFilter", () => ({
-  parseWeeklyFlag: jest.fn(() => false),
-  getDateFilterForMeetings: jest.fn(() => null),
-}));
 jest.mock("../../../src/services/groupAdminService", () => ({
   isGroupAdmin: jest.fn(),
 }));

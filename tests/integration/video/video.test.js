@@ -1,5 +1,8 @@
 const express = require("express");
 const request = require("supertest");
+const axios = require("axios");
+
+jest.mock("axios");
 
 jest.mock("../../../src/middleware/verifyToken", () => ({
   verifyToken: (req, res, next) => next(),
@@ -27,6 +30,8 @@ jest.mock("../../../src/repositories/videoRepository", () => ({
   resolveVideoId: jest.fn(),
   getVideoSourceById: jest.fn(),
   getTranscriptSummaryByVideoAndLanguage: jest.fn(),
+  addSlug: jest.fn(),
+  upsertTranscriptSummary: jest.fn(),
 }));
 jest.mock("../../../src/repositories/commentRepository", () => ({
   getCommentsByVideo: jest.fn(),
@@ -34,31 +39,15 @@ jest.mock("../../../src/repositories/commentRepository", () => ({
 jest.mock("../../../src/repositories/groupRepository", () => ({
   getGroupOwner: jest.fn(),
 }));
-jest.mock("../../../src/utils/uploadVideoFiles", () => ({
-  uploadFiles: jest.fn(),
-}));
-jest.mock("../../../src/utils/slug", () => ({
-  createUniqueVideoSlug: jest.fn(),
-}));
-jest.mock("../../../src/utils/videoDuration", () => ({
-  createVideoDuration: jest.fn(),
-}));
 jest.mock("../../../src/validators/videoValidator", () => ({
   createVideoValidator: jest.fn(),
-}));
-jest.mock("../../../src/utils/videoSummarize", () => ({
-  internalSummarizeVideo: jest.fn(),
 }));
 
 const videoRoute = require("../../../src/routes/videoRoute");
 const videoRepository = require("../../../src/repositories/videoRepository");
 const commentRepository = require("../../../src/repositories/commentRepository");
 const groupRepository = require("../../../src/repositories/groupRepository");
-const { uploadFiles } = require("../../../src/utils/uploadVideoFiles");
-const { createUniqueVideoSlug } = require("../../../src/utils/slug");
-const { createVideoDuration } = require("../../../src/utils/videoDuration");
 const videoValidator = require("../../../src/validators/videoValidator");
-const { internalSummarizeVideo } = require("../../../src/utils/videoSummarize");
 
 describe("video", () => {
   const app = express();
@@ -75,12 +64,20 @@ describe("video", () => {
     videoRepository.deleteVideo.mockResolvedValue(1);
     commentRepository.getCommentsByVideo.mockResolvedValue([]);
     videoValidator.createVideoValidator.mockResolvedValue();
-    uploadFiles.mockResolvedValue({ videoUrl: "https://example.com/video.mp4", posterUrl: "https://example.com/poster.jpg" });
-    createVideoDuration.mockResolvedValue(120);
-    createUniqueVideoSlug.mockResolvedValue("video-1");
+    videoRepository.addSlug.mockResolvedValue();
     groupRepository.getGroupOwner.mockResolvedValue({ user_id: "admin-1" });
     videoRepository.createVideo.mockResolvedValue({ id: "v1", title: "Video 1", slug: "video-1", description: "desc" });
-    internalSummarizeVideo.mockResolvedValue({ summary: "ok", topics: [] });
+    videoRepository.upsertTranscriptSummary.mockResolvedValue();
+    axios.post.mockResolvedValue({
+      data: {
+        data: {
+          transcript: "transcript",
+          summary: "ok",
+          topics: [],
+          language: "en",
+        },
+      },
+    });
   });
 
   test("GET /api/video returns 200", async () => {
@@ -102,7 +99,7 @@ describe("video", () => {
     expect(res.body.success).toBe(true);
     expect(videoRepository.createVideo).toHaveBeenCalledTimes(1);
     expect(groupRepository.getGroupOwner).toHaveBeenCalledWith("g1");
-    expect(internalSummarizeVideo).toHaveBeenCalledTimes(1);
+    expect(videoRepository.upsertTranscriptSummary).toHaveBeenCalledTimes(1);
   });
 
   test("GET /api/video/:id returns 200", async () => {

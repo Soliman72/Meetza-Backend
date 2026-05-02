@@ -22,15 +22,10 @@ jest.mock("bcrypt", () => ({
   compare: jest.fn(),
   hash: jest.fn(),
 }));
-jest.mock("../../../src/utils/emailService", () => ({
-  sendVerificationEmail: jest.fn(),
-}));
-jest.mock("../../../src/utils/loginAttempts", () => ({
-  recordFailedAttempt: jest.fn(),
-  clearAttempts: jest.fn(),
-}));
-jest.mock("../../../src/utils/jwtHelper", () => ({
-  generateToken: jest.fn(() => "jwt-token"),
+jest.mock("nodemailer", () => ({
+  createTransport: jest.fn(() => ({
+    sendMail: jest.fn().mockResolvedValue({ messageId: "test-mail" }),
+  })),
 }));
 jest.mock("../../../src/services/auth/authServiceSecurity", () => ({
   checkLoginSecurity: jest.fn(),
@@ -40,7 +35,6 @@ const authRoute = require("../../../src/routes/authRoute");
 const authRepo = require("../../../src/repositories/authRepository");
 const domainRepo = require("../../../src/repositories/domainRepository");
 const bcrypt = require("bcrypt");
-const { sendVerificationEmail } = require("../../../src/utils/emailService");
 const authSecurity = require("../../../src/services/auth/authServiceSecurity");
 
 describe("Login Integration Tests", () => {
@@ -108,7 +102,6 @@ describe("Login Integration Tests", () => {
     it("should request reset successfully", async () => {
       authRepo.findByEmail.mockResolvedValueOnce({ id: "u1", email: testUser.email });
       authRepo.setResetCode.mockResolvedValueOnce();
-      sendVerificationEmail.mockResolvedValueOnce();
       const res = await request(app)
         .post("/api/auth/forgot_password")
         .send({ email: testUser.email });

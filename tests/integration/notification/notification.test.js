@@ -35,7 +35,6 @@ jest.mock("../../../src/sockets/notificationSocket", () => ({
   emitUnreadCount: jest.fn(),
   emitPendingGroupNotificationStatus: jest.fn(),
 }));
-jest.mock("../../../src/utils/sendEmail", () => jest.fn());
 
 jest.mock("../../../src/validators/notificationValidator", () => ({
   createNotificationValidator: jest.fn(),
