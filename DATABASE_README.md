@@ -35,6 +35,7 @@ Or import it through MySQL Workbench or any MySQL client.
 11. **group_message_media** - Media files attached to messages (images, voice, files)
 12. **message_read_status** - Read/unread status tracking for group messages
 13. **notifications** - System notifications sent to members
+14. **chat_bot_cache** - Cached chatbot replies for repeated questions
 
 ### Meetings & Videos
 
