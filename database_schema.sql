@@ -739,3 +739,20 @@ CREATE TABLE IF NOT EXISTS `pending_group_admins` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =============================================
+-- 25. CHAT BOT CACHE TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS `chat_bot_cache` (
+    `id` VARCHAR(36) NOT NULL PRIMARY KEY,
+    `question_key` VARCHAR(512) NOT NULL,
+    `normalized_question` TEXT NOT NULL,
+    `reply` LONGTEXT NOT NULL,
+    `expires_at` DATETIME NOT NULL,
+    `hit_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_chat_bot_cache_question_key` (`question_key`),
+    INDEX `idx_chat_bot_cache_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
