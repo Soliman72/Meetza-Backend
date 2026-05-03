@@ -44,16 +44,11 @@ async function ensureAdministratorUser(
 
   await db.promise().query(
     `INSERT INTO administrator (user_id, role)
-     SELECT id, ? FROM user WHERE email = ?
-     AND id NOT IN (SELECT user_id FROM administrator)`,
-    [role, email]
+     SELECT ?, ? FROM DUAL
+     WHERE ? NOT IN (SELECT user_id FROM administrator)`,
+    [userId, role, userId]
   );
-
-  const [idRows] = await db.promise().query(
-    "SELECT id FROM user WHERE email = ?",
-    [email]
-  );
-  return idRows[0].id;
+  return userId;
 }
 
 module.exports = { insertIfNotExists, ensureAdministratorUser };
