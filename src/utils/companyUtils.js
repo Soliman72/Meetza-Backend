@@ -77,7 +77,6 @@ exports.domainRepositoryPatchFromBody = (body) => {
 
 exports.assertCompanyExists = async (companyId) => {
   const row = await companyRepository.findCompanyById(companyId);
-  if (!row) throw httpError(404, "Company not found");
   return row;
 };
 

@@ -55,7 +55,6 @@ exports.getById = async (req, res) => {
     if (!companyId) {
       return res.json({ success: true, data: defaultCompanyData });
     }
-
     const data = await companyService.getCompanyById(companyId);
     if (!data) {
       return res.json({ success: true, data: defaultCompanyData });
