@@ -32,6 +32,21 @@ exports.list = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const data = await companyService.getCompanyById(companyId);
+    if (!data) {
+      return res.json({
+        success: true,
+        data: {
+          name: "Meetza",
+          settings: {
+            system_name: "Meetza",
+            system_name_color: "#2c3e50",
+            logo_url: "https://res.cloudinary.com/dovu1umwg/image/upload/v1714857600/meetza/logo.png",
+            theme: "light",
+            auth_google_enabled: true
+          }
+        }
+      });
+    }
     return res.json({ success: true, data });
   } catch (err) {
     return sendError(res, err);
