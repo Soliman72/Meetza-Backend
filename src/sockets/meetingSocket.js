@@ -83,6 +83,7 @@ const canAdminMuteInMeeting = async (userId, meetingId) => {
 };
 
 const MEETING_ROOM_PREFIX = "meeting:";
+const activeScreenShareByMeeting = new Map();
 
 const registerMeetingSocket = (io) => {
   io.on("connection", (socket) => {
@@ -138,6 +139,15 @@ const registerMeetingSocket = (io) => {
             meetingId,
           });
         }
+
+        const activeScreenShare = activeScreenShareByMeeting.get(meetingId);
+        if (activeScreenShare) {
+          socket.emit("screenShareStarted", {
+            meetingId,
+            socketId: activeScreenShare.socketId,
+            userId: activeScreenShare.userId,
+          });
+        }
         socket.to(room).emit("participantJoined", {
           socketId: socket.id,
           userId: socket.user.id,
@@ -160,6 +170,15 @@ const registerMeetingSocket = (io) => {
         typeof payload === "string" ? payload : payload?.meetingId;
       if (!meetingId) return;
       const room = MEETING_ROOM_PREFIX + meetingId;
+      const activeScreenShare = activeScreenShareByMeeting.get(meetingId);
+      if (activeScreenShare?.socketId === socket.id) {
+        activeScreenShareByMeeting.delete(meetingId);
+        socket.to(room).emit("screenShareStopped", {
+          meetingId,
+          socketId: socket.id,
+          userId: socket.user?.id,
+        });
+      }
       meetingRooms.delete(meetingId);
       socket.to(room).emit("participantLeft", {
         socketId: socket.id,
@@ -447,9 +466,17 @@ const registerMeetingSocket = (io) => {
       }
 
       const room = MEETING_ROOM_PREFIX + meetingId;
+      activeScreenShareByMeeting.set(meetingId, {
+        socketId: socket.id,
+        userId: socket.user?.id,
+      });
       socket
         .to(room)
-        .emit("screenShareStarted", { meetingId, socketId: socket.id });
+        .emit("screenShareStarted", {
+          meetingId,
+          socketId: socket.id,
+          userId: socket.user?.id,
+        });
       if (typeof ack === "function") ack({ ok: true });
     });
 
@@ -467,9 +494,17 @@ const registerMeetingSocket = (io) => {
       }
 
       const room = MEETING_ROOM_PREFIX + meetingId;
+      const activeScreenShare = activeScreenShareByMeeting.get(meetingId);
+      if (activeScreenShare?.socketId === socket.id) {
+        activeScreenShareByMeeting.delete(meetingId);
+      }
       socket
         .to(room)
-        .emit("screenShareStopped", { meetingId, socketId: socket.id });
+        .emit("screenShareStopped", {
+          meetingId,
+          socketId: socket.id,
+          userId: socket.user?.id,
+        });
       if (typeof ack === "function") ack({ ok: true });
     });
 
@@ -494,6 +529,15 @@ const registerMeetingSocket = (io) => {
     socket.on("disconnect", () => {
       meetingRooms.forEach((meetingId) => {
         const room = MEETING_ROOM_PREFIX + meetingId;
+        const activeScreenShare = activeScreenShareByMeeting.get(meetingId);
+        if (activeScreenShare?.socketId === socket.id) {
+          activeScreenShareByMeeting.delete(meetingId);
+          socket.to(room).emit("screenShareStopped", {
+            meetingId,
+            socketId: socket.id,
+            userId: socket.user?.id,
+          });
+        }
         socket.to(room).emit("participantLeft", {
           socketId: socket.id,
           userId: socket.user?.id,
