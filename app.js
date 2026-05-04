@@ -17,6 +17,7 @@ const videoRouter = require("./src/routes/videoRoute");
 const groupRouter = require("./src/routes/groupRoute");
 const groupMembershipRouter = require("./src/routes/group_memberShipRoute");
 const positionRouter = require("./src/routes/positionRoute");
+const likeRouter = require("./src/routes/likeRoute");
 const commentRouter = require("./src/routes/commentRoute");
 const saved_videoRouter = require("./src/routes/saved_videoRoute");
 const notificationRouter = require("./src/routes/notificationRoute");
@@ -38,12 +39,7 @@ function createApp() {
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));
   app.use(express.static(path.join(__dirname, "public")));
 
-  app.use(cors({
-    origin: ["https://meetza-front-end.vercel.app", "http://localhost:3000"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  }));
+  app.use(cors());
   app.use(express.json());
   app.use(passport.initialize());
 
@@ -58,7 +54,7 @@ function createApp() {
   app.use("/api/group-contents", groupContentRouter);
   app.use("/api/meeting", meetingRouter);
   app.use("/api/video", videoRouter);
-  app.use("/api/like", require("./src/routes/likeRoute"));
+  app.use("/api/like", likeRouter);
   app.use("/api/comment", commentRouter);
   app.use("/api/saved_video", saved_videoRouter);
   app.use("/api/chat", chatRouter);

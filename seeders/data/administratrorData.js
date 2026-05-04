@@ -4,13 +4,13 @@
  */
 module.exports = [
   {
-    name: "Super Admin",
-    email: "superadmin@company.com",
+    name: "Shahd Saeed",
+    email: "ShahdSaeed@meetza.com",
     role: "Super_Admin",
   },
   {
-    name: "Admin 1",
-    email: "admin1@company.com",
+    name: "Shahoda",
+    email: "Shahoda@meetza.com",
     role: "Administrator",
   },
 ];
