@@ -4,11 +4,14 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-async function askGemini(message, context) {
+async function askGemini(message, context, options = {}) {
+  const userName = options.userName || "User";
+
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `
 You are Meetza support chatbot.
+Current authenticated user name: ${userName}
 
 Answer ONLY using the following knowledge base:
 ${context}
@@ -19,6 +22,7 @@ Rules:
 - Do not invent details that are not in the knowledge base.
 - If the user asks for missing details, say: "This detail is not available in the current knowledge base."
 - Keep answers clear and practical.
+- You know the current user's name and may address them naturally when relevant.
 - If the user writes in Arabic, answer in Arabic. Otherwise answer in English.
 `,
   });
