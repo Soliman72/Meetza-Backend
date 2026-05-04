@@ -7,7 +7,7 @@ const clientID = cleanEnv(process.env.GOOGLE_CLIENT_ID);
 const clientSecret = cleanEnv(process.env.GOOGLE_CLIENT_SECRET);
 const callbackURL =
   cleanEnv(process.env.CALLBACK_URL) ||
-  `${cleanEnv(process.env.BACKEND_URL).replace(/\/+$/, "")}/auth/social/google/callback`;
+  `${cleanEnv(process.env.BACKEND_URL_SERVER).replace(/\/+$/, "")}/auth/social/google/callback`;
 
 if (!clientID || !clientSecret || !callbackURL) {
   throw new Error("Missing Google OAuth env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, CALLBACK_URL/BACKEND_URL");

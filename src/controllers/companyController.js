@@ -10,6 +10,13 @@ const defaultCompanyData = {
       "https://res.cloudinary.com/dovu1umwg/image/upload/v1714857600/meetza/logo.png",
     theme: "light",
     auth_google_enabled: true,
+    domains: [
+      {
+        domain_name: "meetza.com",
+        auth_email_enabled: true,
+        auth_google_enabled: true,
+      },
+    ],
   },
 };
 

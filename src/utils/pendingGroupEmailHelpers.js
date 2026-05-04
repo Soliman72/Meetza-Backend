@@ -5,7 +5,7 @@ exports.DEFAULT_EMAIL_REJECTION_REASON = "Rejected via approval email";
 const getConfiguredPublicApiBaseUrl = () => {
   const raw =
     process.env.API_BASE_URL ||
-    process.env.BACKEND_URL ||
+    process.env.BACKEND_URL_SERVER ||
     process.env.APP_URL ||
     "";
   const trimmed = String(raw).trim().replace(/\/$/, "");
