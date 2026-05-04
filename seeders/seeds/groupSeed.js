@@ -3,6 +3,48 @@ const db = require("../../src/config/db");
 const groups = require("../data/groupData");
 const { ensureAdministratorUser } = require("../utils/seedHelper");
 
+async function ensureDefaultGroupContent(dbConn, groupId, group) {
+  const [rows] = await dbConn.promise().query(
+    "SELECT id FROM group_content WHERE group_id = ? LIMIT 1",
+    [groupId]
+  );
+  if (rows.length > 0) return;
+
+  const contentName =
+    group.group_content_name || `${group.group_name} Content`;
+  const contentDescription =
+    group.group_content_description ?? group.description ?? null;
+
+  await dbConn.promise().query(
+    `INSERT INTO group_content (id, content_name, content_description, group_id)
+     VALUES (?, ?, ?, ?)`,
+    [uuidv4(), contentName, contentDescription, groupId]
+  );
+}
+
+/** Optional: admin.position_title or admin.position (string) → one position row per admin if missing. */
+async function ensureOptionalPosition(dbConn, userId, admin) {
+  const raw =
+    typeof admin.position_title === "string"
+      ? admin.position_title
+      : typeof admin.position === "string"
+        ? admin.position
+        : "Educational";
+  const title = raw.trim() || "Educational";
+  if (!title) return;
+
+  const [existing] = await dbConn.promise().query(
+    "SELECT id FROM `position` WHERE administrator_id = ? AND title = ? LIMIT 1",
+    [userId, title]
+  );
+  if (existing.length > 0) return;
+
+  await dbConn.promise().query(
+    "INSERT INTO `position` (id, title, administrator_id) VALUES (?, ?, ?)",
+    [uuidv4(), title, userId]
+  );
+}
+
 async function seedGroups() {
   for (const group of groups) {
     const admins = Array.isArray(group.admins) ? group.admins : group.admin ? [group.admin] : [];
@@ -38,6 +80,8 @@ async function seedGroups() {
       );
     }
 
+    await ensureDefaultGroupContent(db, groupId, group);
+
     for (let idx = 0; idx < admins.length; idx += 1) {
       const a = admins[idx];
       if (!a?.email || !a?.name) {
@@ -57,6 +101,8 @@ async function seedGroups() {
         role: leaderRole,
         passwordPlain: a.password ?? undefined,
       });
+
+      await ensureOptionalPosition(db, userId, a);
 
       const [existingGa] = await db.promise().query(
         "SELECT id FROM group_admin WHERE group_id = ? AND user_id = ?",
