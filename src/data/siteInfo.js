@@ -10,7 +10,35 @@ const siteInfo = `
 ---
 
 ## 🏢 Platform Overview
-**Meetza** is a specialized academic collaboration platform. It serves as a central hub for Members and Leaders to manage groups, communicate in real-time, share structured resources, and host interactive video meetings.
+**Meetza** is a unified collaboration and communication platform designed to centralize how educational institutions, businesses, and professional teams interact and manage their workflows. Instead of relying on multiple disconnected tools for meetings, messaging, content sharing, and scheduling, Meetza brings everything together in one intelligent ecosystem.
+
+The platform enables seamless group-based collaboration through real-time chat, video meetings, structured group management, and centralized file and content sharing. It is built to support both learning and productivity environments, ensuring that communication and organization happen in a structured and efficient way.
+
+Beyond traditional collaboration tools, Meetza introduces an AI-powered layer that enhances user experience through smart summaries for videos and PDFs, helping users quickly understand and extract key information from content. In addition, the platform includes an intelligent chatbot that assists users with platform-related queries and navigation, making the system easier and more interactive to use.
+
+Additionally, Meetza provides a unified management system for Leaders and Super Admins, allowing full control over groups, users, meetings, and content from a single dashboard. With integrated scheduling, real-time notifications, and calendar synchronization, the platform ensures that users stay continuously informed and organized.
+
+Overall, Meetza is designed as an all-in-one smart ecosystem that combines collaboration, communication, content management, and AI intelligence into a single unified experience.
+
+---
+
+## 🎯 Platform Goals
+- **Unified Collaboration Hub:** Build a single platform that integrates meetings, messaging, group management, and scheduling in one seamless experience.
+- **Dedicated Meeting System:** Provide a seamless meeting experience with scheduling and management all in one place, ensuring smooth organization and control of all meetings within the platform.
+- **AI-Powered Intelligence:** AI summaries for meetings, videos and PDFs, plus a chatbot that answers users’ questions about Meetza and its content.
+- **Video Sessions Management:** Empower leaders to share and manage video sessions beyond meetings, enabling higher user engagement with educational and work-related content, and ensuring everything is easily accessible in one centralized platform.
+- **Integrated Calendar System:** Allow members to view all upcoming meetings with their schedules, dates, and details in a clear and organized calendar interface.
+- **Unified Leadership Control:** Empower leaders to manage everything—meetings, groups, content, and members—through a centralized dashboard and seamless in-app controls.
+- **Real-Time Notification System:** Keep users instantly updated on all activities including messages, meetings, and group content, delivered in real-time through both in-app and email notifications.
+- **Dark & Light Mode Support:** Offer theme customization for a better user experience.
+- **White-Label Branding Experience:** Empower organizations to apply their own branding, including logos and visual identity, for a fully customized platform experience.
+
+---
+
+## 👥 Target Audience
+- **Members:** Users who join groups, engage in chats, attend meetings, access and save videos, and interact with all shared content seamlessly.
+- **Leaders:** Users who create and manage groups, meetings, and content.
+- **Super Admins:** Users with full administrative control over organizations, branding, and platform settings.
 
 ---
 
