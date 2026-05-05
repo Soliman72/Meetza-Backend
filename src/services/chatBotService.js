@@ -12,6 +12,7 @@ exports.chat = async (req) => {
   const { message, conversation_id } = req.body || {};
   const userId = req.user?.id || "anonymous";
   const userName = req.user?.name || "User";
+  const userRole = req.user?.role || "Member";
 
   if (!message || typeof message !== "string") {
     const error = new Error("Message is required");
@@ -31,7 +32,7 @@ exports.chat = async (req) => {
   }
 
   const context = await buildContext(message);
-  const reply = await askGemini(message, context, { userName });
+  const reply = await askGemini(message, context, { userName, userRole });
   await chatBotCacheRepo.upsertReply({
     questionKey: cacheKey,
     normalizedQuestion: cacheKey,
