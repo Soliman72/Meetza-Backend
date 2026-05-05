@@ -1,6 +1,10 @@
 /**
  * Each group includes its leader (`admin`). That user is created as
  * `Administrator` and linked via `group_admin` (OWNER) when seeds run.
+ *
+ * Optional on each admin: `position_title` or `position` — creates a row in `position` if absent.
+ * Optional on each group: `group_content_name`, `group_content_description` — default content uses
+ * `${group_name} Content` and group `description` when omitted.
  */
 module.exports = [
   {
@@ -101,7 +105,7 @@ module.exports = [
     semester: "Fall",
     group_photo: "https://res.cloudinary.com/dax2irx1f/image/upload/v1772145824/posters/n4c2qysd1oxqkzr4te4v.jpg",
     admin: {
-      name: "Hussein Karan",
+      name: "Hussein Karam",
       email: "Husseinkaram@gmual.com",
       role: "Administrator",
       user_photo: "",

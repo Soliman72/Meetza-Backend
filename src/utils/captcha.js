@@ -10,10 +10,16 @@ exports.verifyCaptcha = async (captchaToken) => {
     },
   });
 
-  const { success, score } = response.data;
+  const { success, score, "error-codes": errorCodesRaw } = response.data || {};
+  const errorCodes = Array.isArray(errorCodesRaw)
+    ? errorCodesRaw.filter(Boolean)
+    : [];
 
   if (!success) {
-    throw new Error("CAPTCHA verification failed");
+    const details = errorCodes.length > 0 ? ` (${errorCodes.join(", ")})` : "";
+    throw new Error(
+      `CAPTCHA verification failed: ${errorCodes.length} error(s)${details}`,
+    );
   }
 
   if (score !== undefined && score < 0.5) {

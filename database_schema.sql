@@ -71,7 +71,6 @@ CREATE TABLE IF NOT EXISTS `position` (
 
 -- =============================================
 -- 5. GROUP CONTENT TABLE
--- Note: group_id foreign key will be added after group table is created
 -- =============================================
 CREATE TABLE IF NOT EXISTS `group_content` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -144,6 +143,7 @@ CREATE TABLE IF NOT EXISTS `group_membership` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
+-- 9. MEETING TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `meeting` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS `meeting` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 9a. MEETING SERIES (weekly recurrence template; id matches meeting.series_id)
+-- 10. MEETING SERIES (weekly recurrence template; id matches meeting.series_id)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `meeting_series` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -202,7 +202,7 @@ CREATE TABLE IF NOT EXISTS `meeting_series` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 9b. MEETING PARTICIPANT TABLE (members in a meeting)
+-- 11. MEETING PARTICIPANT TABLE (members in a meeting)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `meeting_participant` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -258,7 +258,7 @@ CREATE TABLE IF NOT EXISTS `video` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 10a. VIDEO TRANSCRIPT & SUMMARY TABLE
+-- 12. VIDEO TRANSCRIPT & SUMMARY TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `video_transcript_summary` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS `video_transcript_summary` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 10b. RESOURCE AI METADATA TABLE (for PDFs, etc.)
+-- 13. RESOURCE AI METADATA TABLE (for PDFs, etc.)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `resource_ai_metadata` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS `resource_ai_metadata` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 11. COMMENT TABLE
+-- 14. COMMENT TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `comment` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -330,7 +330,7 @@ CREATE TABLE IF NOT EXISTS `comment` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 12. LIKE TABLE
+-- 15. LIKE TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `like` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -354,7 +354,7 @@ CREATE TABLE IF NOT EXISTS `like` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 13. SAVED VIDEO TABLE
+-- 16. SAVED VIDEO TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `saved_video` (
     `member_id` VARCHAR(36) NOT NULL,
@@ -375,7 +375,7 @@ CREATE TABLE IF NOT EXISTS `saved_video` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 13a. VIDEO WATCH PROGRESS (per user; home "Watching" / "Completed")
+-- 17. VIDEO WATCH PROGRESS (per user; home "Watching" / "Completed")
 -- =============================================
 CREATE TABLE IF NOT EXISTS `video_watch_progress` (
     `user_id` VARCHAR(36) NOT NULL,
@@ -396,7 +396,7 @@ CREATE TABLE IF NOT EXISTS `video_watch_progress` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 14. NOTIFICATIONS TABLE
+-- 18. NOTIFICATIONS TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `notifications` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -420,7 +420,9 @@ CREATE TABLE IF NOT EXISTS `notifications` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Optional payload for "pending group approval" notifications (not in title/message).
+-- =============================================
+-- 19. NOTIFICATION PENDING GROUP ACTION TABLE
+-- =============================================
 CREATE TABLE IF NOT EXISTS `notification_pending_group_action` (
     `notification_id` VARCHAR(36) NOT NULL PRIMARY KEY,
     `pending_group_id` VARCHAR(36) NOT NULL,
@@ -434,14 +436,8 @@ CREATE TABLE IF NOT EXISTS `notification_pending_group_action` (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- If `notification_pending_group_action` exists without `status`:
--- ALTER TABLE notification_pending_group_action ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | approved | rejected' AFTER reject_url;
-
--- If you temporarily added a JSON `metadata` column on `notifications`, remove it after switching to the table above:
--- ALTER TABLE notifications DROP COLUMN metadata;
-
 -- =============================================
--- 15. GROUP MESSAGE TABLE
+-- 20. GROUP MESSAGE TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `group_message` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -469,7 +465,7 @@ CREATE TABLE IF NOT EXISTS `group_message` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 16. GROUP MESSAGE MEDIA TABLE
+-- 21. GROUP MESSAGE MEDIA TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `group_message_media` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -498,7 +494,7 @@ CREATE TABLE IF NOT EXISTS `group_message_media` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 17. MESSAGE READ STATUS TABLE
+-- 22. MESSAGE READ STATUS TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `message_read_status` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -524,7 +520,7 @@ CREATE TABLE IF NOT EXISTS `message_read_status` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 18. SOCIAL AUTH TABLE
+-- 23. SOCIAL AUTH TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `social_auth` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -543,11 +539,7 @@ CREATE TABLE IF NOT EXISTS `social_auth` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- END OF SCHEMA
--- =============================================
-
--- =============================================
--- 19. GROUP ADMIN TABLE (multi-admin per group)
+-- 24. GROUP ADMIN TABLE (multi-admin per group)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `group_admin` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -575,7 +567,7 @@ CREATE TABLE IF NOT EXISTS `group_admin` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 20. MEETING ADMIN TABLE (multi-admin per meeting)
+-- 25. MEETING ADMIN TABLE (multi-admin per meeting)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `meeting_admin` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -603,7 +595,7 @@ CREATE TABLE IF NOT EXISTS `meeting_admin` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 21. MESSAGE REACTION TABLE
+-- 26. MESSAGE REACTION TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `message_reaction` (
     `id`         VARCHAR(36) NOT NULL,
@@ -626,7 +618,7 @@ CREATE TABLE IF NOT EXISTS `message_reaction` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 22a. COMPANIES & PER-COMPANY SETTINGS (multi-tenant; before organization_domain FK)
+-- 27. COMPANIES & PER-COMPANY SETTINGS (multi-tenant; before organization_domain FK)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `companies` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -637,6 +629,9 @@ CREATE TABLE IF NOT EXISTS `companies` (
     INDEX `idx_companies_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =============================================
+-- 28. COMPANY SETTINGS TABLE
+-- =============================================
 CREATE TABLE IF NOT EXISTS `company_settings` (
     `company_id` VARCHAR(36) NOT NULL PRIMARY KEY,
     `system_name` VARCHAR(255) NOT NULL DEFAULT 'Meetza',
@@ -657,7 +652,7 @@ CREATE TABLE IF NOT EXISTS `company_settings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 22. ORGANIZATION DOMAIN TABLE (all domains: global legacy rows company_id NULL, or linked to a company)
+-- 29. ORGANIZATION DOMAIN TABLE (all domains: global legacy rows company_id NULL, or linked to a company)
 -- =============================================
 CREATE TABLE IF NOT EXISTS `organization_domain` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -675,10 +670,8 @@ CREATE TABLE IF NOT EXISTS `organization_domain` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Existing DB: add company_id + nullable auth to organization_domain, migrate company_domains data if any, then DROP company_domains.
-
 -- =============================================
--- 23. PENDING GROUP TABLE
+-- 30. PENDING GROUP TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `pending_groups` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -713,7 +706,7 @@ CREATE TABLE IF NOT EXISTS `pending_groups` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 24. PENDING GROUP ADMIN TABLE
+-- 31. PENDING GROUP ADMIN TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `pending_group_admins` (
     `id` VARCHAR(36) PRIMARY KEY,
@@ -740,7 +733,7 @@ CREATE TABLE IF NOT EXISTS `pending_group_admins` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 25. CHAT BOT CACHE TABLE
+-- 32. CHAT BOT CACHE TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS `chat_bot_cache` (
     `id` VARCHAR(36) NOT NULL PRIMARY KEY,

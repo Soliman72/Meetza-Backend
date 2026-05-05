@@ -3,6 +3,7 @@ const authService = require("../services/auth/authService");
 const authOAuthService = require("../services/authOAuthService");
 const authValidator = require("../validators/authValidator");
 const { success: resSuccess, error: resError } = require("../dto");
+const { getAttemptsInfo } = require("../utils/loginAttempts");
 
 exports.register = async (req, res) => {
   try {
@@ -19,7 +20,13 @@ exports.login = async (req, res) => {
     const result = await authService.login(req.body);
     res.status(200).json(resSuccess(result));
   } catch (e) {
-    res.status(400).json(resError(e.message));
+    const info = getAttemptsInfo(req.body?.email);
+    res.status(400).json({
+      ...resError(e.message),
+      failedAttempts: info.count,
+      requiresCaptcha: info.requiresCaptcha,
+      remaining: info.remaining,
+    });
   }
 };
 

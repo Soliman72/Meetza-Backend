@@ -41,10 +41,15 @@ function clearAttempts(email) {
 function getAttemptsInfo(email) {
   const entry = getAttempts(email);
   if (!entry) {
-    return { remaining: MAX_FAILED_ATTEMPTS, requiresCaptcha: false };
+    return {
+      count: 0,
+      remaining: MAX_FAILED_ATTEMPTS,
+      requiresCaptcha: false,
+    };
   }
   const remaining = Math.max(0, MAX_FAILED_ATTEMPTS - entry.count);
   return {
+    count: entry.count,
     remaining,
     requiresCaptcha: entry.count >= MAX_FAILED_ATTEMPTS,
   };
