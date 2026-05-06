@@ -36,7 +36,7 @@ registerMeetingSocket(io);
 notificationSocket.setSocket(io);
 notificationSocket.registerNotificationSocket(io);
 
-const port = process.env.PORT;
+const port = process.env.PORT || process.env.port;
 
 const getLocalIP = () => {
   const interfaces = os.networkInterfaces();
