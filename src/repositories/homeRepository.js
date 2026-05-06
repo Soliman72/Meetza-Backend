@@ -135,19 +135,24 @@ exports.findMostInterestedVideos = async (whereSql, params) => {
       v.duration,
       v.group_id,
       g.group_name,
-      (SELECT COUNT(*) FROM \`like\` l WHERE l.video_id = v.id AND l.like_type = 1) AS likes_count,
-      (SELECT COUNT(*) FROM comment c WHERE c.video_id = v.id) AS comments_count,
-      (SELECT COUNT(*) FROM saved_video sv WHERE sv.video_id = v.id) AS saved_count,
-      (
-        (SELECT COUNT(*) FROM \`like\` l2 WHERE l2.video_id = v.id AND l2.like_type = 1) +
-        (SELECT COUNT(*) FROM comment c2 WHERE c2.video_id = v.id) +
-        (SELECT COUNT(*) FROM saved_video sv2 WHERE sv2.video_id = v.id)
-      ) AS interest_score,
+      COALESCE(l.likes_count, 0) AS likes_count,
+      COALESCE(c.comments_count, 0) AS comments_count,
+      COALESCE(sv.saved_count, 0) AS saved_count,
+      (COALESCE(l.likes_count, 0) + COALESCE(c.comments_count, 0) + COALESCE(sv.saved_count, 0)) AS interest_score,
       ${WATCH_PROGRESS_SELECT}
     FROM video v
     LEFT JOIN \`group\` g ON g.id = v.group_id
     LEFT JOIN video_watch_progress vwp
       ON vwp.video_id = v.id AND vwp.user_id = ?
+    LEFT JOIN (
+      SELECT video_id, COUNT(*) AS likes_count FROM \`like\` WHERE like_type = 1 GROUP BY video_id
+    ) l ON l.video_id = v.id
+    LEFT JOIN (
+      SELECT video_id, COUNT(*) AS comments_count FROM comment GROUP BY video_id
+    ) c ON c.video_id = v.id
+    LEFT JOIN (
+      SELECT video_id, COUNT(*) AS saved_count FROM saved_video GROUP BY video_id
+    ) sv ON sv.video_id = v.id
     ${whereSql}
     ORDER BY interest_score DESC, v.updated_at DESC
     LIMIT ?

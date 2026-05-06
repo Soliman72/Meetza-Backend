@@ -1,5 +1,11 @@
 const db = require("../config/db");
 const { normalizeToArray, normalizeAndValidate } = require("../utils/normalize");
+const pendingGroupRepository = require("./pendingGroupRepository");
+const groupAdminRepository = require("./groupAdminRepository");
+const meetingRepository = require("./meetingRepository");
+const meetingAdminRepository = require("./meetingAdminRepository");
+const groupMembershipRepository = require("./group_memberShipRepository");
+const userRepository = require("./userRepository");
 
 const toNullable = (value) => (value === undefined ? null : value);
 
@@ -19,95 +25,14 @@ exports.createGroup = async (data) => {
   ]);
 };
 
-exports.createPendingGroup = async (data) => {
-  const sql = `
-    INSERT INTO pending_groups
-    (id, group_name, description, group_photo, year, semester, created_by, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-  await db.promise().execute(sql, [
-    data.id,
-    data.group_name,
-    data.description ?? null,
-    data.group_photo ?? null,
-    data.year,
-    data.semester,
-    data.created_by,
-    data.status || "pending",
-  ]);
-};
-
-exports.createPendingGroupAdmin = async (data) => {
-  const sql = `
-    INSERT INTO pending_group_admins
-    (id, pending_group_id, user_id, role, assigned_by)
-    VALUES (?, ?, ?, ?, ?)
-  `;
-  await db.promise().execute(sql, [
-    data.id,
-    data.pending_group_id,
-    data.user_id,
-    data.role || "ADMIN",
-    data.assigned_by,
-  ]);
-};
-
-exports.findPendingGroupById = async (id) => {
-  const [rows] = await db.promise().execute(
-    `SELECT pg.*
-     FROM pending_groups pg
-     WHERE pg.id = ?`,
-    [id]
-  );
-  return rows[0] || null;
-};
-
-exports.getPendingGroups = async () => {
-  const [rows] = await db.promise().execute(
-    `SELECT pg.*, u.name AS created_by_name, u.email AS created_by_email
-     FROM pending_groups pg
-     JOIN user u ON u.id = pg.created_by
-     WHERE pg.status = 'pending'
-     ORDER BY pg.created_at DESC`
-  );
-  return rows;
-};
-
-exports.getPendingGroupAdmins = async (pendingGroupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT pga.*, u.name, u.email
-     FROM pending_group_admins pga
-     JOIN user u ON u.id = pga.user_id
-     WHERE pga.pending_group_id = ?
-     ORDER BY FIELD(pga.role, 'OWNER', 'ADMIN'), pga.created_at ASC`,
-    [pendingGroupId]
-  );
-  return rows;
-};
-
-exports.updatePendingGroupStatus = async ({
-  id,
-  status,
-  approvedBy = null,
-  rejectedBy = null,
-  rejectionReason = null,
-}) => {
-  await db.promise().execute(
-    `UPDATE pending_groups
-     SET status = ?,
-         approved_by = COALESCE(?, approved_by),
-         approved_at = CASE WHEN ? = 'approved' THEN CURRENT_TIMESTAMP ELSE approved_at END,
-         rejected_by = COALESCE(?, rejected_by),
-         rejected_at = CASE WHEN ? = 'rejected' THEN CURRENT_TIMESTAMP ELSE rejected_at END,
-         rejection_reason = ?
-     WHERE id = ?`,
-    [status, approvedBy, status, rejectedBy, status, rejectionReason, id]
-  );
-};
-
-exports.deletePendingGroup = async (id) => {
-  await db.promise().execute("DELETE FROM pending_groups WHERE id = ?", [id]);
-};
+// Pending Groups
+exports.createPendingGroup = pendingGroupRepository.createPendingGroup;
+exports.createPendingGroupAdmin = pendingGroupRepository.createPendingGroupAdmin;
+exports.findPendingGroupById = pendingGroupRepository.findPendingGroupById;
+exports.getPendingGroups = pendingGroupRepository.getPendingGroups;
+exports.getPendingGroupAdmins = pendingGroupRepository.getPendingGroupAdmins;
+exports.updatePendingGroupStatus = pendingGroupRepository.updatePendingGroupStatus;
+exports.deletePendingGroup = pendingGroupRepository.deletePendingGroup;
 
 exports.findById = async (id) => {
   const [rows] = await db.promise().execute(
@@ -119,16 +44,13 @@ exports.findById = async (id) => {
 
 exports.validateAdminIds = async (adminIds) => {
   if (!Array.isArray(adminIds) || adminIds.length === 0) return [];
-
   const cleanIds = [...new Set(adminIds.map((id) => String(id).trim()).filter(Boolean))];
   if (!cleanIds.length) return [];
-
   const placeholders = cleanIds.map(() => "?").join(",");
   const [rows] = await db.promise().execute(
     `SELECT user_id FROM administrator WHERE user_id IN (${placeholders})`,
     cleanIds
   );
-
   return rows.map((r) => r.user_id);
 };
 
@@ -160,7 +82,6 @@ exports.getAllGroups = async (req) => {
     .filter((y) => ["1", "2", "3", "4"].includes(y));
 
   if (yearsArray.length) {
-
     where.push(` g.year IN (${yearsArray.map(() => "?").join(",")})`);
     params.push(...yearsArray);
   }
@@ -175,7 +96,6 @@ exports.getAllGroups = async (req) => {
     where.push(` g.semester IN (${semestersArray.map(() => "?").join(",")})`);
     params.push(...semestersArray);
   }
-
 
   if (where.length) {
     sql += " WHERE " + where.join(" AND ");
@@ -194,34 +114,34 @@ exports.getAllGroupsForContext = async () => {
 
 exports.getGroupById = async (id) => {
   const [rows] = await db.promise().execute("SELECT * FROM `group` WHERE id = ?", [id]);
-
   return rows[0];
 };
 
+// Group Admins
+exports.getAdminsByGroupIds = groupAdminRepository.getAdminsByGroupIds;
+exports.getOwner = groupAdminRepository.getOwner;
+exports.countOwners = groupAdminRepository.countOwners;
+exports.removeGroupAdmin = groupAdminRepository.removeGroupAdmin;
+exports.countOtherAdmins = groupAdminRepository.countOtherAdmins;
+exports.getGroupAdmins = groupAdminRepository.getGroupAdmins;
+exports.getAnyOtherAdmin = groupAdminRepository.getAnyOtherAdmin;
+exports.updateGroupAdmin = groupAdminRepository.updateGroupAdmin;
+exports.getGroupRoleByUser = groupAdminRepository.getGroupRoleByUser;
+exports.getGroupOwner = groupAdminRepository.getGroupOwner;
 
-exports.getAdminsByGroupIds = async (groupIds) => {
-  if (!Array.isArray(groupIds) || groupIds.length === 0) return [];
-
-  const safeIds = groupIds
-    .filter((id) => typeof id === "string" || typeof id === "number")
-    .map((id) => id.toString().trim())
-    .filter(Boolean);
-
-  if (safeIds.length === 0) return [];
-
-  const placeholders = safeIds.map(() => "?").join(",");
-  const [admins] = await db.promise().execute(
-    `SELECT 
-          ga.group_id, ga.user_id, ga.role, ga.assigned_by, ga.created_at,
-          u.name, u.email, u.user_photo
-       FROM group_admin ga
-       JOIN user u ON u.id = ga.user_id
-       WHERE ga.group_id IN (${placeholders})
-       ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC`,
-    safeIds
+// User logic
+exports.getUserRole = userRepository.getUserRole || (async (userId) => {
+  const [rows] = await db.promise().execute(`SELECT role FROM user WHERE id = ?`, [userId]);
+  return rows[0]?.role;
+});
+exports.getUserByEmail = async (email, groupId) => {
+  const [rows] = await db.promise().execute(
+    `SELECT u.*, ga.role AS group_admin_role FROM user u 
+     JOIN group_admin ga ON ga.user_id = u.id
+     WHERE u.email = ? AND ga.group_id = ?`,
+    [email, groupId]
   );
-
-  return admins;
+  return rows[0];
 };
 
 exports.updateGroup = async (id, updates) => {
@@ -233,17 +153,14 @@ exports.updateGroup = async (id, updates) => {
         semester = COALESCE(?, semester)
         WHERE id = ?`;
 
-  const [result] = await db
-    .promise()
-    .execute(sql, [
-      toNullable(updates.group_name),
-      toNullable(updates.description),
-      toNullable(updates.group_photo),
-      toNullable(updates.year),
-      toNullable(updates.semester),
-      id,
-    ]);
-
+  await db.promise().execute(sql, [
+    toNullable(updates.group_name),
+    toNullable(updates.description),
+    toNullable(updates.group_photo),
+    toNullable(updates.year),
+    toNullable(updates.semester),
+    id,
+  ]);
 };
 
 exports.delete = async (id) => {
@@ -258,71 +175,7 @@ exports.getGroupMeetingIds = async (groupId) => {
   return rows;
 };
 
-exports.getUserByEmail = async (email, groupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT
-       u.*,
-       ga.role AS group_admin_role
-     FROM user u 
-    JOIN group_admin ga ON ga.user_id = u.id
-     WHERE u.email = ? AND ga.group_id = ?`,
-    [email, groupId]
-  );
-  return rows[0];
-};
-
-exports.getOwner = async (groupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT ga.user_id FROM group_admin ga 
-     WHERE ga.group_id = ? AND ga.role = 'OWNER'`,
-    [groupId]
-  );
-  return rows;
-};
-
-exports.countOwners = async (groupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT COUNT(*) as count FROM group_admin WHERE group_id = ? AND role = 'OWNER'`,
-    [groupId]
-  );
-  return rows[0].count;
-};
-
-exports.removeGroupAdmin = async (groupId, userId) => {
-  const [result] = await db.promise().execute(
-    `DELETE FROM group_admin 
-     WHERE group_id = ? AND user_id = ?`,
-    [groupId, userId]
-  );
-  return result.affectedRows > 0;
-};
-
-exports.removeMeetingAdminByUser = async (groupId, userId) => {
-  const [result] = await db.promise().execute(
-    `DELETE ma FROM meeting_admin ma
-     JOIN meeting m ON m.id = ma.meeting_id
-     WHERE m.group_id = ? AND ma.user_id = ?`,
-    [groupId, userId]
-  );
-  return result.affectedRows > 0;
-};
-
-exports.countOtherAdmins = async (userId, groupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT COUNT(*) as count FROM group_admin 
-     WHERE group_id = ? AND user_id <> ? AND role <> 'OWNER'`,
-    [groupId, userId]
-  );
-  return rows[0].count;
-};
-
-exports.getUserRole = async (userId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT role FROM user WHERE id = ?`,
-    [userId]
-  );
-  return rows[0].role;
-};
+exports.removeMeetingAdminByUser = meetingAdminRepository.removeMeetingAdminByUser;
 
 exports.getGroupAsSuperAdmin = async (groupId) => {
   const [rows] = await db.promise().execute(
@@ -341,7 +194,6 @@ exports.getGroupAsSuperAdmin = async (groupId) => {
     `,
     [groupId]
   );
-
   return rows[0];
 };
 
@@ -370,7 +222,6 @@ exports.getGroupWithAccess = async (userId, groupId) => {
     `,
     [userId, userId, groupId]
   );
-
   return rows[0];
 };
 
@@ -413,87 +264,12 @@ exports.getGroupMedia = async (groupId) => {
     `,
     [groupId, groupId]
   );
-
   return rows;
 };
 
-
-exports.getGroupAdmins = async (groupId) => {
-  const [rows] = await db.promise().query(
-    `
-    SELECT
-      ga.user_id,
-      u.name,
-      u.email,
-      u.user_photo,
-      ga.role,
-      ga.assigned_by,
-      ga.created_at
-    FROM group_admin ga
-    JOIN user u ON u.id = ga.user_id
-    WHERE ga.group_id = ?
-    ORDER BY FIELD(ga.role, 'OWNER', 'ADMIN'), ga.created_at ASC
-    `,
-    [groupId]
-  );
-
-  return rows;
-};
-
-exports.getAnyOtherAdmin = async (userId, groupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT user_id FROM group_admin 
-     WHERE group_id = ? AND user_id <> ? AND role <> 'OWNER' LIMIT 1 `,
-    [groupId, userId]
-  );
-  return rows[0];
-};
-
-exports.updateGroupAdmin = async (groupId, userId, role) => {
-  await db.promise().execute(
-    `UPDATE group_admin 
-     SET role = ? 
-     WHERE group_id = ? AND user_id = ?`,
-    [role, groupId, userId]
-  );
-};
-
-exports.getGroupRoleByUser = async (userId, groupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT role FROM group_admin 
-     WHERE group_id = ? AND user_id = ?`,
-    [groupId, userId]
-  );
-  return rows[0].role;
-};
-
-exports.getGroupOwner = async (groupId) => {
-  const [rows] = await db.promise().execute(
-    `SELECT user_id FROM group_admin 
-     WHERE group_id = ? AND role = 'OWNER'`,
-    [groupId]
-  );
-  return rows[0];
-};
-
-/* ——— leave group (transactional; pass pool connection from service) ——— */
-
-exports.leaveSelectMyAdminRole = async (conn, groupId, userId) => {
-  const [rows] = await conn.query(
-    "SELECT role FROM group_admin WHERE group_id = ? AND user_id = ? LIMIT 1",
-    [groupId, userId]
-  );
-  return rows;
-};
-
-exports.leaveCountOtherAdmins = async (conn, groupId, excludeUserId) => {
-  const [rows] = await conn.query(
-    "SELECT COUNT(*) AS c FROM group_admin WHERE group_id = ? AND user_id <> ?",
-    [groupId, excludeUserId]
-  );
-  return Number(rows[0]?.c) || 0;
-};
-
+// Leave Group Logic
+exports.leaveSelectMyAdminRole = groupAdminRepository.leaveSelectMyAdminRole;
+exports.leaveCountOtherAdmins = groupAdminRepository.leaveCountOtherAdmins;
 exports.leaveListAdministratorCandidates = async (conn, excludeUserId) => {
   const [rows] = await conn.query(
     `SELECT u.id, u.name, u.user_photo
@@ -507,7 +283,6 @@ exports.leaveListAdministratorCandidates = async (conn, excludeUserId) => {
   );
   return rows;
 };
-
 exports.leaveFindAdministratorByUserId = async (conn, userId) => {
   const [rows] = await conn.query(
     `SELECT a.user_id
@@ -519,19 +294,7 @@ exports.leaveFindAdministratorByUserId = async (conn, userId) => {
   );
   return rows;
 };
-
-exports.leaveUpsertGroupAdmin = async (
-  conn,
-  { id, groupId, userId, role, assignedBy }
-) => {
-  await conn.query(
-    `INSERT INTO group_admin (id, group_id, user_id, role, assigned_by)
-     VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE role = VALUES(role), assigned_by = VALUES(assigned_by)`,
-    [id, groupId, userId, role, assignedBy]
-  );
-};
-
+exports.leaveUpsertGroupAdmin = groupAdminRepository.leaveUpsertGroupAdmin;
 exports.leaveSelectMeetingIdsByGroup = async (conn, groupId) => {
   const [rows] = await conn.query(
     "SELECT id FROM meeting WHERE group_id = ?",
@@ -539,38 +302,7 @@ exports.leaveSelectMeetingIdsByGroup = async (conn, groupId) => {
   );
   return rows;
 };
-
-exports.leaveUpsertMeetingAdmin = async (
-  conn,
-  { id, meetingId, userId, role, assignedBy }
-) => {
-  await conn.query(
-    `INSERT INTO meeting_admin (id, meeting_id, user_id, role, assigned_by)
-     VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE role = VALUES(role), assigned_by = VALUES(assigned_by)`,
-    [id, meetingId, userId, role, assignedBy]
-  );
-};
-
-exports.leaveDeleteGroupAdmin = async (conn, groupId, userId) => {
-  await conn.query(
-    "DELETE FROM group_admin WHERE group_id = ? AND user_id = ?",
-    [groupId, userId]
-  );
-};
-
-exports.leaveDeleteMeetingAdminsForUserInGroup = async (conn, groupId, userId) => {
-  await conn.query(
-    `DELETE ma FROM meeting_admin ma
-     JOIN meeting m ON m.id = ma.meeting_id
-     WHERE m.group_id = ? AND ma.user_id = ?`,
-    [groupId, userId]
-  );
-};
-
-exports.leaveDeleteGroupMembership = async (conn, groupId, memberId) => {
-  await conn.query(
-    "DELETE FROM group_membership WHERE group_id = ? AND member_id = ?",
-    [groupId, memberId]
-  );
-};
+exports.leaveUpsertMeetingAdmin = meetingAdminRepository.leaveUpsertMeetingAdmin;
+exports.leaveDeleteGroupAdmin = groupAdminRepository.leaveDeleteGroupAdmin;
+exports.leaveDeleteMeetingAdminsForUserInGroup = meetingAdminRepository.leaveDeleteMeetingAdminsForUserInGroup;
+exports.leaveDeleteGroupMembership = groupMembershipRepository.leaveDeleteGroupMembership;

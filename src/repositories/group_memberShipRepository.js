@@ -15,12 +15,28 @@ exports.exists = async (group_id, member_id) => {
   return rows.length > 0;
 };
 
+exports.findGroupMembership = async (groupId, userId) => {
+  const [rows] = await db.promise().query(
+    "SELECT id FROM group_membership WHERE group_id = ? AND member_id = ?",
+    [groupId, userId]
+  );
+  return rows[0] || null;
+};
+
 exports.removeGroupMembership = async (memberId, groupId) => {
   const [result] = await db.promise().execute(
     "DELETE FROM group_membership WHERE member_id = ? AND group_id = ?",
     [memberId, groupId]
   );
   return result.affectedRows > 0;
+};
+
+exports.getMemberIdsByGroupId = async (groupId) => {
+  const [rows] = await db.promise().query(
+    "SELECT member_id FROM group_membership WHERE group_id = ?",
+    [groupId]
+  );
+  return rows.map((r) => r.member_id);
 };
 
 exports.findGroupById = async (group_id) => {
@@ -91,4 +107,11 @@ exports.getAllGroupedRows = async (userId, userRole) => {
 
   const [rows] = await db.promise().query(query, params);
   return rows;
+};
+
+exports.leaveDeleteGroupMembership = async (conn, groupId, memberId) => {
+  await conn.query(
+    "DELETE FROM group_membership WHERE group_id = ? AND member_id = ?",
+    [groupId, memberId]
+  );
 };
