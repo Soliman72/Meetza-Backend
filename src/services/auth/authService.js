@@ -45,7 +45,7 @@ exports.register = async (data) => {
 
   await sendVerificationEmail(email, code, "Verify your email");
 
-  return { id, name, email, role: "Member" };
+  return { message: "Registration success check your email for verification" };
 };
 
 exports.login = async (data) => {

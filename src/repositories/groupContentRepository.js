@@ -36,8 +36,8 @@ exports.createContent = async ({ id, content_name, content_description, group_id
   ]);
 };
 
-exports.getAllContents = async (query, params) => {
-  const [rows] = await db.promise().query(query, params);
+exports.getAllContents = async () => {
+  const [rows] = await db.promise().query("SELECT * FROM group_content");
   return rows;
 };
 

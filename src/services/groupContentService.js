@@ -97,8 +97,7 @@ exports.getAllGroupContentsWithResources = async (req) => {
   const { name } = req.query;
   const userId = req.user.id;
   const userRole = req.user.role;
-  const { query, params } = exports.buildListQuery(userId, userRole, name);
-  const results = await repo.getAllContents(query, params);
+  const results = await repo.getAllContents(req);
   if (!results.length) return [];
 
   const contentIds = results.map((c) => c.id);
@@ -312,7 +311,11 @@ exports.addFilesToGroupContent = async (req) => {
   const groupMeta = await repo.getGroupNameAndOwnerAdmin(group_id);
   const groupName = groupMeta?.group_name || "the group";
   const senderId = groupMeta?.administrator_id ?? null;
-
+  console.log("group_id", group_id);
+  console.log("memberIds", memberIds);
+  console.log("groupMeta", groupMeta);
+  console.log("groupName", groupName);
+  console.log("senderId", senderId);
   for (const memberId of memberIds) {
     await createNotification({
       memberId,

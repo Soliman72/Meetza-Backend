@@ -68,7 +68,7 @@ exports.updateUser = async (req) => {
   const theme = req.body.theme;
   const supportedThemes = ["light", "dark"];
   if (theme && !supportedThemes.includes(theme)) {
-    throw new Error("Invalid theme. Supported themes: light, dark, blue, green");
+    throw new Error("Invalid theme. Supported themes: light, dark");
   }
 
   const updateData = Object.fromEntries(
