@@ -41,6 +41,11 @@ exports.getAnalyticsReport = async (req) => {
   const isSuperAdmin = req.isSuperAdmin || req.user.role === "Super_Admin";
 
   let end = endDate ? new Date(endDate) : new Date();
+  // When endDate is a date-only string (e.g. "2026-05-04"), extend to end of day
+  // so BETWEEN captures all records from that day, not just exact midnight
+  if (endDate && !endDate.includes("T")) {
+    end.setUTCHours(23, 59, 59, 999);
+  }
   let start;
   let isAllTime = false;
 
