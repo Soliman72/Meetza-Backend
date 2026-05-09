@@ -2,8 +2,13 @@
 
 A comprehensive Node.js backend application for managing educational groups, meetings, videos, and real-time communication. Meetza provides a platform for administrators and members to collaborate through groups, schedule meetings, share content, and interact via chat.
 
+## Quick start (local & Docker)
+
+For step-by-step setup including **MySQL**, **Docker Compose**, and the **`python-ai-service`** summarizer, see **[QUICKSTART.md](./QUICKSTART.md)**.
+
 ## 📋 Table of Contents
 
+- [Quick start (local & Docker)](./QUICKSTART.md)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Prerequisites](#prerequisites)

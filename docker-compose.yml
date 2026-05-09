@@ -1,13 +1,40 @@
 version: "3.8"
 
 services:
+  # FastAPI summarization (video + PDF)
+  summarize-api:
+    build: ./python-ai-service
+    container_name: meetza-summarize-api
+    restart: unless-stopped
+    environment:
+      # Must match backend SUMMARIZE_API_KEY; override in .env for production.
+      - API_KEY=${SUMMARIZE_API_KEY:-dev-meetza-summarize-key}
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-medium}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      - WHISPER_COMPUTE=${WHISPER_COMPUTE:-int8}
+    ports:
+      - "0.0.0.0:${SUMMARIZE_API_PORT:-8000}:8000"
+    volumes:
+      - ./python-ai-service/cache:/app/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - meetza-network
+
   # Backend API Service
   backend:
     build: .
     container_name: meetza-backend
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_started
+      summarize-api:
+        condition: service_healthy
     ports:
       # Expose port 4000 on all network interfaces (accessible from anywhere)
       # Format: "host_port:container_port" or "0.0.0.0:host_port:container_port"
@@ -33,10 +60,11 @@ services:
       - EMAIL_PORT=${EMAIL_PORT}
       - EMAIL_USER=${EMAIL_USER}
       - EMAIL_PASS=${EMAIL_PASS}
-      - FACEBOOK_APP_ID=${FACEBOOK_APP_ID}
-      - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET}
-      - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID}
-      - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
+      # Inside Docker, use compose service DNS (host .env localhost URLs would fail).
+      - SUMMARIZE_API_URL=http://summarize-api:8000/summarize_video
+      - SUMMARIZE_PDF_API_URL=http://summarize-api:8000/summarize_pdf
+      - SUMMARIZE_API_KEY=${SUMMARIZE_API_KEY:-dev-meetza-summarize-key}
+      - SUMMARIZE_API_TIMEOUT_MS=${SUMMARIZE_API_TIMEOUT_MS:-1800000}
     volumes:
       - ./uploads:/app/uploads
     networks:

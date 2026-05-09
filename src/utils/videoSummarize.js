@@ -9,8 +9,8 @@ const httpError = require("./httpError");
  * Calls an external API to get transcript, summary, and topics.
  */
 const internalSummarizeVideo = async (videoId, url, localization, file = null) => {
-  const apiUrl = process.env.SUMMARIZE_API_URL || "http://127.0.0.1:8000/summarize_video";
-  const apiKey = process.env.SUMMARIZE_API_KEY || "#$$0limaaaannnn##sddsdsd23233522dd";
+  const apiUrl = process.env.SUMMARIZE_API_URL;
+  const apiKey = process.env.SUMMARIZE_API_KEY;
   const timeoutMs = Number(process.env.SUMMARIZE_API_TIMEOUT_MS) || 1800000;
 
   const form = new FormData();
