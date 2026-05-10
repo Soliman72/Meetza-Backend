@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Determine if we should use local or external MariaDB
-if [ "$DB_HOST" = "db" ] || [ "$DB_HOST" = "172.17.0.1" ]; then
-    echo "Using external database at $DB_HOST. Skipping internal MariaDB startup."
+# Determine if we should use local or external database
+if [ -n "$DB_HOST" ] && [ "$DB_HOST" != "127.0.0.1" ] && [ "$DB_HOST" != "localhost" ]; then
+    echo "Using database at $DB_HOST. Skipping internal MariaDB startup."
 else
     echo "Starting MariaDB..."
     /etc/init.d/mariadb start

@@ -11,7 +11,7 @@ const db = mysql.createPool({
   waitForConnections: true,
   connectionLimit: Number(process.env.DB_POOL_LIMIT) || 20,
   queueLimit: 0,
-  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 15000,
+  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 30000,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
 });
