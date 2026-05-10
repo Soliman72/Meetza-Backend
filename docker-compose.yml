@@ -66,6 +66,7 @@ services:
       - SUMMARIZE_API_KEY=${SUMMARIZE_API_KEY:-dev-meetza-summarize-key}
       - SUMMARIZE_API_TIMEOUT_MS=${SUMMARIZE_API_TIMEOUT_MS:-1800000}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - COMPANY_ID=${COMPANY_ID}
     volumes:
       - ./uploads:/app/uploads
     networks:

@@ -1,6 +1,8 @@
 const cloudinary = require("cloudinary").v2;
 const multer = require("multer");
-const { Readable } = require("stream");
+const fs = require("fs");
+const path = require("path");
+const { compressVideo } = require("../utils/videoCompressor");
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -19,42 +21,79 @@ const getResourcesCloudinaryConfig = () => ({
     process.env.CLOUDINARY_API_SECRET,
 });
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+// Use Disk Storage to support large files without crashing RAM
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const tempDir = path.join(__dirname, "../../uploads/temp");
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    cb(null, tempDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
+  },
+});
 
-function bufferToStream(buffer) {
-  const stream = new Readable();
-  stream.push(buffer);
-  stream.push(null);
-  return stream;
-}
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 1024 * 1024 * 500 } // 500MB limit
+});
 
+/**
+ * Uploads a file to Cloudinary using the Large Upload API (for videos/large files).
+ * Automatically compresses videos if they exceed the 100MB Cloudinary limit.
+ */
 const uploadToCloudinary = (
   file,
   folder = "default_folder",
   resourceType = "auto"
 ) => {
-  return new Promise((resolve, reject) => {
-    console.log("Cloudinary Config:", cloudinary.config().cloud_name);
-    console.log("File to upload:", file.originalname || "buffer");
+  return new Promise(async (resolve, reject) => {
+    if (!file || !file.path) {
+      return reject(new Error("No file path provided for upload"));
+    }
 
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: folder,
-        resource_type: resourceType,
-        timeout: 1800000, // 30 minutes
-      },
+    let uploadPath = file.path;
+    let isCompressed = false;
+
+    // Trigger compression for videos over 95MB to stay under Cloudinary's 100MB free limit
+    if (resourceType === "video" && file.size > 95 * 1024 * 1024) {
+      try {
+        console.log(`[Uploader] File is ${ (file.size / (1024*1024)).toFixed(2) }MB. Compressing to stay under 100MB limit...`);
+        uploadPath = await compressVideo(file.path);
+        isCompressed = true;
+      } catch (compressError) {
+        console.error("[Uploader] Compression failed, attempting original upload:", compressError.message);
+      }
+    }
+
+    console.log(`Starting Cloudinary upload for: ${file.originalname} (${resourceType})`);
+
+    const options = {
+      folder: folder,
+      resource_type: resourceType,
+      timeout: 1800000, // 30 minutes
+    };
+
+    cloudinary.uploader.upload_large(
+      uploadPath,
+      options,
       (error, result) => {
+        // Clean up: delete temp file(s) from local disk
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        if (isCompressed && fs.existsSync(uploadPath)) fs.unlinkSync(uploadPath);
+
         if (error) {
-          console.error("Cloudinary Error:", error);
+          console.error("Cloudinary Upload Error:", error);
           return reject(error);
         }
-        console.log("Cloudinary Result:", result);
+
+        console.log("Cloudinary Upload Success:", result.secure_url);
         resolve(result.secure_url);
       }
     );
-
-    bufferToStream(file.buffer).pipe(stream);
   });
 };
 
@@ -63,30 +102,7 @@ const uploadToCloudinaryResources = (
   folder = "meeting_content_resources",
   resourceType = "raw"
 ) => {
-  return new Promise((resolve, reject) => {
-    const resourcesConfig = getResourcesCloudinaryConfig();
-
-    cloudinary.config(resourcesConfig);
-    console.log("Cloudinary Resources Config:", cloudinary.config().cloud_name);
-
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: folder,
-        resource_type: resourceType,
-        timeout: 1800000, // 30 minutes
-      },
-      (error, result) => {
-        if (error) {
-          console.error("Cloudinary Resources Error:", error);
-          return reject(error);
-        }
-        console.log("Cloudinary Resources Result:", result);
-        resolve(result.secure_url);
-      }
-    );
-
-    bufferToStream(file.buffer).pipe(stream);
-  });
+  return uploadToCloudinary(file, folder, resourceType);
 };
 
 module.exports = { upload, uploadToCloudinary, uploadToCloudinaryResources };

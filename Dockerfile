@@ -3,7 +3,7 @@ FROM node:18-bookworm-slim
 
 # Install MariaDB server and dos2unix to fix line endings
 RUN apt-get update && \
-    apt-get install -y mariadb-server dos2unix && \
+    apt-get install -y mariadb-server dos2unix ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory

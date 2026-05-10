@@ -13,7 +13,9 @@ const httpError = require("../utils/httpError");
 
 exports.createVideo = async (req) => {
   await videoValidator.createVideoValidator(req);
+  // if req have already video_url and poster_url don't need to upload it 
   const { videoUrl, posterUrl } = await uploadFiles(req);
+
   console.log("videoUrl :", videoUrl)
   console.log("posterUrl :", posterUrl)
   const duration = await createVideoDuration(req.body.duration);
