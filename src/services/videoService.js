@@ -38,10 +38,12 @@ exports.createVideo = async (req) => {
   const localization = getRequestedLocalization(req);
   const file = req.files?.video_file ? req.files.video_file[0] : null;
 
-  // Run summarization in the background to avoid Request Timeout
-  internalSummarizeVideo(video.id, videoUrl, localization, file).catch((err) => {
-    console.error(`[Background Summary Error] Video ${video.id}:`, err.message);
-  });
+  // Wait for summarization to complete so the returned video object contains it
+  try {
+    await internalSummarizeVideo(video.id, videoUrl, localization, file);
+  } catch (err) {
+    console.error(`[Summary Error] Video ${video.id}:`, err.message);
+  }
 
   // Return the full video object (with summary and topics)
   return exports.getVideoById({ params: { id: video.id }, user: req.user });
@@ -125,19 +127,32 @@ exports.summarizeVideo = async (req) => {
     throw httpError(404, "Video not found");
   }
 
-  const cachedRow = await videoRepo.getTranscriptSummaryByVideoAndLanguage(
-    resolvedVideoId,
-    localization
-  );
-  if (cachedRow?.transcript || cachedRow?.summary) {
-    return {
+  const allRows = await videoRepo.listTranscriptSummariesByVideoId(resolvedVideoId);
+  if (allRows && allRows.length > 0) {
+    const response = {
       video_id: resolvedVideoId,
-      language: cachedRow.language,
-      transcript: cachedRow.transcript,
-      summary: cachedRow.summary,
-      topics: normalizeTopics(cachedRow.topics),
+      summaries: {},
       cached: true,
     };
+
+    allRows.forEach((row) => {
+      response.summaries[row.language] = {
+        summary: row.summary,
+        topics: normalizeTopics(row.topics),
+        transcript: row.transcript,
+      };
+    });
+
+    // For backward compatibility, also return at top level if requested language exists
+    const requested = allRows.find(r => r.language === localization);
+    if (requested) {
+      response.language = requested.language;
+      response.summary = requested.summary;
+      response.topics = normalizeTopics(requested.topics);
+      response.transcript = requested.transcript;
+    }
+
+    return response;
   }
 
   const file = req.file || null;
