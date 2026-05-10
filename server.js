@@ -104,23 +104,9 @@ server.listen(port, "0.0.0.0", () => {
   if (!isDocker && localIP !== "localhost") {
     console.log(`Network access:  http://${localIP}:${port}`);
     console.log(`Socket.IO URL:   http://${localIP}:${port}`);
-    console.log("=".repeat(60));
-    console.log(`\nTo access from another device:`);
-    console.log(`   1. Same network: Use http://${localIP}:${port}`);
-    console.log(`   2. Different network: Use ngrok (see docker-compose.yml)`);
-    console.log(`   3. Check Windows Firewall if same-network access fails\n`);
   } else if (isDocker) {
     console.log(`Docker container running on port ${port}`);
     console.log(`Socket.IO URL:   http://localhost:${port}`);
-    console.log("=".repeat(60));
-    console.log(`\nAccess options:`);
-    console.log(
-      `   1. Same network: Use your host IP address (run 'npm run get-ip' on host)`,
-    );
-    console.log(
-      `   2. Different network: Use ngrok service (if enabled in docker-compose)`,
-    );
-    console.log(`   3. Check docker-compose.yml for ngrok public URL\n`);
   } else {
     console.log(`Network access:  http://${localIP}:${port}`);
     console.log(`Socket.IO URL:   http://${localIP}:${port}`);
