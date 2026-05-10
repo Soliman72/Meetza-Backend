@@ -37,9 +37,14 @@ const internalSummarizeVideo = async (videoId, url, localization, file = null) =
     });
     apiData = apiRes.data;
   } catch (err) {
-    if (err.response?.data) {
-      const detail = err.response.data.detail || err.response.data.message || "Unknown error";
-      const error = httpError(500, `Summarization API error: ${detail}`);
+    if (err.response) {
+      if (err.response.status === 413) {
+        const error = httpError(413, "The video file is too large for the summarization service.");
+        error.details = "Try uploading a shorter or lower resolution video.";
+        throw error;
+      }
+      const detail = err.response.data?.detail || err.response.data?.message || "Unknown error";
+      const error = httpError(err.response.status || 500, `Summarization API error: ${detail}`);
       error.details = err.response.data;
       throw error;
     }
