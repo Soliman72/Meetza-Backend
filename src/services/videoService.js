@@ -13,16 +13,16 @@ const httpError = require("../utils/httpError");
 
 exports.createVideo = async (req) => {
   await videoValidator.createVideoValidator(req);
-
   const { videoUrl, posterUrl } = await uploadFiles(req);
-
+  console.log("videoUrl :", videoUrl)
+  console.log("posterUrl :", posterUrl)
   const duration = await createVideoDuration(req.body.duration);
   const slug = await createUniqueVideoSlug(req.body.title);
   const owner = await groupRepository.getGroupOwner(req.body.group_id);
   if (!owner) {
     throw httpError(404, "Owner not found");
   }
-  
+
   const video = await videoRepo.createVideo({
     title: req.body.title,
     video_url: videoUrl,
@@ -160,5 +160,14 @@ exports.summarizeVideo = async (req) => {
     throw httpError(400, "No file or url provided");
   }
 
-  return internalSummarizeVideo(resolvedVideoId, url, localization, file);
+  // Run in background to avoid timeouts
+  internalSummarizeVideo(resolvedVideoId, url, localization, file).catch((err) => {
+    console.error(`[Background Summary Error] Video ${resolvedVideoId}:`, err.message);
+  });
+
+  return {
+    video_id: resolvedVideoId,
+    message: "Summarization started in background",
+    status: "processing"
+  };
 };

@@ -14,6 +14,7 @@ exports.uploadPhoto = async (file) => {
 
 exports.uploadVideo = async (file) => {
   validateFileType(file, "video");
+  console.log("file here videoUrl:", file)
   return await uploadToCloudinary(file, "videos");
 };
 

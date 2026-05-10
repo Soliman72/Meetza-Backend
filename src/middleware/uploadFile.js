@@ -35,13 +35,21 @@ const uploadToCloudinary = (
   resourceType = "auto"
 ) => {
   return new Promise((resolve, reject) => {
+    console.log("Cloudinary Config:", cloudinary.config().cloud_name);
+    console.log("File to upload:", file.originalname || "buffer");
+
     const stream = cloudinary.uploader.upload_stream(
       {
         folder: folder,
         resource_type: resourceType,
+        timeout: 1800000, // 30 minutes
       },
       (error, result) => {
-        if (error) return reject(error);
+        if (error) {
+          console.error("Cloudinary Error:", error);
+          return reject(error);
+        }
+        console.log("Cloudinary Result:", result);
         resolve(result.secure_url);
       }
     );
@@ -59,14 +67,20 @@ const uploadToCloudinaryResources = (
     const resourcesConfig = getResourcesCloudinaryConfig();
 
     cloudinary.config(resourcesConfig);
+    console.log("Cloudinary Resources Config:", cloudinary.config().cloud_name);
 
     const stream = cloudinary.uploader.upload_stream(
       {
         folder: folder,
         resource_type: resourceType,
+        timeout: 1800000, // 30 minutes
       },
       (error, result) => {
-        if (error) return reject(error);
+        if (error) {
+          console.error("Cloudinary Resources Error:", error);
+          return reject(error);
+        }
+        console.log("Cloudinary Resources Result:", result);
         resolve(result.secure_url);
       }
     );

@@ -18,7 +18,10 @@ const {
 
 const app = createApp();
 const server = http.createServer(app);
-server.timeout = 0; // Disable default Node.js timeout for long-running AI requests
+server.timeout = 0;
+server.headersTimeout = 0;
+server.requestTimeout = 0;
+server.keepAliveTimeout = 60 * 60 * 1000; // 1 hour
 const io = new Server(server, {
   cors: {
     origin: "*",

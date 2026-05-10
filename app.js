@@ -28,6 +28,7 @@ const reportRouter = require("./src/routes/reportRoute");
 const domainRouter = require("./src/routes/domainRoute");
 const companyRouter = require("./src/routes/companyRoute");
 const chatBotRouter = require("./src/routes/chatBotRoute");
+const watchProgressRouter = require("./src/routes/watchProgressRoute");
 
 /**
  * Express application (HTTP routes, middleware, static files).
@@ -67,9 +68,10 @@ function createApp() {
   app.use("/api/reports", reportRouter);
   app.use("/api/organization-domain", domainRouter);
   app.use("/api/companies", companyRouter);
+  app.use("/api/video-watch-progress", watchProgressRouter);
 
   setupSwagger(app);
-  
+
   // Global Error Handler for parsing errors (like 413 Request Entity Too Large)
   app.use((err, req, res, next) => {
     if (err.type === "entity.too.large" || err.status === 413) {

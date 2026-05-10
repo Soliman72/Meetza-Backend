@@ -6,6 +6,7 @@ exports.uploadFiles = async (req) => {
 
   if (req.files?.video_file) {
     videoUrl = await uploadVideo(req.files.video_file[0]);
+    console.log("file here videoUrl:", videoUrl)
   } else if (req.body?.video_file) {
     videoUrl = await uploadVideo(req.body.video_file);
   }
