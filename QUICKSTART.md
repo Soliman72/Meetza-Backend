@@ -7,13 +7,24 @@ This repo ships two parts:
 
 ---
 
+## Architecture Highlights (Deployment-Ready)
+
+This repository includes several advanced optimizations for reliable production deployment:
+
+- **⚡ Optimized AI Startup**: Implements **Lazy Loading** and **Background Initialization** for heavy AI models (Whisper/ONNX). This prevents the server from blocking during startup and ensures instant availability.
+- **🔗 Intelligent Service Orchestration**: Uses **Docker Health Checks** to ensure the Backend only starts communicating with the AI service once it is fully ready, eliminating connection errors.
+- **🛠 Robust Error Handling**: Automated fallback mechanisms for API connections ensure stability even if environment variables are missing.
+- **📂 Smart Containerization**: Optimized `start.sh` logic to intelligently handle database connections based on the deployment environment.
+
+---
+
 ## Prerequisites
 
 ### For local development
 
 - Node.js **18+** recommended (Dockerfile uses Node 18)
 - **MySQL 8** (or compatible), with schema loaded from `database_schema.sql`
-- **FFmpeg**, **Poppler**, **Tesseract** (already in the Python Docker image; required on the host if you run `python-ai-service` locally — see [`python-ai-service/README.md`](./python-ai-service/README.md))
+- **FFmpeg** (already in the Python Docker image; required on the host if you run `python-ai-service` locally — see [`python-ai-service/README.md`](./python-ai-service/README.md))
 
 ### For Docker
 
@@ -68,14 +79,28 @@ Runs **MySQL**, **`summarize-api`** (FastAPI under `python-ai-service`), and **`
    | REST + Socket.IO | `http://localhost:4000` (or `PORT` from `.env` for host mapping) |
    | AI API + `/docs` | `http://localhost:8000` |
 
-4. Logs
+4. Verification
+
+   Check the status of your containers:
+   ```bash
+   docker ps
+   ```
+   Wait until `meetza-summarize-api` shows `(healthy)`. You can also check the logs to see the health checks passing:
+
+   ```bash
+   docker compose logs -f summarize-api
+   ```
+   You should see regular health pings confirming the service is ready:
+   `INFO: 127.0.0.1:XXXXX - "GET /health HTTP/1.1" 200 OK`
+
+5. Logs
 
    ```bash
    docker compose logs -f backend
    docker compose logs -f summarize-api
    ```
 
-5. Stop
+6. Stop
 
    ```bash
    docker compose down

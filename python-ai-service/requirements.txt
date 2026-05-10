@@ -8,7 +8,5 @@ ctranslate2>=4.0,<5
 huggingface-hub>=0.21
 tokenizers>=0.13,<1
 onnxruntime>=1.14,<2
-pytesseract>=0.3.10
-pdf2image>=1.17.0
 pypdf>=4.0.0
 pdfplumber>=0.11.0

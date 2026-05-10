@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 # Install system dependencies including ffmpeg
 RUN apt-get update && \
-    apt-get install -y ffmpeg poppler-utils tesseract-ocr curl && \
+    apt-get install -y ffmpeg curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

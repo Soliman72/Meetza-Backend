@@ -35,15 +35,13 @@ exports.createVideo = async (req) => {
     group_id: req.body.group_id,
   });
 
-  try {
-    const localization = getRequestedLocalization(req);
-    const file = req.files?.video_file ? req.files.video_file[0] : null;
-    await internalSummarizeVideo(video.id, videoUrl, localization, file);
-  } catch (err) {
-    // Rollback: Delete the video if summarization fails
-    await videoRepo.deleteVideo(video.id, req);
-    throw err;
-  }
+  const localization = getRequestedLocalization(req);
+  const file = req.files?.video_file ? req.files.video_file[0] : null;
+
+  // Run summarization in the background to avoid Request Timeout
+  internalSummarizeVideo(video.id, videoUrl, localization, file).catch((err) => {
+    console.error(`[Background Summary Error] Video ${video.id}:`, err.message);
+  });
 
   // Return the full video object (with summary and topics)
   return exports.getVideoById({ params: { id: video.id }, user: req.user });
