@@ -38,7 +38,10 @@ exports.createVideo = async (req) => {
   const localization = getRequestedLocalization(req);
   const file = req.files?.video_file ? req.files.video_file[0] : null;
 
-  // Wait for summarization to complete so the returned video object contains it
+  // Set request timeout to infinity to allow long AI processing
+  if (req.setTimeout) req.setTimeout(0);
+
+  // Wait for summarization to complete as requested
   try {
     await internalSummarizeVideo(video.id, videoUrl, localization, file);
   } catch (err) {
