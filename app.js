@@ -28,7 +28,6 @@ const reportRouter = require("./src/routes/reportRoute");
 const domainRouter = require("./src/routes/domainRoute");
 const companyRouter = require("./src/routes/companyRoute");
 const chatBotRouter = require("./src/routes/chatBotRoute");
-const watchProgressRouter = require("./src/routes/watchProgressRoute");
 
 /**
  * Express application (HTTP routes, middleware, static files).
@@ -68,7 +67,6 @@ function createApp() {
   app.use("/api/reports", reportRouter);
   app.use("/api/organization-domain", domainRouter);
   app.use("/api/companies", companyRouter);
-  app.use("/api/video-watch-progress", watchProgressRouter);
 
   setupSwagger(app);
 
