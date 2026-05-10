@@ -38,15 +38,10 @@ exports.createVideo = async (req) => {
   const localization = getRequestedLocalization(req);
   const file = req.files?.video_file ? req.files.video_file[0] : null;
 
-  // Set request timeout to infinity to allow long AI processing
-  if (req.setTimeout) req.setTimeout(0);
-
-  // Wait for summarization to complete as requested
-  try {
-    await internalSummarizeVideo(video.id, videoUrl, localization, file);
-  } catch (err) {
-    console.error(`[Summary Error] Video ${video.id}:`, err.message);
-  }
+  // Run summarization in the background to avoid timeouts
+  internalSummarizeVideo(video.id, videoUrl, localization, file).catch((err) => {
+    console.error(`[Background Summary Error] Video ${video.id}:`, err.message);
+  });
 
   // Return the full video object (with summary and topics)
   return exports.getVideoById({ params: { id: video.id }, user: req.user });

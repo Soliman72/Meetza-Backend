@@ -207,7 +207,6 @@ exports.addFilesToGroupContent = async (req) => {
   const localization = getRequestedLocalization(req);
 
   if (hasFiles) {
-    if (req.setTimeout) req.setTimeout(0);
     for (const file of req.files) {
       try {
         const isPdf = file.mimetype && file.mimetype.includes("pdf");
@@ -239,13 +238,9 @@ exports.addFilesToGroupContent = async (req) => {
         });
 
         if (isPdf) {
-          try {
-            await internalSummarizePdf(resourceId, fileUrl, localization, file);
-          } catch (summarizeError) {
-            // Rollback: Delete the resource if summarization fails
-            await repo.deleteResource(resourceId, id);
-            throw summarizeError;
-          }
+          internalSummarizePdf(resourceId, fileUrl, localization, file).catch((err) => {
+            console.error(`[Background PDF Summary Error] Resource ${resourceId}:`, err.message);
+          });
         }
 
         uploadedResources.push({
@@ -284,12 +279,9 @@ exports.addFilesToGroupContent = async (req) => {
 
       // Summarize PDF links if they end with .pdf
       if (link.toLowerCase().endsWith(".pdf")) {
-        try {
-          await internalSummarizePdf(resourceId, link, localization);
-        } catch (summarizeError) {
-          await repo.deleteResource(resourceId, id);
-          throw summarizeError;
-        }
+        internalSummarizePdf(resourceId, link, localization).catch((err) => {
+          console.error(`[Background Link Summary Error] Resource ${resourceId}:`, err.message);
+        });
       }
 
       uploadedResources.push({
