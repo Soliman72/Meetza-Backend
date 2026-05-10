@@ -124,29 +124,67 @@ function registerWeeklySeriesJob(seriesRow) {
   const seriesId = seriesRow.id;
   cancelWeeklySeriesJob(seriesId);
 
-  // Run exactly 1 minute after the server starts (or after the series is activated)
-  const scheduledTime = new Date(Date.now() + 60 * 1000);
+  // Create a proper recurrence rule for node-schedule
+  const rule = new schedule.RecurrenceRule();
+  rule.dayOfWeek = seriesRow.day_of_week; // 0-6 (Sunday-Saturday)
+  rule.hour = seriesRow.start_hour;
+  rule.minute = seriesRow.start_minute;
+  rule.second = seriesRow.start_second || 0;
 
-  schedule.scheduleJob(
-    jobNameForSeries(seriesId),
-    scheduledTime,
-    (fireDate) => {
-      spawnWeeklyOccurrence(seriesId, fireDate).catch((err) => {
-        console.error(
-          `[meeting recurrence] spawnWeeklyOccurrence failed for ${seriesId}:`,
-          err,
-        );
-      });
-    },
-  );
+  schedule.scheduleJob(jobNameForSeries(seriesId), rule, (fireDate) => {
+    spawnWeeklyOccurrence(seriesId, fireDate).catch((err) => {
+      console.error(
+        `[meeting recurrence] spawnWeeklyOccurrence failed for ${seriesId}:`,
+        err
+      );
+    });
+  });
+}
+
+/**
+ * Calculates the most recent scheduled occurrence for a weekly series.
+ */
+function getMostRecentOccurrenceDate(seriesRow) {
+  const now = new Date();
+  const occurrence = new Date(now);
+  occurrence.setHours(seriesRow.start_hour, seriesRow.start_minute, seriesRow.start_second || 0, 0);
+
+  // Adjust day of week
+  const currentDay = now.getDay();
+  const targetDay = seriesRow.day_of_week;
+  let dayDiff = currentDay - targetDay;
+  
+  if (dayDiff < 0) {
+    dayDiff += 7;
+  }
+  
+  occurrence.setDate(now.getDate() - dayDiff);
+
+  // If the calculated occurrence is in the future compared to 'now', it means the last one was 7 days ago
+  if (occurrence > now) {
+    occurrence.setDate(occurrence.getDate() - 7);
+  }
+
+  return occurrence;
 }
 
 async function bootstrapMeetingRecurrenceJobs() {
   const [rows] = await db
     .promise()
     .query("SELECT * FROM meeting_series WHERE is_active = 1");
+  
   for (const row of rows) {
+    // 1. Register the recurring job for future occurrences
     registerWeeklySeriesJob(row);
+
+    // 2. Check and spawn the most recent occurrence if it was missed
+    const recentDate = getMostRecentOccurrenceDate(row);
+    spawnWeeklyOccurrence(row.id, recentDate).catch((err) => {
+      console.error(
+        `[meeting recurrence] bootstrap recovery failed for series ${row.id}:`,
+        err.message
+      );
+    });
   }
 }
 

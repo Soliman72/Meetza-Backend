@@ -1,5 +1,5 @@
 const groupContentService = require("../services/groupContentService");
-const { upload } = require("../middleware/uploadFile");
+const { upload, cleanupRequestFiles } = require("../middleware/uploadFile");
 
 const sendError = (res, err) => {
   const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 500;
@@ -63,6 +63,8 @@ exports.addFilesToGroupContent = (req, res) => {
       });
     } catch (err) {
       return sendError(res, err);
+    } finally {
+      cleanupRequestFiles(req);
     }
   });
 };

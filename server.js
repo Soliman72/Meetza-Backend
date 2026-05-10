@@ -15,6 +15,7 @@ const registerMeetingSocket = require("./src/sockets/meetingSocket");
 const {
   bootstrapMeetingRecurrenceJobs,
 } = require("./src/services/meetingRecurrenceScheduler");
+const { clearTempFolder } = require("./src/middleware/uploadFile");
 
 const app = createApp();
 const server = http.createServer(app);
@@ -84,6 +85,7 @@ const getLocalIP = () => {
 };
 
 server.listen(port, "0.0.0.0", () => {
+  clearTempFolder();
   bootstrapMeetingRecurrenceJobs().catch((err) => {
     console.error("[meeting recurrence] Bootstrap failed:", err.message);
   });
