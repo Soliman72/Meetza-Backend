@@ -1,0 +1,10 @@
+version: "3"
+agent:
+  authtoken: 3DVdnTi63nA4NngdvNJObDh1HwY_2UtW3uy3M47Fe8xYWR74z
+tunnels:
+  backend:
+    addr: backend:4000
+    proto: http
+  python:
+    addr: summarize-api:8000
+    proto: http

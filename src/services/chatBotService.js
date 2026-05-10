@@ -10,13 +10,17 @@ function normalizeMessage(message) {
 
 exports.chat = async (req) => {
   const { message, conversation_id } = req.body || {};
+  const userId = req.user?.id || "anonymous";
+  const userName = req.user?.name || "User";
+  const userRole = req.user?.role || "Member";
+
   if (!message || typeof message !== "string") {
     const error = new Error("Message is required");
     error.status = 400;
     throw error;
   }
 
-  const cacheKey = normalizeMessage(message);
+  const cacheKey = `${userId}:${normalizeMessage(message)}`;
   const cachedReply = await chatBotCacheRepo.getValidReplyByKey(cacheKey);
   if (cachedReply) {
     return {
@@ -28,7 +32,7 @@ exports.chat = async (req) => {
   }
 
   const context = await buildContext(message);
-  const reply = await askGemini(message, context);
+  const reply = await askGemini(message, context, { userName, userRole });
   await chatBotCacheRepo.upsertReply({
     questionKey: cacheKey,
     normalizedQuestion: cacheKey,

@@ -9,6 +9,7 @@
     "test:integration": "jest --selectProjects integration",
     "test:coverage": "jest --coverage",
     "dev": "nodemon server.js",
+    "start": "node server.js",
     "get-ip": "node scripts/get-server-ip.js",
     "tunnel": "node scripts/start-ngrok.js",
     "docker:up": "docker-compose up -d",

@@ -3,22 +3,57 @@ const db = require("../../src/config/db");
 const groups = require("../data/groupData");
 const { ensureAdministratorUser } = require("../utils/seedHelper");
 
+async function ensureDefaultGroupContent(dbConn, groupId, group) {
+  const [rows] = await dbConn.promise().query(
+    "SELECT id FROM group_content WHERE group_id = ? LIMIT 1",
+    [groupId]
+  );
+  if (rows.length > 0) return;
+
+  const contentName =
+    group.group_content_name || `${group.group_name} Content`;
+  const contentDescription =
+    group.group_content_description ?? group.description ?? null;
+
+  await dbConn.promise().query(
+    `INSERT INTO group_content (id, content_name, content_description, group_id)
+     VALUES (?, ?, ?, ?)`,
+    [uuidv4(), contentName, contentDescription, groupId]
+  );
+}
+
+/** Optional: admin.position_title or admin.position (string) → one position row per admin if missing. */
+async function ensureOptionalPosition(dbConn, userId, admin) {
+  const raw =
+    typeof admin.position_title === "string"
+      ? admin.position_title
+      : typeof admin.position === "string"
+        ? admin.position
+        : "Educational";
+  const title = raw.trim() || "Educational";
+  if (!title) return;
+
+  const [existing] = await dbConn.promise().query(
+    "SELECT id FROM `position` WHERE administrator_id = ? AND title = ? LIMIT 1",
+    [userId, title]
+  );
+  if (existing.length > 0) return;
+
+  await dbConn.promise().query(
+    "INSERT INTO `position` (id, title, administrator_id) VALUES (?, ?, ?)",
+    [uuidv4(), title, userId]
+  );
+}
+
 async function seedGroups() {
   for (const group of groups) {
-    const a = group.admin;
-    if (!a?.email || !a?.name) {
+    const admins = Array.isArray(group.admins) ? group.admins : group.admin ? [group.admin] : [];
+    if (admins.length === 0) {
       throw new Error(
-        `groupData: group "${group.group_name || "?"}" must include admin.name and admin.email`
+        `groupData: group "${group.group_name || "?"}" must include admin/admins with name and email`
       );
     }
-
-    const leaderRole = a.role || "Administrator";
-    const userId = await ensureAdministratorUser(db, {
-      name: a.name,
-      email: a.email,
-      role: leaderRole,
-      passwordPlain: a.password ?? undefined,
-    });
+    const seenEmails = new Set();
 
     const [existingGroup] = await db.promise().query(
       "SELECT id FROM `group` WHERE group_name = ?",
@@ -45,17 +80,43 @@ async function seedGroups() {
       );
     }
 
-    const [existingGa] = await db.promise().query(
-      "SELECT id FROM group_admin WHERE group_id = ? AND user_id = ?",
-      [groupId, userId]
-    );
+    await ensureDefaultGroupContent(db, groupId, group);
 
-    if (existingGa.length === 0) {
-      await db.promise().query(
-        `INSERT INTO group_admin (id, group_id, user_id, role, assigned_by)
-         VALUES (?, ?, ?, 'OWNER', NULL)`,
-        [uuidv4(), groupId, userId]
+    for (let idx = 0; idx < admins.length; idx += 1) {
+      const a = admins[idx];
+      if (!a?.email || !a?.name) {
+        throw new Error(
+          `groupData: group "${group.group_name || "?"}" has admin missing name/email`
+        );
+      }
+
+      const emailKey = String(a.email).trim().toLowerCase();
+      if (seenEmails.has(emailKey)) continue;
+      seenEmails.add(emailKey);
+
+      const leaderRole = a.role || "Administrator";
+      const userId = await ensureAdministratorUser(db, {
+        name: a.name,
+        email: a.email,
+        role: leaderRole,
+        passwordPlain: a.password ?? undefined,
+      });
+
+      await ensureOptionalPosition(db, userId, a);
+
+      const [existingGa] = await db.promise().query(
+        "SELECT id FROM group_admin WHERE group_id = ? AND user_id = ?",
+        [groupId, userId]
       );
+
+      if (existingGa.length === 0) {
+        const groupAdminRole = idx === 0 ? "OWNER" : "ADMIN";
+        await db.promise().query(
+          `INSERT INTO group_admin (id, group_id, user_id, role, assigned_by)
+           VALUES (?, ?, ?, ?, NULL)`,
+          [uuidv4(), groupId, userId, groupAdminRole]
+        );
+      }
     }
   }
 

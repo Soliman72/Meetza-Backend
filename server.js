@@ -18,6 +18,7 @@ const {
 
 const app = createApp();
 const server = http.createServer(app);
+server.timeout = 0; // Disable default Node.js timeout for long-running AI requests
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -36,7 +37,7 @@ registerMeetingSocket(io);
 notificationSocket.setSocket(io);
 notificationSocket.registerNotificationSocket(io);
 
-const port = process.env.PORT;
+const port = process.env.PORT || process.env.port;
 
 const getLocalIP = () => {
   const interfaces = os.networkInterfaces();

@@ -155,7 +155,7 @@ exports.createGroup = async (req) => {
 
   const id = uuidv4();
 
-  if (!req.isSuperAdmin && req.user.role === "Administrator") {
+  if (req.user.role === "Administrator" && !req.isSuperAdmin) {
     await repo.createPendingGroup({
       id,
       group_name: req.body.group_name,
@@ -173,7 +173,7 @@ exports.createGroup = async (req) => {
           id: uuidv4(),
           pending_group_id: id,
           user_id: adminId,
-          role: adminId === req.user.id ? "OWNER" : "ADMIN",
+          role: adminId === adminIds[0] ? "OWNER" : "ADMIN",
           assigned_by: req.user.id,
         })
       )
@@ -198,7 +198,7 @@ exports.createGroup = async (req) => {
     id,
     body: req.body,
     adminIds,
-    ownerId: req.user.id,
+    ownerId: adminIds[0],
     assignedBy: req.user.id,
     groupPhotoUrl: group_photo_url,
   });

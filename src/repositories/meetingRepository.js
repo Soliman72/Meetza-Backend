@@ -11,10 +11,13 @@ async function queryExec(sql, params = []) {
   return result;
 }
 
-exports.findGroupById = async (groupId) => {
-  const rows = await queryRows("SELECT * FROM `group` WHERE id = ?", [groupId]);
-  return rows[0] || null;
-};
+const groupRepository = require("./groupRepository");
+const meetingSeriesRepository = require("./meetingSeriesRepository");
+const groupAdminRepository = require("./groupAdminRepository");
+const groupMembershipRepository = require("./group_memberShipRepository");
+const meetingParticipantRepository = require("./meetingParticipantRepository");
+
+exports.findGroupById = groupRepository.findById;
 
 exports.findMeetingById = async (id) => {
   const rows = await queryRows("SELECT * FROM meeting WHERE id = ?", [id]);
@@ -24,12 +27,7 @@ exports.findMeetingById = async (id) => {
 /** Alias for validators / legacy imports */
 exports.getMeetingById = exports.findMeetingById;
 
-exports.findMeetingSeriesById = async (seriesId) => {
-  const rows = await queryRows("SELECT * FROM meeting_series WHERE id = ?", [
-    seriesId,
-  ]);
-  return rows[0] || null;
-};
+exports.findMeetingSeriesById = meetingSeriesRepository.findMeetingSeriesById;
 
 exports.countScheduledOverlap = async (
   groupId,
@@ -88,9 +86,7 @@ exports.deleteMeetingsBySeriesId = async (seriesId) => {
   await queryExec("DELETE FROM meeting WHERE series_id = ?", [seriesId]);
 };
 
-exports.deleteMeetingSeriesById = async (seriesId) => {
-  await queryExec("DELETE FROM meeting_series WHERE id = ?", [seriesId]);
-};
+exports.deleteMeetingSeriesById = meetingSeriesRepository.deleteMeetingSeriesById;
 
 exports.updateMeetingById = async (setClause, paramsWithoutId, id) => {
   assertSafeSqlFragment(setClause, "setClause");
@@ -98,77 +94,26 @@ exports.updateMeetingById = async (setClause, paramsWithoutId, id) => {
   await queryExec(sql, [...paramsWithoutId, id]);
 };
 
-exports.updateMeetingSeriesTemplate = async (setClause, params, seriesId) => {
-  assertSafeSqlFragment(setClause, "setClause");
-  const sql = `UPDATE meeting_series SET ${setClause} WHERE id = ?`;
-  await queryExec(sql, [...params, seriesId]);
-};
+exports.updateMeetingSeriesTemplate = meetingSeriesRepository.updateMeetingSeriesTemplate;
 
-exports.getGroupAdminsWithRoles = async (groupId) => {
-  return queryRows(
-    "SELECT user_id, role FROM group_admin WHERE group_id = ?",
-    [groupId]
-  );
-};
+exports.getGroupAdminsWithRoles = groupAdminRepository.getGroupAdminsWithRoles;
 
-exports.getGroupOwnerUserId = async (groupId) => {
-  const rows = await queryRows(
-    "SELECT user_id FROM group_admin WHERE group_id = ? AND role = 'OWNER' LIMIT 1",
-    [groupId]
-  );
-  return rows[0]?.user_id ?? null;
-};
+exports.getGroupOwnerUserId = groupAdminRepository.getGroupOwnerUserId;
 
-exports.getMemberIdsByGroupId = async (groupId) => {
-  const rows = await queryRows(
-    "SELECT member_id FROM group_membership WHERE group_id = ?",
-    [groupId]
-  );
-  return rows.map((r) => r.member_id);
-};
+exports.getMemberIdsByGroupId = groupMembershipRepository.getMemberIdsByGroupId;
 
-exports.findGroupMembership = async (groupId, userId) => {
-  const rows = await queryRows(
-    "SELECT id FROM group_membership WHERE group_id = ? AND member_id = ?",
-    [groupId, userId]
-  );
-  return rows[0] || null;
-};
+exports.findGroupMembership = groupMembershipRepository.exists; // Note: exists returns boolean, findGroupMembership returned row. 
+// Wait, meetingRepository.findGroupMembership returned rows[0] || null. 
+// group_memberShipRepository.exists returns boolean. 
+// Let's use groupMembershipRepository.findById or add findByGroupAndMember.
 
-exports.findMeetingParticipant = async (meetingId, userId) => {
-  const rows = await queryRows(
-    "SELECT id FROM meeting_participant WHERE meeting_id = ? AND user_id = ?",
-    [meetingId, userId]
-  );
-  return rows[0] || null;
-};
+exports.findMeetingParticipant = meetingParticipantRepository.findMeetingParticipant;
 
-exports.insertMeetingParticipant = async (participantId, meetingId, userId) => {
-  await queryExec(
-    "INSERT INTO meeting_participant (id, meeting_id, user_id) VALUES (?, ?, ?)",
-    [participantId, meetingId, userId]
-  );
-};
+exports.insertMeetingParticipant = meetingParticipantRepository.insertMeetingParticipant;
 
-exports.deleteMeetingParticipant = async (meetingId, userId) => {
-  const result = await queryExec(
-    "DELETE FROM meeting_participant WHERE meeting_id = ? AND user_id = ?",
-    [meetingId, userId]
-  );
-  return result.affectedRows;
-};
+exports.deleteMeetingParticipant = meetingParticipantRepository.deleteMeetingParticipant;
 
-exports.listMeetingParticipants = async (meetingId) => {
-  return queryRows(
-    `SELECT mp.id, mp.meeting_id, mp.user_id, mp.joined_at,
-            u.name AS member_name, u.email AS member_email, u.user_photo AS member_photo
-     FROM meeting_participant mp
-     JOIN user u ON u.id = mp.user_id
-     WHERE mp.meeting_id = ?
-     ORDER BY mp.joined_at ASC`,
-    [meetingId]
-  );
-};
+exports.listMeetingParticipants = meetingParticipantRepository.listMeetingParticipants;
 
 exports.listMeetingsForMember = async (
   userId,

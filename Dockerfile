@@ -1,5 +1,10 @@
-# Use Node.js LTS version
-FROM node:18-alpine
+# Use Node.js Debian-based image for apt support (needed for MariaDB)
+FROM node:18-bookworm-slim
+
+# Install MariaDB server
+RUN apt-get update && \
+    apt-get install -y mariadb-server && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -7,20 +12,18 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including devDependencies for nodemon)
+# Install all dependencies
 RUN npm ci
 
-# Copy application files
+# Copy application files and database schema
 COPY . .
 
-# Create uploads directory if it doesn't exist
-RUN mkdir -p uploads
+# Make the start script executable
+RUN chmod +x /app/start.sh
 
-# Expose the port
+# Expose the Node.js port and MySQL port
 EXPOSE 4000
+EXPOSE 3306
 
-# Start the application
-# Use npm run dev for development (with nodemon for hot reload)
-# For production, you can change this to: CMD ["node", "server.js"]
-CMD ["npm", "run", "dev"]
-
+# Start the application using the start script
+CMD ["/app/start.sh"]

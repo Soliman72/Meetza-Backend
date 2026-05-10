@@ -97,8 +97,7 @@ exports.getAllGroupContentsWithResources = async (req) => {
   const { name } = req.query;
   const userId = req.user.id;
   const userRole = req.user.role;
-  const { query, params } = exports.buildListQuery(userId, userRole, name);
-  const results = await repo.getAllContents(query, params);
+  const results = await repo.getAllContents(req);
   if (!results.length) return [];
 
   const contentIds = results.map((c) => c.id);
@@ -123,7 +122,10 @@ exports.getGroupContentById = async (req) => {
     throw notFound("Group content not found");
   }
   if (req.user.role !== "Super_Admin") {
-    const ok = await repo.hasUserAccessToGroupContent(row.group_id, req.user.id);
+    const ok = await repo.hasUserAccessToGroupContent(
+      row.group_id,
+      req.user.id,
+    );
     if (!ok) {
       throw forbidden("You do not have access to this group's content");
     }
@@ -149,7 +151,7 @@ exports.updateGroupContentById = async (req) => {
   const affected = await repo.updateContentFields(
     id,
     content_name ?? null,
-    content_description ?? null
+    content_description ?? null,
   );
   if (!affected) {
     throw notFound("Group content not found");
@@ -176,12 +178,10 @@ exports.addFilesToGroupContent = async (req) => {
   if (req.user.role !== "Super_Admin") {
     const admin = await repo.isUserGroupAdmin(
       groupContent.group_id,
-      req.user.id
+      req.user.id,
     );
     if (!admin) {
-      throw forbidden(
-        "Only group Leaders can add files to this content"
-      );
+      throw forbidden("Only group Leaders can add files to this content");
     }
   }
 
@@ -223,7 +223,7 @@ exports.addFilesToGroupContent = async (req) => {
         const fileUrl = await uploadToCloudinaryResources(
           file,
           "group_content_resources",
-          resourceType
+          resourceType,
         );
 
         const resourceId = uuidv4();
@@ -256,10 +256,7 @@ exports.addFilesToGroupContent = async (req) => {
         });
       } catch (fileError) {
         if (fileError.status) throw fileError;
-        console.error(
-          `Error uploading file ${file.originalname}:`,
-          fileError
-        );
+        console.error(`Error uploading file ${file.originalname}:`, fileError);
       }
     }
 
@@ -312,7 +309,6 @@ exports.addFilesToGroupContent = async (req) => {
   const groupMeta = await repo.getGroupNameAndOwnerAdmin(group_id);
   const groupName = groupMeta?.group_name || "the group";
   const senderId = groupMeta?.administrator_id ?? null;
-
   for (const memberId of memberIds) {
     await createNotification({
       memberId,
@@ -347,12 +343,10 @@ exports.deleteFileFromGroupContent = async (req) => {
   if (req.user.role !== "Super_Admin") {
     const admin = await repo.isUserGroupAdmin(
       groupContent.group_id,
-      req.user.id
+      req.user.id,
     );
     if (!admin) {
-      throw forbidden(
-        "Only group Leaders can delete files from this content"
-      );
+      throw forbidden("Only group Leaders can delete files from this content");
     }
   }
 
