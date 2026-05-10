@@ -36,7 +36,7 @@ exports.validateCreateMeeting = ({
     throw httpError(400, "Recording must be 1 or 0");
   }
   const isWeekly = parseWeeklyFlag(weekly);
-  if (isWeekly && status == "Scheduled") {
+  if (isWeekly && status !== "Scheduled") {
     throw httpError(
       400,
       "Weekly meetings must be created with status Scheduled"
