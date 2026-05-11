@@ -98,7 +98,7 @@ server.listen(port, "0.0.0.0", () => {
 
   console.log("\n" + "=".repeat(60));
   console.log(`Server is running!`);
-  console.log("=".repeat(60));
+  console.log("=".repeat(61));
   console.log(`Local access:    http://localhost:${port}`);
 
   if (!isDocker && localIP !== "localhost") {
