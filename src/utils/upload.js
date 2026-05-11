@@ -1,20 +1,35 @@
-const { uploadToCloudinary } = require("../middleware/uploadFile");
+const { uploadToCloudinary, deleteFile } = require("../middleware/uploadFile");
 const { validateFileType } = require("../validators/validateFiles");
 
 
 exports.uploadDocument = async (file) => {
-  validateFileType(file, "document");
-  return await uploadToCloudinary(file, "documents");
+  try {
+    validateFileType(file, "document");
+    return await uploadToCloudinary(file, "documents");
+  } catch (err) {
+    if (file && file.path) deleteFile(file.path);
+    throw err;
+  }
 };
 
 exports.uploadPhoto = async (file) => {
-  validateFileType(file, "image");
-  return await uploadToCloudinary(file, "posters");
+  try {
+    validateFileType(file, "image");
+    return await uploadToCloudinary(file, "posters");
+  } catch (err) {
+    if (file && file.path) deleteFile(file.path);
+    throw err;
+  }
 };
 
 exports.uploadVideo = async (file) => {
-  validateFileType(file, "video");
-  return await uploadToCloudinary(file, "videos");
+  try {
+    validateFileType(file, "video");
+    return await uploadToCloudinary(file, "videos", "video");
+  } catch (err) {
+    if (file && file.path) deleteFile(file.path);
+    throw err;
+  }
 };
 
 

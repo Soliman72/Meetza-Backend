@@ -33,7 +33,7 @@ exports.createMeeting = async (req) => {
     start_time,
     end_time,
     group_id,
-    status,
+    status = "Scheduled",
     description,
     recording,
     weekly,

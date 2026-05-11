@@ -32,6 +32,17 @@ This repository includes several advanced optimizations for reliable production 
 
 ---
 
+## 0. Clone the project
+
+First, clone the repository to your local machine:
+
+```bash
+git clone https://github.com/Soliman72/Meetza-Backend.git
+cd Meetza-Backend
+```
+
+---
+
 ## Option A — Docker (backend + MySQL + Python AI)
 
 Runs **MySQL**, **`summarize-api`** (FastAPI under `python-ai-service`), and **`backend`** together.

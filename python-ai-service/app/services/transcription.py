@@ -1,6 +1,6 @@
 from faster_whisper import WhisperModel
 
-from app.core.config import WHISPER_COMPUTE, WHISPER_DEVICE, WHISPER_MODEL_SIZE
+from app.core.config import WHISPER_COMPUTE, WHISPER_DEVICE, WHISPER_MODEL_SIZE, WHISPER_CACHE_DIR
 
 _whisper_model = None
 
@@ -12,6 +12,7 @@ def get_model():
             WHISPER_MODEL_SIZE,
             device=WHISPER_DEVICE,
             compute_type=WHISPER_COMPUTE,
+            download_root=WHISPER_CACHE_DIR,
         )
         print("[startup] Whisper ready ✓")
     return _whisper_model

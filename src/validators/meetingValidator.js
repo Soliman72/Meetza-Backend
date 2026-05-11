@@ -17,8 +17,8 @@ exports.validateCreateMeeting = ({
   start_time,
   end_time,
   group_id,
-  status,
   recording,
+  status = "Scheduled",
   weekly,
   posterFiles,
   bodyPoster,
@@ -26,20 +26,14 @@ exports.validateCreateMeeting = ({
   if (!posterFiles && !bodyPoster) {
     throw httpError(400, "Poster file is required");
   }
-  if (!title || !start_time || !end_time || !group_id || !status || !recording) {
+  if (!title || !start_time || !end_time || !group_id || !recording) {
     throw httpError(
       400,
-      "Title, start_time, end_time, group_id, status, and recording are required"
+      "Title, start_time, end_time, group_id, and recording are required"
     );
   }
   if (recording !== "1" && recording !== "0") {
     throw httpError(400, "Recording must be 1 or 0");
-  }
-  if (!["Scheduled", "Completed", "Cancelled"].includes(status)) {
-    throw httpError(
-      400,
-      "Status must be one of: Scheduled, Completed, Cancelled"
-    );
   }
   const isWeekly = parseWeeklyFlag(weekly);
   if (isWeekly && status !== "Scheduled") {

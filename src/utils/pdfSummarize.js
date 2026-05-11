@@ -3,6 +3,7 @@ const FormData = require("form-data");
 const repo = require("../repositories/groupContentRepository");
 const { normalizeTopics } = require("./normalizeTopicsVideo");
 const httpError = require("./httpError");
+const { ensureBilingualAiMetadata } = require("./aiTranslator");
 
 /**
  * Internal logic for PDF summarization.
@@ -55,6 +56,7 @@ const internalSummarizePdf = async (resourceId, url, localization, file = null) 
 
   const topicsForDb = topics == null ? null : typeof topics === "string" ? topics : JSON.stringify(topics);
 
+  // Save original language
   await repo.upsertResourceAiMetadata({
     resourceId,
     language: storedLanguage,
@@ -63,12 +65,41 @@ const internalSummarizePdf = async (resourceId, url, localization, file = null) 
     topics: topicsForDb,
   });
 
+  // Handle bilingual requirement - Get both versions in one go
+  let bilingualData = null;
+  try {
+    bilingualData = await ensureBilingualAiMetadata(summary, topics);
+
+    if (bilingualData) {
+      // Save Arabic
+      await repo.upsertResourceAiMetadata({
+        resourceId,
+        language: "ar",
+        transcript,
+        summary: bilingualData.ar.summary,
+        topics: JSON.stringify(bilingualData.ar.topics),
+      });
+
+      // Save English
+      await repo.upsertResourceAiMetadata({
+        resourceId,
+        language: "en",
+        transcript,
+        summary: bilingualData.en.summary,
+        topics: JSON.stringify(bilingualData.en.topics),
+      });
+    }
+  } catch (error) {
+    console.error(`[Bilingual Generation Error] Resource ${resourceId}:`, error);
+  }
+
   return {
     resource_id: resourceId,
     language: storedLanguage,
     transcript,
-    summary,
-    topics,
+    summary: bilingualData?.ar?.summary || summary,
+    topics: bilingualData?.ar?.topics || topics,
+    translations: bilingualData || null,
   };
 };
 

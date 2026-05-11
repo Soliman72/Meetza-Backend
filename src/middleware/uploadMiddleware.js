@@ -1,4 +1,4 @@
-const { upload } = require("./uploadFile");
+const { upload, cleanupRequestFiles } = require("./uploadFile");
 
 const fields = [
   { name: "user_photo", maxCount: 1 },
@@ -25,6 +25,12 @@ function uploadMiddleware(req, res, next) {
     if (err) {
       return handleMulterError(res, err);
     }
+
+    // Automatically clean up files when the response is sent or the connection is closed
+    const cleanup = () => cleanupRequestFiles(req);
+    res.on("finish", cleanup);
+    res.on("close", cleanup);
+
     next();
   });
 }
@@ -34,9 +40,14 @@ function summarizeVideoUpload(req, res, next) {
     if (err) {
       return handleMulterError(res, err);
     }
+
+    const cleanup = () => cleanupRequestFiles(req);
+    res.on("finish", cleanup);
+    res.on("close", cleanup);
+
     next();
   });
-};
+}
 
 module.exports = uploadMiddleware;
 module.exports.summarizeVideoUpload = summarizeVideoUpload;
