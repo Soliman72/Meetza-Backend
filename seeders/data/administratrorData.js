@@ -7,10 +7,12 @@ module.exports = [
     name: "Shahd Saeed",
     email: "ShahdSaeed@meetza.com",
     role: "Super_Admin",
+    password:"Shahd@123456"
   },
   {
     name: "Shahoda",
     email: "Shahoda@meetza.com",
     role: "Administrator",
+    password:"Shahd@123456",
   },
 ];
